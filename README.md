@@ -4,7 +4,7 @@
 ║  ░█▀█░░█▀▀░█▀▄░█░█░█▀▀░█▀█░░█░░█░█   ░█░█░█░█░▀▀█░░█░░█░█░█░█░█▀▀░█▀▄░█░█  ║
 ║  ░▀░▀░░▀░░░▀░▀░▀░▀░▀░░░▀░▀░░▀░░▀▀▀   ░▀░▀░▀▀▀░▀▀▀░▀▀▀░▀░▀░▀▀░░▀▀▀░▀░▀░▀▀▀  ║
 ║                                                                              ║
-║  [+] RELEASE .......... honeypot-auditor v0.2.0                              ║
+║  [+] RELEASE .......... honeypot-auditor v0.2.1                              ║
 ║  [+] TYPE ............. Multi-Protocol Decoy Fingerprinter / Lab Util        ║
 ║  [+] PLATFORM ......... Linux · macOS · Windows (Python 3.10+)               ║
 ║  [+] DISKS ............ 0 · pure electrons · no floppies harmed                ║
@@ -234,6 +234,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  h0n3yp0t 4ud1t0r · v0.2.0 · spread headers not malware · EOF                ║
+║  h0n3yp0t 4ud1t0r · v0.2.1 · spread headers not malware · EOF                ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```

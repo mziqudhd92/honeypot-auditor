@@ -156,7 +156,12 @@ def match_ssh_banner(banner: str) -> str | None:
 
 
 def normalize_uname(text: str) -> str:
-    line = (text or "").strip().splitlines()[0] if text else ""
+    if not text:
+        return ""
+    lines = (text or "").strip().splitlines()
+    if not lines:
+        return ""
+    line = lines[0]
     return _UNAME_HOST_RE.sub("Linux <host> ", line).strip()
 
 

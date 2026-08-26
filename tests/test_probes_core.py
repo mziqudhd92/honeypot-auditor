@@ -108,3 +108,22 @@ def test_ftp_banner_diskstation():
     banner = next(i for i in inds if i.id == "ftp.banner")
     assert banner.triggered
     assert "DiskStation" in banner.detail
+
+
+def test_ftp_reconnect_failure_still_returns_banner():
+    mock_ftplib = MagicMock()
+    ftp_upload = MagicMock()
+    ftp_upload.getwelcome.return_value = "220 DiskStation FTP server ready."
+    ftp_verify = MagicMock()
+    ftp_verify.login.side_effect = OSError("connection refused")
+
+    mock_ftplib.FTP.side_effect = [ftp_upload, ftp_verify]
+
+    with patch.object(core, "optional_import", return_value=mock_ftplib):
+        inds = core.probe_ftp("127.0.0.1", 8021)
+
+    assert len(inds) == 2
+    persist = next(i for i in inds if i.id == "ftp.persist")
+    banner = next(i for i in inds if i.id == "ftp.banner")
+    assert persist.skipped
+    assert banner.triggered

@@ -169,7 +169,9 @@ def probe_smtp_fsm(host: str, port: int) -> list[Indicator]:
                 failures.append(f"VRFY unexpected: {exc}")
         try:
             smtp.docmd("RSET")
-            smtp.docmd("RCPT TO:<fake@external-domain.com>")
+            rcpt_code, _rcpt_msg = smtp.docmd("RCPT TO:<fake@external-domain.com>")
+            if rcpt_code == 250:
+                failures.append("RSET+RCPT accepted external recipient without MAIL FROM")
         except smtplib.SMTPException as exc:
             if "250" in str(exc):
                 failures.append("RSET+RCPT accepted external recipient without MAIL FROM")

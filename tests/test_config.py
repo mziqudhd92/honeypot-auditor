@@ -77,3 +77,10 @@ def test_ssh_banner_legacy():
 def test_uname_normalize():
     raw = "Linux decoy 3.2.0-4-amd64 #1 SMP Debian 3.2.68-1+deb7u1 x86_64 GNU/Linux"
     assert match_uname_signature(raw)
+
+
+def test_uname_whitespace_only():
+    from honeypot_auditor.config import normalize_uname
+
+    assert normalize_uname("\n") == ""
+    assert match_uname_signature("\n") is None

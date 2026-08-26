@@ -294,42 +294,13 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
         ftp = ftplib.FTP()
         ftp.connect(host, port, timeout=settings.timeout_seconds)
         welcome = ftp.getwelcome() or ""
-        try:
-            ftp.login()
-        except Exception:
-            ftp.login("anonymous", "guest@")
+        _ftp_login(ftp)
         ftp.timeout = settings.timeout_seconds
-        for path in ("incoming", "/incoming", "/"):
-            try:
-                ftp.cwd(path)
-                break
-            except Exception:
-                continue
+        _ftp_cwd_probe_dir(ftp)
         bio = io.BytesIO(FTP_PROBE_BODY)
         ftp.storbinary(f"STOR {name}", bio)
         ftp.quit()
     except Exception as exc:
-        banner_hit = next((t for t in FTP_WELCOME_TELLS if t.lower() in welcome.lower()), None) if welcome else None
-        banner_ind = (
-            Indicator(
-                id="ftp.banner",
-                title="FTP welcome banner matches emulator template",
-                category="static_signature",
-                triggered=bool(banner_hit),
-                protocol="ftp",
-                detail=welcome[:180] or closed_reason(str(exc)),
-                evidence=banner_hit or "",
-            )
-            if welcome
-            else skipped_indicator(
-                "ftp.banner",
-                "FTP welcome banner matches emulator template",
-                "static_signature",
-                closed_reason(str(exc)),
-                protocol="ftp",
-                error=str(exc),
-            )
-        )
         return [
             skipped_indicator(
                 "ftp.persist",
@@ -339,23 +310,19 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
                 protocol="ftp",
                 error=str(exc),
             ),
-            banner_ind,
+            _ftp_banner_indicator(welcome, exc=exc),
         ]
 
     banner_hit = next((t for t in FTP_WELCOME_TELLS if t.lower() in welcome.lower()), None)
+    banner_ind = _ftp_banner_indicator(welcome, banner_hit=banner_hit)
     found = False
     listing: list[str] = []
     try:
         ftp2 = ftplib.FTP()
         ftp2.connect(host, port, timeout=settings.timeout_seconds)
-        ftp2.login()
+        _ftp_login(ftp2)
         ftp2.timeout = settings.timeout_seconds
-        for path in ("incoming", "/incoming"):
-            try:
-                ftp2.cwd(path)
-                break
-            except Exception:
-                continue
+        _ftp_cwd_probe_dir(ftp2)
         ftp2.retrlines("LIST", listing.append)
         found = any(name in line for line in listing)
         if found:
@@ -373,7 +340,8 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
                 f"reconnect/LIST failed: {closed_reason(str(exc))}",
                 protocol="ftp",
                 error=str(exc),
-            )
+            ),
+            banner_ind,
         ]
 
     return [
@@ -390,16 +358,53 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
             ),
             evidence="\n".join(listing)[:800],
         ),
-        Indicator(
+        banner_ind,
+    ]
+
+
+def _ftp_login(ftp) -> None:
+    try:
+        ftp.login()
+    except Exception:
+        ftp.login("anonymous", "guest@")
+
+
+def _ftp_cwd_probe_dir(ftp) -> None:
+    for path in ("incoming", "/incoming", "/"):
+        try:
+            ftp.cwd(path)
+            return
+        except Exception:
+            continue
+
+
+def _ftp_banner_indicator(
+    welcome: str,
+    *,
+    banner_hit: str | None = None,
+    exc: Exception | None = None,
+) -> Indicator:
+    hit = banner_hit
+    if hit is None and welcome:
+        hit = next((t for t in FTP_WELCOME_TELLS if t.lower() in welcome.lower()), None)
+    if welcome:
+        return Indicator(
             id="ftp.banner",
             title="FTP welcome banner matches emulator template",
             category="static_signature",
-            triggered=bool(banner_hit),
+            triggered=bool(hit),
             protocol="ftp",
-            detail=welcome[:180] or "(no welcome)",
-            evidence=banner_hit or "",
-        ),
-    ]
+            detail=welcome[:180] or (closed_reason(str(exc)) if exc else "(no welcome)"),
+            evidence=hit or "",
+        )
+    return skipped_indicator(
+        "ftp.banner",
+        "FTP welcome banner matches emulator template",
+        "static_signature",
+        closed_reason(str(exc)) if exc else "no welcome banner",
+        protocol="ftp",
+        error=str(exc) if exc else "",
+    )
 
 
 def _random_creds() -> tuple[str, str]:

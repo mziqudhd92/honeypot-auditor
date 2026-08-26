@@ -4,7 +4,27 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.1] - 2026-08-26
+
+### Fixed
+
+- FTP persist verify/login parity, banner on reconnect failure
+- `normalize_uname` whitespace crash, VNC single-session handshake, SMTP RCPT 250 detection
+- Public-target authorization note recorded in JSON when `--confirm-authorized` is used
+
+### Security
+
+- Expanded `SECURITY.md` (data handling, deep mode, Shodan keys, nmap trust)
+
 ## [0.2.0] - 2026-08-26
+
+### Fixed
+
+- FTP persist verify now uses the same login/CWD paths as upload (incl. `/` and anonymous)
+- FTP banner indicator preserved when reconnect/LIST fails
+- `normalize_uname` no longer crashes on whitespace-only output
+- VNC probe uses one TCP session for the full RFB handshake
+- SMTP deep FSM detects RCPT 250 success without relying on exceptions
 
 ### Added
 

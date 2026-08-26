@@ -207,7 +207,7 @@ def probe_smtp(host: str, port: int) -> list[Indicator]:
 
 
 def probe_vnc(host: str, port: int) -> list[Indicator]:
-    raw, err = tcp_transact(host, port, b"", recv_first=True)
+    raw, err = tcp_transact(host, port, b"RFB 003.008\n", recv_first=True)
     if err and not raw:
         return [
             skipped_indicator(
@@ -219,7 +219,8 @@ def probe_vnc(host: str, port: int) -> list[Indicator]:
                 error=err,
             )
         ]
-    banner = raw.decode("latin-1", "replace")
+    text = raw.decode("latin-1", "replace")
+    banner = text.split("\n", 1)[0] if text else ""
     if not banner.startswith("RFB "):
         return [
             Indicator(
@@ -229,11 +230,10 @@ def probe_vnc(host: str, port: int) -> list[Indicator]:
                 triggered=False,
                 protocol="vnc",
                 detail=banner.strip()[:120] or "(no RFB banner)",
-                evidence=banner[:400],
+                evidence=text[:400],
             )
         ]
-    reply, _ = tcp_transact(host, port, b"RFB 003.008\n", recv_first=True)
-    blob = (raw + reply).decode("latin-1", "replace").lower()
+    blob = text.lower()
     desktop_hit = any(tok in blob for tok in VNC_DESKTOP_TELLS)
     return [
         Indicator(

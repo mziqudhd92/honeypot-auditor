@@ -122,6 +122,8 @@ async def run_audit(args: argparse.Namespace) -> int:
         )
         return 2
 
+    public_target = not is_private_or_loopback(ip)
+
     if args.timeout <= 0:
         console.print("[red]--timeout must be positive[/red]")
         return 2
@@ -133,6 +135,10 @@ async def run_audit(args: argparse.Namespace) -> int:
         f"preset={args.preset} timeout={args.timeout}s deep={args.deep}",
         "Closed ports are skipped and do not raise the score.",
     ]
+    if public_target and args.confirm_authorized:
+        notes.append(
+            "Public target: operator asserted authorization via --confirm-authorized."
+        )
     if args.deep:
         notes.append("Deep mode: co-tenancy requires corroboration from another emulator tell.")
 

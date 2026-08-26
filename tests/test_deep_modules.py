@@ -119,7 +119,9 @@ def test_smtp_fsm_open_relay_tell(mock_import):
             return (252, b"ok")
         if cmd == "RSET":
             return (250, b"reset")
-        raise SMTPException("250 accepted")
+        if cmd.startswith("RCPT"):
+            return (250, b"accepted")
+        return (250, b"ok")
 
     smtp.docmd.side_effect = docmd
 
