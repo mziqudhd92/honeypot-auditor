@@ -1,0 +1,29 @@
+# Benchmark lab: stock honeypots for honeypot-auditor validation
+#
+# Usage:
+#   docker compose -f deploy/docker-compose.benchmark.yml up -d
+#   ./scripts/benchmark-lab.sh
+
+name: honeypot-auditor-benchmark
+
+services:
+  cowrie:
+    image: cowrie/cowrie:latest
+    container_name: hpaudit-cowrie
+    ports:
+      - "127.0.0.1:8022:2222/tcp"
+      - "127.0.0.1:8023:2223/tcp"
+    restart: unless-stopped
+
+  dionaea:
+    image: dinotools/dionaea:latest
+    container_name: hpaudit-dionaea
+    ports:
+      - "127.0.0.1:8021:21/tcp"
+      - "127.0.0.1:8025:25/tcp"
+      - "127.0.0.1:8024:80/tcp"
+      - "127.0.0.1:8445:445/tcp"
+      - "127.0.0.1:8027:5060/tcp"
+      - "127.0.0.1:8026:5900/tcp"
+      - "127.0.0.1:26379:6379/tcp"
+    restart: unless-stopped

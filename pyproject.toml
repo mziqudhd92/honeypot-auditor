@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "honeypot-auditor"
+version = "0.2.0"
+description = "Multi-protocol CLI that fingerprints whether an authorized target behaves like a low-interaction honeypot."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Moran Zavdi", email = "security@helloaeterna.com" }]
+keywords = ["honeypot", "security", "fingerprinting", "purple-team", "deception"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+]
+dependencies = [
+  "rich>=13.0",
+  "paramiko>=3.0",
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+full = [
+  "python-nmap>=0.7.1",
+  "impacket>=0.11",
+  "telnetlib3>=2.0",
+  "redis>=5.0",
+  "shodan>=1.31",
+  "scapy>=2.5",
+]
+dev = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "ruff>=0.4",
+  "build>=1.0",
+]
+
+[project.scripts]
+honeypot-auditor = "honeypot_auditor.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/mziqudhd92/honeypot-auditor"
+Documentation = "https://github.com/mziqudhd92/honeypot-auditor#readme"
+Repository = "https://github.com/mziqudhd92/honeypot-auditor"
+Issues = "https://github.com/mziqudhd92/honeypot-auditor/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["honeypot_auditor"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+]
+fail_under = 55
+show_missing = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --cov=honeypot_auditor --cov-report=term-missing:skip-covered"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]

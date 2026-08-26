@@ -1,0 +1,54 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e ".[full,dev]"
+      - name: Pytest with coverage
+        run: pytest --cov=honeypot_auditor --cov-report=term-missing --cov-fail-under=55
+      - name: Ruff
+        run: ruff check src tests
+      - name: Build package
+        run: python -m build
+
+  integration:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[full,dev]"
+      - name: Start Cowrie benchmark container
+        run: |
+          docker compose -f deploy/docker-compose.benchmark.yml up -d cowrie
+          sleep 15
+      - name: Audit Cowrie (expect honeypot)
+        run: |
+          honeypot-auditor --target 127.0.0.1 \
+            --preset iana --ports ssh=8022,telnet=8023 \
+            --skip-nmap --deep --timeout 8 \
+            --output /tmp/cowrie-integration.json
+          python - <<'PY'
+          import json, sys
+          r = json.load(open("/tmp/cowrie-integration.json"))
+          assert r["score"] >= 30, r
+          assert "Honeypot" in r["threat_level"], r
+          print("integration ok:", r["score"], r["threat_level"])
+          PY
