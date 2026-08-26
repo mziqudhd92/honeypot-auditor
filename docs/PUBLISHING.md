@@ -8,7 +8,7 @@ Repository: **https://github.com/mziqudhd92/honeypot-auditor**
 
 | Event | What runs |
 |-------|-----------|
-| Push / PR to `main` | Tests (3.10–3.14), ruff, coverage ≥55%, package build |
+| Push / PR to `main` | Unit tests (3.10–3.14), ruff, dedicated coverage job ≥60%, build |
 | Push to `main` | + Cowrie Docker integration audit |
 | GitHub Release `vX.Y.Z` | Tests → PyPI publish (Trusted Publishing) |
 

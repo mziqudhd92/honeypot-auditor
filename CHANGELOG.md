@@ -14,6 +14,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - PyPI publish workflow (Trusted Publishing) and `docs/PUBLISHING.md`
 - Expanded test suite with mocked recon/probes and Cowrie Docker integration job in CI
 - Coverage gate raised to 60% (local suite ~73% with 96 tests)
+- Coverage best practices: branch coverage, HTML/XML reports, dedicated CI job + artifacts, Makefile targets
 
 ### Changed
 

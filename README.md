@@ -234,6 +234,23 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ---
 
+## -=[ HACKING / COVERAGE ]=-
+
+![tests](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml/badge.svg)
+
+```bash
+make install    # editable install with [full,dev]
+make test       # unit tests (fast, no coverage)
+make test-cov   # branch coverage gate 60% + htmlcov/index.html
+make lint
+```
+
+Coverage config: `pyproject.toml` → `[tool.coverage.*]`. CI uploads `coverage.xml` + HTML as the **`coverage-report`** artifact on every push/PR.
+
+Contributing → [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
 ## -=[ LICENSE ]=-
 
 ```

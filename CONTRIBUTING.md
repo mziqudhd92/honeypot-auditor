@@ -8,14 +8,30 @@ Thanks for helping improve Honeypot Auditor.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[full,dev]"
-pytest
+make test          # fast unit tests (no coverage)
+make test-cov      # branch coverage + HTML report
 ```
+
+## Coverage
+
+Configuration lives in `pyproject.toml` under `[tool.coverage.*]` (single source of truth).
+
+| Command | Purpose |
+|---------|---------|
+| `make test` | Unit tests only (`pytest --no-cov`) |
+| `make test-cov` | Full suite with branch coverage; opens `htmlcov/index.html` |
+| `pytest --no-cov` | Same as `make test` |
+| `pytest` | Coverage + terminal/XML/HTML reports; fails under **60%** |
+
+CI runs a dedicated **coverage** job on Python 3.12 and uploads `coverage.xml` + `htmlcov/` as a workflow artifact (`coverage-report`). The version matrix runs `pytest --no-cov` for speed.
+
+When changing probe or scoring logic, add or update tests and keep `make test-cov` green before opening a PR.
 
 ## Pull requests
 
 1. Fork and create a feature branch.
 2. Add or update tests for behavior changes.
-3. Run `pytest` and `ruff check src tests`.
+3. Run `make test-cov` and `make lint`.
 4. Keep probes **non-destructive** — banner/state checks only.
 5. Do not add exploit payloads or third-party honeypot product names in shipped strings (use neutral “low-interaction emulator” language).
 

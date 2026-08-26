@@ -59,19 +59,57 @@ where = ["src"]
 
 [tool.coverage.run]
 branch = true
+relative_files = true
 source = ["honeypot_auditor"]
+source_pkgs = ["honeypot_auditor"]
+omit = [
+  "*/tests/*",
+  "*/test_*.py",
+]
+
+[tool.coverage.paths]
+source = [
+  "src/honeypot_auditor",
+  "*/site-packages/honeypot_auditor",
+]
 
 [tool.coverage.report]
 exclude_lines = [
   "pragma: no cover",
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if TYPE_CHECKING:",
   "if __name__ == .__main__.:",
+  "@(abc\\.)?abstractmethod",
 ]
 fail_under = 60
+precision = 2
 show_missing = true
+skip_covered = false
+skip_empty = true
+
+[tool.coverage.html]
+show_contexts = true
+title = "honeypot-auditor coverage"
+
+[tool.coverage.xml]
+output = "coverage.xml"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --cov=honeypot_auditor --cov-report=term-missing:skip-covered"
+addopts = [
+  "-q",
+  "--strict-markers",
+  "--cov=honeypot_auditor",
+  "--cov-branch",
+  "--cov-report=term-missing:skip-covered",
+  "--cov-report=xml:coverage.xml",
+  "--cov-report=html:htmlcov",
+]
+markers = [
+  "integration: live network or Docker targets (not run in default CI unit job)",
+]
 
 [tool.ruff]
 line-length = 100
