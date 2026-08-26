@@ -9,7 +9,8 @@
 ║  [+] PLATFORM .......... Linux · macOS · Windows (Python 3.10+)              ║
 ║  [+] DISKS ............. 0 · pure electrons · no floppies harmed               ║
 ║  [+] PROTECTION ........ NONE · MIT license · spread the sauce               ║
-║  [+] SUPPLIER .......... https://github.com/mziqudhd92/honeypot-auditor     ║
+║  [+] PYPI .............. https://pypi.org/project/honeypot-auditor/           ║
+║  [+] REPO .............. https://github.com/mziqudhd92/honeypot-auditor       ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║  >>> READ THIS NFO BEFORE YOU DIAL IN <<<                                    ║
 ║                                                                              ║
@@ -45,53 +46,59 @@ made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ## -=[ INSTALLATION ]=-
 
+**Requirements:** Python **3.10+** and a normal `pip` (no extra PyPI config — package is on the public index).
+
+### Users — install from PyPI (recommended)
+
+Use a virtual environment if you can (keeps probes isolated from system Python):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 ```
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │  STEP 0 · PyPI (after first publish)                                  │
-  └─────────────────────────────────────────────────────────────────────┘
-```
+
+**Core** — SSH, Telnet, FTP, HTTP, Redis, SMTP, VNC, SIP (Paramiko + Requests):
 
 ```bash
 pip install honeypot-auditor
-pip install "honeypot-auditor[full]"    # nmap deps, impacket, shodan, scapy
+honeypot-auditor --version
 ```
 
-Publish checklist: [docs/PUBLISHING.md](docs/PUBLISHING.md)
+**Full stack** — adds Nmap (`python-nmap`), Impacket (SMB), Shodan SDK, Scapy, Telnetlib3:
 
+```bash
+pip install "honeypot-auditor[full]"
 ```
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │  STEP 1 · grab the release (source / dev)                             │
-  └─────────────────────────────────────────────────────────────────────┘
+
+| Extra | What it unlocks |
+|-------|-----------------|
+| *(core, default)* | All protocol probes that only need Paramiko/Requests/stdlib |
+| `[full]` | `--skip-nmap` off · Shodan tags · SMB via Impacket · HASSH/TCP stack · deep telnet |
+
+Shodan Honeyscore still needs **`SHODAN_API_KEY`** in the environment or **`--shodan-key`** — the `[full]` extra installs the client library, not your API key.
+
+**First run (local lab):**
+
+```bash
+honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
 ```
+
+---
+
+### Developers — clone and hack
+
+For contributors or unreleased main-branch changes:
 
 ```bash
 git clone https://github.com/mziqudhd92/honeypot-auditor.git
 cd honeypot-auditor
 python3 -m venv .venv
-source .venv/bin/activate          # win32: .venv\Scripts\activate
-pip install -e ".[full,dev]"       # full probe stack + scapy + dev tools
+source .venv/bin/activate
+pip install -e ".[full,dev]"       # editable install + test/lint tools
+make test                          # or: make test-cov · make lint
 ```
 
-```
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │  STEP 2 · lite install (core only · no impacket/scapy/shodan extras)  │
-  └─────────────────────────────────────────────────────────────────────┘
-```
-
-```bash
-pip install -e .
-```
-
-```
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │  STEP 3 · verify your stack                                         │
-  └─────────────────────────────────────────────────────────────────────┘
-```
-
-```bash
-honeypot-auditor --version
-pytest -q
-```
+Maintainers releasing to PyPI → [docs/PUBLISHING.md](docs/PUBLISHING.md)
 
 ---
 
@@ -184,13 +191,16 @@ research stacks with 11 open faces). Needs another tell first. By design.
 
 ## -=[ DEV / QA ]=-
 
+![tests](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml/badge.svg)
+[![PyPI](https://img.shields.io/pypi/v/honeypot-auditor)](https://pypi.org/project/honeypot-auditor/)
+
 ```bash
-pip install -e ".[full,dev]"
-pytest
-ruff check src tests
+make install && make test-cov && make lint
 docker compose -f deploy/docker-compose.benchmark.yml up -d
 ./scripts/benchmark-lab.sh
 ```
+
+Contributing → [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
 
@@ -231,23 +241,6 @@ Defensive research. Authorized testing. Lab sandboxes. Your sensors. Your ticket
 Do **not** point this at infrastructure you don't own or haven't been cleared to test.
 
 Vuln reports → [SECURITY.md](SECURITY.md)
-
----
-
-## -=[ HACKING / COVERAGE ]=-
-
-![tests](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml/badge.svg)
-
-```bash
-make install    # editable install with [full,dev]
-make test       # unit tests (fast, no coverage)
-make test-cov   # branch coverage gate 60% + htmlcov/index.html
-make lint
-```
-
-Coverage config: `pyproject.toml` → `[tool.coverage.*]`. CI uploads `coverage.xml` + HTML as the **`coverage-report`** artifact on every push/PR.
-
-Contributing → [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
 
