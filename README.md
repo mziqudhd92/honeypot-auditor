@@ -5,12 +5,12 @@
 ║  ░▀░▀░░▀░░░▀░▀░▀░▀░▀░░░▀░▀░░▀░░▀▀▀   ░▀░▀░▀▀▀░▀▀▀░▀▀▀░▀░▀░▀▀░░▀▀▀░▀░▀░▀▀▀  ║
 ║                                                                              ║
 ║  [+] RELEASE .......... honeypot-auditor v0.2.0                              ║
-║  [+] TYPE .............. Multi-Protocol Decoy Fingerprinter / Lab Util       ║
-║  [+] PLATFORM .......... Linux · macOS · Windows (Python 3.10+)              ║
-║  [+] DISKS ............. 0 · pure electrons · no floppies harmed               ║
-║  [+] PROTECTION ........ NONE · MIT license · spread the sauce               ║
-║  [+] PYPI .............. https://pypi.org/project/honeypot-auditor/           ║
-║  [+] REPO .............. https://github.com/mziqudhd92/honeypot-auditor       ║
+║  [+] TYPE ............. Multi-Protocol Decoy Fingerprinter / Lab Util        ║
+║  [+] PLATFORM ......... Linux · macOS · Windows (Python 3.10+)               ║
+║  [+] DISKS ............ 0 · pure electrons · no floppies harmed                ║
+║  [+] PROTECTION ....... NONE · MIT license · spread the sauce                  ║
+║  [+] PYPI ............. pypi.org/project/honeypot-auditor                    ║
+║  [+] REPO ............. github.com/mziqudhd92/honeypot-auditor               ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║  >>> READ THIS NFO BEFORE YOU DIAL IN <<<                                    ║
 ║                                                                              ║
@@ -20,6 +20,11 @@
 ║  Scanning random /16 because Shodan said "interesting" = you are the bait.   ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
+
+[![PyPI](https://img.shields.io/pypi/v/honeypot-auditor?style=flat-square)](https://pypi.org/project/honeypot-auditor/)
+[![Python](https://img.shields.io/pypi/pyversions/honeypot-auditor?style=flat-square)](https://pypi.org/project/honeypot-auditor/)
+[![tests](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml/badge.svg)](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
 ## -=[ WHAT IS THIS ]=-
 
@@ -46,59 +51,38 @@ made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ## -=[ INSTALLATION ]=-
 
-**Requirements:** Python **3.10+** and a normal `pip` (no extra PyPI config — package is on the public index).
-
-### Users — install from PyPI (recommended)
-
-Use a virtual environment if you can (keeps probes isolated from system Python):
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+```
+  ┌─ USERS · PyPI (public index — no pip config voodoo) ─────────────────────┐
+  │  python3 -m venv .venv && source .venv/bin/activate   # recommended      │
+  │  pip install honeypot-auditor                                            │
+  │  pip install "honeypot-auditor[full]"    # + nmap impacket shodan scapy   │
+  │  honeypot-auditor --version                                              │
+  └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Core** — SSH, Telnet, FTP, HTTP, Redis, SMTP, VNC, SIP (Paramiko + Requests):
+| Install | Unlocks |
+|---------|---------|
+| `pip install honeypot-auditor` | Core probes (Paramiko + Requests + stdlib) |
+| `pip install "honeypot-auditor[full]"` | + Nmap · SMB/Impacket · Shodan SDK · Scapy · deep telnet |
 
-```bash
-pip install honeypot-auditor
-honeypot-auditor --version
-```
+`SHODAN_API_KEY` or `--shodan-key` is still **your** key — `[full]` only installs the client lib.
 
-**Full stack** — adds Nmap (`python-nmap`), Impacket (SMB), Shodan SDK, Scapy, Telnetlib3:
-
-```bash
-pip install "honeypot-auditor[full]"
-```
-
-| Extra | What it unlocks |
-|-------|-----------------|
-| *(core, default)* | All protocol probes that only need Paramiko/Requests/stdlib |
-| `[full]` | `--skip-nmap` off · Shodan tags · SMB via Impacket · HASSH/TCP stack · deep telnet |
-
-Shodan Honeyscore still needs **`SHODAN_API_KEY`** in the environment or **`--shodan-key`** — the `[full]` extra installs the client library, not your API key.
-
-**First run (local lab):**
+**First dial-in:**
 
 ```bash
 honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
 ```
 
----
-
-### Developers — clone and hack
-
-For contributors or unreleased main-branch changes:
-
-```bash
-git clone https://github.com/mziqudhd92/honeypot-auditor.git
-cd honeypot-auditor
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[full,dev]"       # editable install + test/lint tools
-make test                          # or: make test-cov · make lint
+```
+  ┌─ DEVELOPERS · from source ───────────────────────────────────────────────┐
+  │  git clone https://github.com/mziqudhd92/honeypot-auditor.git            │
+  │  cd honeypot-auditor && python3 -m venv .venv && source .venv/bin/activate│
+  │  pip install -e ".[full,dev]"                                            │
+  │  make test-cov && make lint                                                │
+  └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-Maintainers releasing to PyPI → [docs/PUBLISHING.md](docs/PUBLISHING.md)
+Release maintainers → [docs/PUBLISHING.md](docs/PUBLISHING.md)
 
 ---
 
@@ -124,24 +108,24 @@ honeypot-auditor --target 203.0.113.10 --preset iana \
 ## -=[ SCORING MATRIX ]=-
 
 ```
-  ╭──────────────────────────┬────────┬────────────────────────────────────╮
-  │ CATEGORY                 │ WEIGHT │ TRIGGERS                           │
-  ├──────────────────────────┼────────┼────────────────────────────────────┤
-  │ Shodan intel             │  25%   │ Honeyscore > 0.6 · honeypot tag    │
+  ╭──────────────────────────┬────────┬───────────────────────────────────────╮
+  │ CATEGORY                 │ WEIGHT │ TRIGGERS                              │
+  ├──────────────────────────┼────────┼───────────────────────────────────────┤
+  │ Shodan intel             │  25%   │ Honeyscore > 0.6 · honeypot tag       │
   │ Arbitrary auth           │  30%   │ any-password SSH/Telnet · open relay│
-  │ State non-persistence    │  25%   │ FTP STOR / Redis key vanishes      │
-  │ Static signatures        │  20%   │ Cowrie banners · stock uname/cpu   │
-  ╰──────────────────────────┴────────┴────────────────────────────────────╯
+  │ State non-persistence    │  25%   │ FTP STOR / Redis key vanishes         │
+  │ Static signatures        │  20%   │ Cowrie banners · stock uname/cpu      │
+  ╰──────────────────────────┴────────┴───────────────────────────────────────╯
 
   --deep ADDS (lab brain mode):
-  ┌──────────────────────────┬────────┬────────────────────────────────────┐
-  │ behavior                 │  18%   │ $((arith)) · sleep · channel lies  │
-  │ coherence                │  15%   │ uname vs /proc vs os-release drift │
-  │ stack_fingerprint        │  12%   │ HASSH vs banner · TCP TTL mismatch │
-  │ proto_conformance        │  12%   │ HTTP/ FTP/SMTP FSM edge cases      │
+  ┌──────────────────────────┬────────┬───────────────────────────────────────┐
+  │ behavior                 │  18%   │ $((arith)) · sleep · channel lies     │
+  │ coherence                │  15%   │ uname vs /proc vs os-release drift    │
+  │ stack_fingerprint        │  12%   │ HASSH vs banner · TCP TTL mismatch  │
+  │ proto_conformance        │  12%   │ HTTP/ FTP/SMTP FSM edge cases         │
   │ co-tenancy               │   8%   │ honeypot buffet · needs corroboration│
-  │ temporal                 │  10%   │ robotic latency · egress silence   │
-  └──────────────────────────┴────────┴────────────────────────────────────┘
+  │ temporal                 │  10%   │ robotic latency · egress silence      │
+  └──────────────────────────┴────────┴───────────────────────────────────────┘
 
   VERDICT BANDS:
     [##########----------]  < 30%   LIKELY REAL HOST
@@ -190,9 +174,6 @@ research stacks with 11 open faces). Needs another tell first. By design.
 ---
 
 ## -=[ DEV / QA ]=-
-
-![tests](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml/badge.svg)
-[![PyPI](https://img.shields.io/pypi/v/honeypot-auditor)](https://pypi.org/project/honeypot-auditor/)
 
 ```bash
 make install && make test-cov && make lint
@@ -253,6 +234,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  h0n3yp0t 4ud1t0r · v0.2.0 · spread headers not malware · EOF               ║
+║  h0n3yp0t 4ud1t0r · v0.2.0 · spread headers not malware · EOF                ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
