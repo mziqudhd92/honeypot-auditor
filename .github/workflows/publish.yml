@@ -19,7 +19,7 @@ jobs:
       - name: Install and test
         run: |
           pip install -e ".[full,dev]"
-          pytest --cov=honeypot_auditor --cov-fail-under=55
+          pytest --cov=honeypot_auditor --cov-fail-under=60
           ruff check src tests
 
   publish:

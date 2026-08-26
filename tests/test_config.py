@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from honeypot_auditor.config import (
@@ -36,6 +38,35 @@ def test_nmap_honeypot_tells_include_cowrie():
 def test_invalid_port():
     with pytest.raises(ValueError):
         parse_port_overrides("ssh=0")
+
+
+def test_invalid_ports_format():
+    with pytest.raises(ValueError):
+        parse_port_overrides("ssh8022")
+
+
+def test_unknown_preset():
+    with pytest.raises(ValueError):
+        merge_ports("not-a-preset")
+
+
+def test_resolve_target_ip():
+    from honeypot_auditor.config import resolve_target
+
+    assert resolve_target("127.0.0.1") == "127.0.0.1"
+
+
+@patch("honeypot_auditor.config.socket.gethostbyname", return_value="93.184.216.34")
+def test_resolve_target_hostname(mock_dns):
+    from honeypot_auditor.config import resolve_target
+
+    assert resolve_target("example.com") == "93.184.216.34"
+
+
+def test_match_cpuinfo_signature():
+    from honeypot_auditor.config import match_cpuinfo_signature
+
+    assert match_cpuinfo_signature("model name : Intel(R) Core(TM)2 Duo CPU     T7300  @ 2.00GHz")
 
 
 def test_ssh_banner_legacy():

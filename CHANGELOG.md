@@ -13,7 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - FTP welcome-banner tells (e.g. DiskStation / Dionaea)
 - PyPI publish workflow (Trusted Publishing) and `docs/PUBLISHING.md`
 - Expanded test suite with mocked recon/probes and Cowrie Docker integration job in CI
-- Coverage gate (55%) and `pip install -e ".[full,dev]"` in CI
+- Coverage gate raised to 60% (local suite ~73% with 96 tests)
 
 ### Changed
 

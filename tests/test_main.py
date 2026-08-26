@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
-import runpy
+import subprocess
+import sys
 
 
-def test_main_module_runs_help():
-    runpy.run_module("honeypot_auditor.__main__", run_name="__not_main__")
+def test_module_version():
+    proc = subprocess.run(
+        [sys.executable, "-m", "honeypot_auditor", "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0
+    assert "0.2.0" in proc.stdout

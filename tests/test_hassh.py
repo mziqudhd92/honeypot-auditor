@@ -5,7 +5,9 @@ from __future__ import annotations
 from honeypot_auditor.hassh import (
     SSHKexInit,
     capture_server_kexinit,
+    find_kexinit_payload,
     hassh_algo_mismatch,
+    openssh_version_from_banner,
     parse_kexinit_payload,
 )
 
@@ -48,3 +50,42 @@ def test_capture_banner_only():
     banner, kex = capture_server_kexinit(b"SSH-2.0-test\r\n")
     assert banner.startswith("SSH-2.0-test")
     assert kex is None
+
+
+def test_openssh_version_from_banner():
+    assert openssh_version_from_banner("SSH-2.0-OpenSSH_9.2p1 Debian") == "9.2p1"
+    assert openssh_version_from_banner("SSH-2.0-Cowrie") is None
+
+
+def test_hassh_client_digest():
+    kex = SSHKexInit(
+        kex="curve25519-sha256",
+        host_key="ssh-rsa",
+        enc_c2s="aes128-ctr",
+        enc_s2c="aes128-ctr",
+        mac_c2s="hmac-sha2-256",
+        mac_s2c="hmac-sha2-256",
+        comp_c2s="none",
+        comp_s2c="none",
+    )
+    assert len(kex.hassh_client) == 32
+
+
+def test_find_kexinit_none_on_garbage():
+    assert find_kexinit_payload(b"not ssh binary") is None
+
+
+def test_hassh_non_openssh_banner_no_trigger():
+    kex = SSHKexInit(
+        kex="curve25519-sha256",
+        host_key="ssh-rsa",
+        enc_c2s="aes128-ctr",
+        enc_s2c="aes128-ctr",
+        mac_c2s="hmac-sha2-256",
+        mac_s2c="hmac-sha2-256",
+        comp_c2s="none",
+        comp_s2c="none",
+    )
+    triggered, detail = hassh_algo_mismatch("SSH-2.0-Cowrie", kex)
+    assert not triggered
+    assert "non-OpenSSH" in detail

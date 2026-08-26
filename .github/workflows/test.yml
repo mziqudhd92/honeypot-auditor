@@ -19,7 +19,7 @@ jobs:
       - name: Install
         run: pip install -e ".[full,dev]"
       - name: Pytest with coverage
-        run: pytest --cov=honeypot_auditor --cov-report=term-missing --cov-fail-under=55
+        run: pytest --cov=honeypot_auditor --cov-report=term-missing --cov-fail-under=60
       - name: Ruff
         run: ruff check src tests
       - name: Build package

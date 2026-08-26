@@ -104,8 +104,36 @@ def test_nmap_scan_failure(mock_open, mock_which):
     assert "nmap failed" in inds[0].skip_reason
 
 
+@patch("honeypot_auditor.probes.recon._http_get", return_value=("", "HTTP 403"))
+def test_shodan_honeyscore_api_error(mock_get):
+    inds = shodan_lookup("8.8.8.8", "fake-key")
+    by_id = {i.id: i for i in inds}
+    assert by_id["shodan.honeyscore"].skipped
+
+
+@patch("honeypot_auditor.probes.recon._host_tags", return_value=([], "rate limit"))
+@patch("honeypot_auditor.probes.recon._honeyscore", return_value=(0.1, ""))
+def test_shodan_tag_api_error(mock_score, mock_tags):
+    inds = shodan_lookup("8.8.8.8", "fake-key")
+    by_id = {i.id: i for i in inds}
+    assert not by_id["shodan.honeyscore"].triggered
+    assert by_id["shodan.tags"].skipped
+
+
 @patch("honeypot_auditor.probes.recon.shutil.which", return_value=None)
 def test_nmap_skipped_without_binary(mock_which):
     inds = nmap_scan("127.0.0.1", {"ssh": 22})
     assert inds[0].skipped
     assert "PATH" in inds[0].skip_reason
+
+
+@patch("honeypot_auditor.probes.recon.optional_import", return_value=None)
+@patch("honeypot_auditor.probes.recon._http_get")
+def test_host_tags_rest_fallback(mock_get, mock_import):
+    mock_get.return_value = ('{"tags": ["scanner"]}', "")
+
+    from honeypot_auditor.probes.recon import _host_tags
+
+    tags, err = _host_tags("8.8.8.8", "key")
+    assert tags == ["scanner"]
+    assert err == ""
