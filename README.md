@@ -1,30 +1,62 @@
 ```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║  ░█░█░█░█▀▀░█▀▄░█▀█░█▀█░█▀█░▀█▀░█▀█   ░█▀█░█░█░█▀▀░▀█▀░█▀█░█▀▄░█▀▀░█▀▄░█▀█  ║
-║  ░█▀█░░█▀▀░█▀▄░█░█░█▀▀░█▀█░░█░░█░█   ░█░█░█░█░▀▀█░░█░░█░█░█░█░█▀▀░█▀▄░█░█  ║
-║  ░▀░▀░░▀░░░▀░▀░▀░▀░▀░░░▀░▀░░▀░░▀▀▀   ░▀░▀░▀▀▀░▀▀▀░▀▀▀░▀░▀░▀▀░░▀▀▀░▀░▀░▀▀▀  ║
-║                                                                              ║
-║  [+] RELEASE .......... honeypot-auditor v0.2.1                              ║
-║  [+] TYPE ............. Multi-Protocol Decoy Fingerprinter / Lab Util        ║
-║  [+] PLATFORM ......... Linux · macOS · Windows (Python 3.10+)               ║
-║  [+] DISKS ............ 0 · pure electrons · no floppies harmed                ║
-║  [+] PROTECTION ....... NONE · MIT license · spread the sauce                  ║
-║  [+] PYPI ............. pypi.org/project/honeypot-auditor                    ║
-║  [+] REPO ............. github.com/mziqudhd92/honeypot-auditor               ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  >>> READ THIS NFO BEFORE YOU DIAL IN <<<                                    ║
-║                                                                              ║
-║  Authorized targets ONLY. Lab boxes. Decoys you own. Sensors you run.        ║
-║  Permission on paper (or in ticket).                                         ║
-║                                                                              ║
-║  Scanning random /16 because Shodan said "interesting" = you are the bait.   ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+.______________________________________________________________________________.
+|  :: H0N3YP0T-AUD1T0R :: v0.2.1 :: "DIALING IN... CARRIER DETECTED" ::       |
+|------------------------------------------------------------------------------|
+|  "warez? nah. headers. we trade banners, not bins."                          |
+|  "if it answers any password, it ain't production — it's a lure."            |
+|  "respect the sysop. probe only what you own. leave no STOR behind."         |
+|______________________________________________________________________________|
 ```
 
 [![PyPI](https://img.shields.io/pypi/v/honeypot-auditor?style=flat-square)](https://pypi.org/project/honeypot-auditor/)
 [![Python](https://img.shields.io/pypi/pyversions/honeypot-auditor?style=flat-square)](https://pypi.org/project/honeypot-auditor/)
 [![tests](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml/badge.svg)](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+
+```
+  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  █  >>> LIVE DEMO · COWRIE ON :2222 · EC2 LAB · DEEP AUDIT <<<            █
+  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+```
+
+![Cowrie deep audit demo](docs/demo/honeypot-auditor-cowrie-demo.gif)
+
+```
+  "cowrie said yes to every password. the shell lied about sleep.
+   egress went quiet. scoreboard lit up — SUSPECTED."
+                                              — some random BBS elite, '96
+```
+
+```
+  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  █  >>> LIVE DEMO · DIONAEA BUFFET · FTP/HTTP/SMB · CONFIRMED <<<         █
+  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+```
+
+![Dionaea deep audit demo](docs/demo/honeypot-auditor-dionaea-demo.gif)
+
+```
+  "PASV handed me a private IP. STOR vanished on reconnect.
+   nginx forgot the Date. that's not a NAS — that's a stage."
+                                              — file area #13 · no call waiting
+```
+
+```
+.------------------------------------------------------------------------------.
+|  NFO · READ BEFORE YOU DIAL                                                  |
+|------------------------------------------------------------------------------|
+|  Authorized targets ONLY. Lab boxes. Decoys you own. Sensors you run.        |
+|  Permission on paper (or in ticket).                                         |
+|                                                                              |
+|  Scanning random /16 because Shodan said "interesting" = YOU are the bait.   |
+|                                                                              |
+|  TYPE ...... Multi-Protocol Decoy Fingerprinter / Lab Util                   |
+|  PLATFORM .. Linux · macOS · Windows (Python 3.10+)                          |
+|  LICENSE ... MIT · spread the sauce · keep the copyright                     |
+|  PYPI ...... pypi.org/project/honeypot-auditor                               |
+|  REPO ...... github.com/mziqudhd92/honeypot-auditor                          |
+'------------------------------------------------------------------------------'
+```
 
 ## -=[ WHAT IS THIS ]=-
 
@@ -45,6 +77,10 @@ made Cowrie sweat in `'09 and still catches clones in `'26.
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
              · co-tenancy buffet detect · latency · egress bait
              (flag: --deep · more intrusive · same authorization rules)
+```
+
+```
+  "elite? nah. just consistent timeouts and a honest --confirm-authorized."
 ```
 
 ---
@@ -122,7 +158,7 @@ honeypot-auditor --target 203.0.113.10 --preset iana \
   │ behavior                 │  18%   │ $((arith)) · sleep · channel lies     │
   │ coherence                │  15%   │ uname vs /proc vs os-release drift    │
   │ stack_fingerprint        │  12%   │ HASSH vs banner · TCP TTL mismatch  │
-  │ proto_conformance        │  12%   │ HTTP/ FTP/SMTP FSM edge cases         │
+  │ proto_conformance        │  12%   │ HTTP/FTP/SMTP FSM edge cases         │
   │ co-tenancy               │   8%   │ honeypot buffet · needs corroboration│
   │ temporal                 │  10%   │ robotic latency · egress silence      │
   └──────────────────────────┴────────┴───────────────────────────────────────┘
@@ -181,6 +217,8 @@ docker compose -f deploy/docker-compose.benchmark.yml up -d
 ./scripts/benchmark-lab.sh
 ```
 
+Re-record the animated demos → [docs/demo/README.md](docs/demo/README.md)
+
 Contributing → [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
@@ -213,6 +251,10 @@ Use this one if you just need a fast external fingerprint.
     anyone who STORs malware on decoys then writes a LinkedIn post about it
 ```
 
+```
+  "greetz to the elite · no greetz to the lame · hang up clean."
+```
+
 ---
 
 ## -=[ RESPONSIBLE USE ]=-
@@ -233,7 +275,7 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 ```
 
 ```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║  h0n3yp0t 4ud1t0r · v0.2.1 · spread headers not malware · EOF                ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+.------------------------------------------------------------------------------.
+|  h0n3yp0t 4ud1t0r · v0.2.1 · spread headers not malware · EOF · NO CARRIER   |
+'------------------------------------------------------------------------------'
 ```
