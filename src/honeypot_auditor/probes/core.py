@@ -8,6 +8,7 @@ import secrets
 from honeypot_auditor.config import (
     FTP_PROBE_BODY,
     FTP_PROBE_PREFIX,
+    FTP_SYST_TELLS,
     FTP_WELCOME_TELLS,
     PROBE_PASSWORD_TEMPLATE,
     PROBE_USERNAME_TEMPLATE,
@@ -18,7 +19,7 @@ from honeypot_auditor.config import (
     match_uname_signature,
 )
 from honeypot_auditor.models import Indicator, optional_import, skipped_indicator
-from honeypot_auditor.netutil import closed_reason, tcp_transact
+from honeypot_auditor.netutil import closed_reason, is_non_routable_ip, parse_ftp_pasv_host, tcp_transact
 from honeypot_auditor.settings import settings
 
 
@@ -217,16 +218,7 @@ def probe_smb(host: str, port: int) -> list[Indicator]:
             try:
                 conn.login("Guest", "")
             except Exception as exc:
-                return [
-                    skipped_indicator(
-                        "smb.dialect",
-                        "SMB dialect / native-OS emulator anomaly",
-                        "static_signature",
-                        f"NTLM session not established: {exc}",
-                        protocol="smb",
-                        error=str(exc),
-                    )
-                ]
+                return _smb_session_failure_indicator(host, port, exc)
         try:
             dialect = str(conn.getDialect() or "")
         except Exception:
@@ -253,16 +245,7 @@ def probe_smb(host: str, port: int) -> list[Indicator]:
         except Exception:
             pass
     except Exception as exc:
-        return [
-            skipped_indicator(
-                "smb.dialect",
-                "SMB dialect / native-OS emulator anomaly",
-                "static_signature",
-                closed_reason(str(exc)),
-                protocol="smb",
-                error=str(exc),
-            )
-        ]
+        return _smb_session_failure_indicator(host, port, exc)
 
     smb1 = dialect in SMB_SMB1_DIALECTS or dialect.upper().startswith("SMB 1") or dialect == "1"
     os_hit = any(tell.lower() in native_os.lower() for tell in SMB_NATIVE_OS_TELLS if native_os)
@@ -280,6 +263,50 @@ def probe_smb(host: str, port: int) -> list[Indicator]:
     ]
 
 
+def _smb_session_failure_indicator(host: str, port: int, exc: Exception) -> list[Indicator]:
+    err = str(exc)
+    framing_anomaly = any(
+        tok in err.lower()
+        for tok in ("unpack requires", "ntlm", "protocol", "not supported", "connection reset")
+    )
+    if framing_anomaly:
+        return [
+            Indicator(
+                id="smb.dialect",
+                title="SMB dialect / native-OS emulator anomaly",
+                category="static_signature",
+                triggered=True,
+                protocol="smb",
+                detail=f"SMB listener up but session setup failed: {err[:160]}",
+                evidence=err[:200],
+            )
+        ]
+    raw, _ = tcp_transact(host, port, b"", recv_first=True, timeout=min(2.0, settings.timeout_seconds))
+    smb_listener = bool(raw) and (raw[:1] == b"\x00" or b"SMB" in raw[:64])
+    if not smb_listener:
+        return [
+            skipped_indicator(
+                "smb.dialect",
+                "SMB dialect / native-OS emulator anomaly",
+                "static_signature",
+                f"NTLM session not established: {err[:160]}",
+                protocol="smb",
+                error=err,
+            )
+        ]
+    return [
+        Indicator(
+            id="smb.dialect",
+            title="SMB dialect / native-OS emulator anomaly",
+            category="static_signature",
+            triggered=True,
+            protocol="smb",
+            detail=f"SMB listener up but session setup failed: {err[:160]}",
+            evidence=raw[:120].hex() if raw else err[:200],
+        )
+    ]
+
+
 def probe_ftp(host: str, port: int) -> list[Indicator]:
     ftplib = optional_import("ftplib")
     if ftplib is None:
@@ -289,16 +316,65 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
         ]
 
     welcome = ""
-    name = f"{FTP_PROBE_PREFIX}{secrets.token_hex(4)}.txt"
+    pasv_private = False
+    pasv_resp = ""
+    syst_line = ""
+    cmd_tells: list[str] = []
+    upload_names: list[str] = []
+    upload_ok = False
+    upload_err = ""
+
     try:
         ftp = ftplib.FTP()
         ftp.connect(host, port, timeout=settings.timeout_seconds)
         welcome = ftp.getwelcome() or ""
         _ftp_login(ftp)
         ftp.timeout = settings.timeout_seconds
+
+        try:
+            pasv_resp = ftp.sendcmd("PASV")
+            pasv_host = parse_ftp_pasv_host(pasv_resp)
+            if pasv_host and is_non_routable_ip(pasv_host):
+                pasv_private = True
+                cmd_tells.append(f"PASV advertises non-routable {pasv_host}")
+        except Exception as exc:
+            cmd_tells.append(f"PASV error: {exc}")
+
+        try:
+            syst_line = ftp.sendcmd("SYST")
+        except Exception:
+            pass
+
+        for cmd in ("NLST", "MLSD"):
+            try:
+                ftp.sendcmd(cmd)
+            except Exception as exc:
+                msg = str(exc)
+                if "502" in msg or "504" in msg or "not implemented" in msg.lower():
+                    cmd_tells.append(f"{cmd} unsupported")
+
+        try:
+            ftp.voidcmd("TYPE A")
+        except Exception:
+            cmd_tells.append("TYPE A rejected")
+
+        try:
+            ftp.sendcmd("TYPE I")
+        except Exception:
+            pass
+
         _ftp_cwd_probe_dir(ftp)
-        bio = io.BytesIO(FTP_PROBE_BODY)
-        ftp.storbinary(f"STOR {name}", bio)
+        for _ in range(2):
+            name = f"{FTP_PROBE_PREFIX}{secrets.token_hex(4)}.txt"
+            upload_names.append(name)
+            try:
+                resp = ftp.storbinary(f"STOR {name}", io.BytesIO(FTP_PROBE_BODY))
+                if resp and "226" in resp:
+                    upload_ok = True
+            except Exception as exc:
+                upload_err = closed_reason(str(exc))
+                cmd_tells.append(f"STOR {name} failed: {upload_err}")
+
         ftp.quit()
     except Exception as exc:
         return [
@@ -306,57 +382,117 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
                 "ftp.persist",
                 "FTP upload does not persist across reconnect",
                 "state_nonpersist",
-                f"anonymous STOR not possible: {closed_reason(str(exc))}",
+                f"FTP session failed: {closed_reason(str(exc))}",
                 protocol="ftp",
                 error=str(exc),
             ),
-            _ftp_banner_indicator(welcome, exc=exc),
+            _ftp_banner_indicator(welcome, exc=exc, syst_line=syst_line, cmd_tells=cmd_tells, pasv_private=pasv_private),
         ]
 
-    banner_hit = next((t for t in FTP_WELCOME_TELLS if t.lower() in welcome.lower()), None)
-    banner_ind = _ftp_banner_indicator(welcome, banner_hit=banner_hit)
-    found = False
-    listing: list[str] = []
+    banner_hit = _ftp_banner_hit(welcome, syst_line, cmd_tells, pasv_private=pasv_private)
+    banner_ind = _ftp_banner_indicator(
+        welcome,
+        banner_hit=banner_hit,
+        syst_line=syst_line,
+        cmd_tells=cmd_tells,
+        pasv_private=pasv_private,
+    )
+
+    persisted_any = False
+    verify_notes: list[str] = []
     try:
         ftp2 = ftplib.FTP()
         ftp2.connect(host, port, timeout=settings.timeout_seconds)
         _ftp_login(ftp2)
         ftp2.timeout = settings.timeout_seconds
+        try:
+            ftp2.sendcmd("TYPE I")
+        except Exception:
+            pass
         _ftp_cwd_probe_dir(ftp2)
-        ftp2.retrlines("LIST", listing.append)
-        found = any(name in line for line in listing)
-        if found:
+        for name in upload_names:
             try:
-                ftp2.delete(name)
-            except Exception:
-                pass
+                mdtm = ftp2.sendcmd(f"MDTM {name}")
+                if mdtm.startswith("213"):
+                    persisted_any = True
+                    verify_notes.append(f"{name} MDTM ok")
+            except Exception as exc:
+                verify_notes.append(f"{name} missing ({exc})")
+        try:
+            listing = ftp2.sendcmd("LIST")
+            if listing and upload_names and any(n in listing for n in upload_names):
+                persisted_any = True
+                verify_notes.append("LIST shows uploaded name")
+        except Exception as exc:
+            verify_notes.append(f"LIST failed ({exc})")
+        try:
+            for name in upload_names:
+                if persisted_any:
+                    try:
+                        ftp2.delete(name)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         ftp2.quit()
     except Exception as exc:
+        if pasv_private or not upload_ok:
+            return [
+                Indicator(
+                    id="ftp.persist",
+                    title="FTP upload does not persist across reconnect",
+                    category="state_nonpersist",
+                    triggered=True,
+                    protocol="ftp",
+                    detail=(
+                        f"non-routable PASV data path; upload surface not verifiable ({closed_reason(str(exc))})"
+                        if pasv_private
+                        else f"STOR failed and reconnect verify failed: {closed_reason(str(exc))}"
+                    ),
+                    evidence=" | ".join(cmd_tells)[:800],
+                ),
+                banner_ind,
+            ]
         return [
             skipped_indicator(
                 "ftp.persist",
                 "FTP upload does not persist across reconnect",
                 "state_nonpersist",
-                f"reconnect/LIST failed: {closed_reason(str(exc))}",
+                f"reconnect verify failed: {closed_reason(str(exc))}",
                 protocol="ftp",
                 error=str(exc),
             ),
             banner_ind,
         ]
 
+    fake_upload_surface = pasv_private or (not upload_ok and bool(upload_names))
+    non_persist = fake_upload_surface or (upload_ok and not persisted_any) or (bool(upload_names) and not persisted_any)
+    persist_detail = "; ".join(
+        x
+        for x in [
+            pasv_resp.strip() if pasv_private else "",
+            upload_err or "",
+            "; ".join(verify_notes[:4]),
+        ]
+        if x
+    )[:240]
+
     return [
         Indicator(
             id="ftp.persist",
             title="FTP upload does not persist across reconnect",
             category="state_nonpersist",
-            triggered=not found,
+            triggered=non_persist,
             protocol="ftp",
             detail=(
-                f"STOR {name} succeeded but LIST after reconnect did not show the file"
-                if not found
-                else f"STOR {name} persisted (deleted after check)"
+                persist_detail
+                or (
+                    f"uploaded {len(upload_names)} probe file(s); none verified after reconnect"
+                    if non_persist
+                    else f"probe file verified on reconnect ({verify_notes[0] if verify_notes else 'ok'})"
+                )
             ),
-            evidence="\n".join(listing)[:800],
+            evidence=" | ".join(cmd_tells + verify_notes)[:800],
         ),
         banner_ind,
     ]
@@ -378,23 +514,52 @@ def _ftp_cwd_probe_dir(ftp) -> None:
             continue
 
 
+def _ftp_banner_hit(
+    welcome: str,
+    syst_line: str = "",
+    cmd_tells: list[str] | None = None,
+    *,
+    pasv_private: bool = False,
+) -> str | None:
+    for tell in FTP_WELCOME_TELLS:
+        if tell.lower() in (welcome or "").lower():
+            return tell
+    for tell in FTP_SYST_TELLS:
+        if tell.lower() in (syst_line or "").lower():
+            return tell
+    if pasv_private and (welcome or syst_line):
+        return "non-routable PASV endpoint"
+    if cmd_tells and sum("unsupported" in t or "TYPE A rejected" in t for t in cmd_tells) >= 2:
+        return "FTP command surface inconsistent with production servers"
+    return None
+
+
 def _ftp_banner_indicator(
     welcome: str,
     *,
     banner_hit: str | None = None,
     exc: Exception | None = None,
+    syst_line: str = "",
+    cmd_tells: list[str] | None = None,
+    pasv_private: bool = False,
 ) -> Indicator:
     hit = banner_hit
-    if hit is None and welcome:
-        hit = next((t for t in FTP_WELCOME_TELLS if t.lower() in welcome.lower()), None)
-    if welcome:
+    if hit is None:
+        hit = _ftp_banner_hit(welcome, syst_line, cmd_tells, pasv_private=pasv_private)
+    detail_parts = [welcome[:120] if welcome else ""]
+    if syst_line:
+        detail_parts.append(str(syst_line).strip()[:80])
+    if cmd_tells:
+        detail_parts.append("; ".join(cmd_tells[:3]))
+    detail = " | ".join(p for p in detail_parts if p) or (closed_reason(str(exc)) if exc else "(no welcome)")
+    if welcome or hit:
         return Indicator(
             id="ftp.banner",
             title="FTP welcome banner matches emulator template",
             category="static_signature",
             triggered=bool(hit),
             protocol="ftp",
-            detail=welcome[:180] or (closed_reason(str(exc)) if exc else "(no welcome)"),
+            detail=detail[:240],
             evidence=hit or "",
         )
     return skipped_indicator(

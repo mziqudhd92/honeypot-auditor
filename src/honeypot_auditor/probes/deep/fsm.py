@@ -6,7 +6,7 @@ import re
 
 from honeypot_auditor.config import USER_AGENT
 from honeypot_auditor.models import Indicator, optional_import, skipped_indicator
-from honeypot_auditor.netutil import closed_reason, tcp_transact
+from honeypot_auditor.netutil import closed_reason, is_non_routable_ip, parse_ftp_pasv_host, tcp_transact
 from honeypot_auditor.settings import settings
 
 
@@ -102,11 +102,9 @@ def probe_ftp_fsm(host: str, port: int) -> list[Indicator]:
             pasv_addr = resp
             m = re.search(r"(\d+,\d+,\d+,\d+,\d+,\d+)", resp)
             if m:
-                octets = [int(x) for x in m.group(1).split(",")]
-                ip = ".".join(str(x) for x in octets[:4])
-                _port_num = octets[4] * 256 + octets[5]
-                if ip.startswith("127.") or ip == "0.0.0.0":
-                    failures.append(f"PASV advertises non-routable {ip}")
+                pasv_host = parse_ftp_pasv_host(resp) or ""
+                if pasv_host and is_non_routable_ip(pasv_host):
+                    failures.append(f"PASV advertises non-routable {pasv_host}")
                 # Try data channel (STOR) — emulators often advertise bad PASV endpoints.
                 try:
                     import io as _io

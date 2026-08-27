@@ -115,6 +115,17 @@ FTP_WELCOME_TELLS = (
     "dionaea",
     "honeypot ftp",
 )
+FTP_SYST_TELLS = (
+    "215 UNIX Type: L8",
+    "215 UNIX Type: L8 version",
+)
+HTTP_SERVER_TELLS = (
+    "nginx",
+)
+HTTP_STATIC_BODY_MARKERS = (
+    b"<html>",
+    b"Welcome",
+)
 REDIS_PROBE_KEY_PREFIX = "hpaudit_"
 REDIS_PROBE_VALUE = "probe_val"
 

@@ -114,6 +114,14 @@ def test_ftp_reconnect_failure_still_returns_banner():
     mock_ftplib = MagicMock()
     ftp_upload = MagicMock()
     ftp_upload.getwelcome.return_value = "220 DiskStation FTP server ready."
+    ftp_upload.sendcmd.side_effect = lambda cmd: {
+        "PASV": "227 Entering Passive Mode (172,18,0,2,182,77).",
+        "SYST": "215 UNIX Type: L8",
+        "NLST": (_ for _ in ()).throw(OSError("502 Command not implemented")),
+        "MLSD": (_ for _ in ()).throw(OSError("502 Command not implemented")),
+        "TYPE I": "200 Type set to I",
+    }.get(cmd.split()[0], "200 OK")
+    ftp_upload.storbinary.side_effect = TimeoutError("timed out")
     ftp_verify = MagicMock()
     ftp_verify.login.side_effect = OSError("connection refused")
 
@@ -125,5 +133,22 @@ def test_ftp_reconnect_failure_still_returns_banner():
     assert len(inds) == 2
     persist = next(i for i in inds if i.id == "ftp.persist")
     banner = next(i for i in inds if i.id == "ftp.banner")
-    assert persist.skipped
+    assert persist.triggered
     assert banner.triggered
+
+
+@patch.object(core, "tcp_transact", return_value=(b"\x00SMB", ""))
+def test_smb_framing_anomaly_on_open_port(mock_tcp):
+    mock_conn = MagicMock()
+    mock_conn.login.side_effect = ValueError("unpack requires a buffer of 2 bytes")
+    mock_smb_cls = MagicMock(return_value=mock_conn)
+    fake_smb = MagicMock()
+    fake_smb.SMBConnection = mock_smb_cls
+    fake_pkg = MagicMock()
+    fake_pkg.smbconnection = fake_smb
+
+    with patch.dict("sys.modules", {"impacket": fake_pkg, "impacket.smbconnection": fake_smb}):
+        inds = core.probe_smb("127.0.0.1", 445)
+
+    assert inds[0].triggered
+    assert "session setup failed" in inds[0].detail

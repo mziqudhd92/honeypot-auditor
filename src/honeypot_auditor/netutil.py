@@ -2,9 +2,31 @@
 
 from __future__ import annotations
 
+import ipaddress
+import re
 import socket
 
 from honeypot_auditor.settings import settings
+
+_PASV_RE = re.compile(r"(\d+,\d+,\d+,\d+,\d+,\d+)")
+
+
+def parse_ftp_pasv_host(response: str) -> str | None:
+    m = _PASV_RE.search(response or "")
+    if not m:
+        return None
+    octets = [int(x) for x in m.group(1).split(",")]
+    if len(octets) < 4:
+        return None
+    return ".".join(str(x) for x in octets[:4])
+
+
+def is_non_routable_ip(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return bool(addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved)
 
 
 def tcp_transact(

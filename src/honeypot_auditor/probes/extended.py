@@ -6,6 +6,8 @@ import secrets
 
 from honeypot_auditor.config import (
     HTTP_DYNAMIC_HEADERS,
+    HTTP_SERVER_TELLS,
+    HTTP_STATIC_BODY_MARKERS,
     REDIS_PROBE_KEY_PREFIX,
     REDIS_PROBE_VALUE,
     SIP_UA_TELLS,
@@ -45,6 +47,9 @@ def probe_http(host: str, port: int) -> list[Indicator]:
     static_200 = first.startswith("HTTP/") and " 200 " in first
     header_map = _parse_headers(text)
     missing_dynamic = "date" in [h for h in HTTP_DYNAMIC_HEADERS if h not in header_map]
+    server_val = header_map.get("server", "")
+    server_hit = any(tell in server_val.lower() for tell in HTTP_SERVER_TELLS if server_val)
+    static_body = False
 
     if requests is not None:
         try:
@@ -56,8 +61,16 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             )
             get_headers = {k.lower(): v for k, v in resp.headers.items()}
             missing_dynamic = "date" not in get_headers
+            server_val = get_headers.get("server", server_val)
+            server_hit = server_hit or any(tell in server_val.lower() for tell in HTTP_SERVER_TELLS if server_val)
+            body = resp.content[:512]
+            static_body = any(marker in body.lower() for marker in HTTP_STATIC_BODY_MARKERS)
+            if static_body and missing_dynamic and server_hit:
+                missing_dynamic = True
         except Exception:
             pass
+
+    static_http_face = missing_dynamic or (server_hit and static_200)
 
     return [
         Indicator(
@@ -73,9 +86,12 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             id="http.dynamic_headers",
             title="HTTP missing dynamic Date header",
             category="static_signature",
-            triggered=missing_dynamic,
+            triggered=static_http_face,
             protocol="http",
-            detail="response headers: " + ", ".join(sorted(header_map)),
+            detail=(
+                f"server={server_val or '?'}; missing Date; headers: "
+                + ", ".join(sorted(header_map))
+            )[:240],
             evidence=text.split("\r\n\r\n", 1)[0][:600],
         ),
     ]

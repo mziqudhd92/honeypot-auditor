@@ -57,7 +57,7 @@ def apply_cotenancy_corroboration(indicators: list[Indicator]) -> list[Indicator
                 count = int(ind.detail.split(" responsive IT lures", 1)[0].strip())
             except ValueError:
                 count = len([x for x in ind.evidence.split(",") if x])
-        threshold = 5 if has_corroboration else 8
+        threshold = 4 if has_corroboration else 8
         should_trigger = count >= threshold
         if should_trigger and not has_corroboration:
             out.append(
