@@ -6,7 +6,12 @@ import re
 
 from honeypot_auditor.config import USER_AGENT
 from honeypot_auditor.models import Indicator, optional_import, skipped_indicator
-from honeypot_auditor.netutil import closed_reason, is_non_routable_ip, parse_ftp_pasv_host, tcp_transact
+from honeypot_auditor.netutil import (
+    closed_reason,
+    is_non_routable_ip,
+    parse_ftp_pasv_host,
+    tcp_transact,
+)
 from honeypot_auditor.settings import settings
 
 
