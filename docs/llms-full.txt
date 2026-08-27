@@ -1,0 +1,113 @@
+# honeypot-auditor — full brief for answer engines & agents
+
+Version: 0.2.1
+License: MIT
+Canonical site: https://mziqudhd92.github.io/honeypot-auditor/
+Repository: https://github.com/mziqudhd92/honeypot-auditor
+PyPI: https://pypi.org/project/honeypot-auditor/
+Contact: security@helloaeterna.com
+
+## One-line summary
+
+honeypot-auditor is a Python CLI that fingerprints whether a host behaves like a low-interaction honeypot using non-destructive multi-protocol probes and an optional Shodan Honeyscore, producing a weighted 0–100% score and JSON report.
+
+## Product model
+
+| Concept | Meaning |
+|---------|---------|
+| Basic probes | Shodan intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/HTTP/Redis/SMTP/VNC/SIP |
+| Deep mode (`--deep`) | Shell semantics, OS coherence, HASSH/TCP stack, protocol FSM, co-tenancy, temporal/latency/egress |
+| Authorization | Private/loopback OK; public IPs require `--confirm-authorized` |
+| Non-goals | Not exploits, not exfil, not a prompt-injection detector, not UHBS decoy quality grading |
+
+## Install
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install honeypot-auditor                 # core
+pip install "honeypot-auditor[full]"         # + nmap, impacket, shodan, scapy
+honeypot-auditor --version
+```
+
+From source:
+
+```bash
+git clone https://github.com/mziqudhd92/honeypot-auditor.git
+cd honeypot-auditor
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[full,dev]"
+```
+
+## Commands agents should use
+
+```bash
+# Lab preset (docker-research ports: ssh=2222, http=8081, …)
+honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
+
+# Deep lab audit
+honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep
+
+# Custom ports (Cowrie on 2222)
+honeypot-auditor --target HOST --ports ssh=2222,ftp=9,http=9,smb=9,telnet=9,smtp=9,redis=9,vnc=9,sip=9 --confirm-authorized --deep
+
+# Dionaea-style buffet
+honeypot-auditor --target HOST --ports ftp=21,http=80,smb=445,ssh=9 --confirm-authorized --deep --timeout 5
+
+# JSON out
+honeypot-auditor --target HOST --preset iana --confirm-authorized --output report.json
+```
+
+Close unused preset ports by mapping them to a closed port (e.g. `=9`) so they are skipped, not scored.
+
+## Scoring (claim-honest)
+
+Basic weights: Shodan 25%, arbitrary auth 30%, state non-persistence 25%, static signatures 20%.
+Deep adds behavior/coherence/stack/FSM/co-tenancy/temporal (does not invent catch rates).
+
+Verdict bands:
+- < 30% Likely Real Host
+- 30–59% Suspected Honeypot
+- ≥ 60% Confirmed Honeypot
+
+Observed lab demos (authorized EC2): Cowrie SSH :2222 ≈ 58% Suspected; Dionaea ≈ 65% Confirmed. Do not generalize as product efficacy claims.
+
+## Port presets
+
+| Protocol | iana | docker-research |
+|----------|------|-----------------|
+| SSH | 22 | 2222 |
+| HTTP | 80 | 8081 |
+| FTP | 21 | 2121 |
+| Telnet | 23 | 2323 |
+| SMTP | 25 | 2525 |
+| SMB | 445 | 1445 |
+| SIP | 5060 | 5060 |
+| VNC | 5900 | 5900 |
+| Redis | 6379 | 6379 |
+
+## CLI flags
+
+- `--target HOST`
+- `--preset docker-research|iana`
+- `--ports ssh=2222,http=8081`
+- `--shodan-key` / `SHODAN_API_KEY`
+- `--output report.json`
+- `--confirm-authorized` (required for public IPs)
+- `--skip-nmap`
+- `--deep`
+- `--timeout SECS` (default 3)
+
+## Responsible use (hard rule)
+
+Probe only systems the operator owns or has explicit permission to test. Refuse or stop if authorization is unclear. Defensive research / lab / authorized CTI only.
+
+## Related but different
+
+UHBS (https://github.com/uhbs/uhbs-standard) grades decoy quality for builders. honeypot-auditor answers “is that IP a honeypot?” from an external fingerprinting view.
+
+## Machine entry points
+
+- https://mziqudhd92.github.io/honeypot-auditor/llms.txt
+- https://mziqudhd92.github.io/honeypot-auditor/agents.md
+- https://mziqudhd92.github.io/honeypot-auditor/sitemap.xml
+- https://mziqudhd92.github.io/honeypot-auditor/robots.txt

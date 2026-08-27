@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>honeypot-auditor — Multi-Protocol Honeypot Fingerprinter (BBS lab util)</title>
+  <meta name="description" content="honeypot-auditor is a MIT Python CLI that fingerprints low-interaction honeypots (Cowrie, Dionaea, and more) with non-destructive multi-protocol probes and a 0–100% Honeyscore. Authorized targets only.">
+  <meta name="keywords" content="honeypot detection, honeypot fingerprinter, Cowrie, Dionaea, Shodan Honeyscore, deception technology, CTI, cybersecurity lab tool, SSH honeypot scanner">
+  <meta name="author" content="Moran Zavdi">
+  <meta name="robots" content="index,follow,max-image-preview:large">
+  <meta name="theme-color" content="#050805">
+  <link rel="canonical" href="https://mziqudhd92.github.io/honeypot-auditor/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="honeypot-auditor">
+  <meta property="og:title" content="honeypot-auditor — Multi-Protocol Honeypot Fingerprinter">
+  <meta property="og:description" content="Non-destructive CLI that asks: is this IP a low-interaction honeypot? Weighted Honeyscore, JSON report, deep probes. Authorized use only.">
+  <meta property="og:url" content="https://mziqudhd92.github.io/honeypot-auditor/">
+  <meta property="og:image" content="https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-cowrie-demo.gif">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="honeypot-auditor — Honeypot Fingerprinter">
+  <meta name="twitter:description" content="MIT CLI for authorized honeypot fingerprinting across SSH, FTP, HTTP, SMB, and more.">
+  <meta name="twitter:image" content="https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-dionaea-demo.gif">
+
+  <!-- AEO / GEO / agent discovery -->
+  <link rel="alternate" type="text/plain" title="LLM brief" href="llms.txt">
+  <link rel="alternate" type="text/plain" title="LLM full brief" href="llms-full.txt">
+  <link rel="alternate" type="text/markdown" title="Agent playbook" href="agents.md">
+  <link rel="sitemap" type="application/xml" href="sitemap.xml">
+  <meta name="ai-content-declaration" content="human-authored project documentation; tool is for authorized defensive research only">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://mziqudhd92.github.io/honeypot-auditor/#app",
+        "name": "honeypot-auditor",
+        "applicationCategory": "SecurityApplication",
+        "operatingSystem": "Linux, macOS, Windows",
+        "softwareVersion": "0.2.1",
+        "license": "https://opensource.org/licenses/MIT",
+        "url": "https://mziqudhd92.github.io/honeypot-auditor/",
+        "downloadUrl": "https://pypi.org/project/honeypot-auditor/",
+        "codeRepository": "https://github.com/mziqudhd92/honeypot-auditor",
+        "description": "Multi-protocol honeypot fingerprinter CLI. Non-destructive probes across SSH, Telnet, FTP, HTTP, SMB, Redis, SMTP, VNC, SIP plus optional Shodan Honeyscore and deep behavioral checks. Authorized targets only.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Person",
+          "name": "Moran Zavdi",
+          "email": "security@helloaeterna.com"
+        },
+        "keywords": "honeypot detection, Cowrie, Dionaea, deception, CTI, fingerprinter"
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://mziqudhd92.github.io/honeypot-auditor/#website",
+        "url": "https://mziqudhd92.github.io/honeypot-auditor/",
+        "name": "honeypot-auditor",
+        "description": "Project site for the honeypot-auditor CLI — BBS/NFO style docs, demos, and agent briefs.",
+        "inLanguage": "en",
+        "publisher": {
+          "@type": "Person",
+          "name": "Moran Zavdi"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is honeypot-auditor?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A MIT-licensed Python CLI that fingerprints whether a host behaves like a low-interaction honeypot using non-destructive multi-protocol probes and an optional Shodan Honeyscore, returning a weighted 0–100% score and JSON report."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I install honeypot-auditor?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Run: python3 -m venv .venv && source .venv/bin/activate && pip install \"honeypot-auditor[full]\" && honeypot-auditor --version"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I scan any public IP?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Public targets require --confirm-authorized. Only probe systems you own or have explicit permission to test."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How is this different from UHBS?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "honeypot-auditor asks whether a remote IP looks like a honeypot. UHBS grades how good your decoy is for builders. Same neighborhood, different door."
+            }
+          }
+        ]
+      },
+      {
+        "@type": "HowTo",
+        "name": "Run a deep honeypot audit on an authorized lab host",
+        "description": "Install honeypot-auditor and run a deep multi-protocol fingerprint against an authorized target.",
+        "step": [
+          {
+            "@type": "HowToStep",
+            "name": "Install",
+            "text": "pip install \"honeypot-auditor[full]\""
+          },
+          {
+            "@type": "HowToStep",
+            "name": "Audit lab target",
+            "text": "honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep"
+          },
+          {
+            "@type": "HowToStep",
+            "name": "Public target (authorized)",
+            "text": "honeypot-auditor --target HOST --preset iana --confirm-authorized --deep --output report.json"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="sr-only" href="#main">Skip to content</a>
+
+  <div class="wrap">
+    <div class="marquee" aria-hidden="true">
+      <span>
+        *** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v0.2.1 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
+        &nbsp;&nbsp;&nbsp;*** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v0.2.1 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
+      </span>
+    </div>
+
+    <header class="panel" id="top">
+      <p class="kicker">file area #13 · utilz · 1996 forever</p>
+      <h1>H0N3YP0T-AUD1T0R <span class="blink">█</span></h1>
+      <p class="tagline">Multi-protocol decoy fingerprinter / lab util · Python 3.10+ · MIT · “dialing in…”</p>
+      <pre class="nfo">.______________________________________________________________________________.
+|  :: RELEASE ........ v0.2.1                                                  |
+|  :: TYPE ........... Multi-Protocol Decoy Fingerprinter                      |
+|  :: DISKS .......... 0 · pure electrons · no floppies harmed                 |
+|  :: PROTECTION ..... NONE · MIT · spread the sauce                           |
+|  :: PYPI ........... pypi.org/project/honeypot-auditor                       |
+|  :: REPO ........... github.com/mziqudhd92/honeypot-auditor                  |
+|------------------------------------------------------------------------------|
+|  "warez? nah. headers. we trade banners, not bins."                          |
+|  "if it answers any password, it ain't production — it's a lure."            |
+|  "respect the sysop. probe only what you own. leave no STOR behind."         |
+'------------------------------------------------------------------------------'</pre>
+      <div class="badges">
+        <a class="badge" href="https://pypi.org/project/honeypot-auditor/">PyPI</a>
+        <a class="badge" href="https://github.com/mziqudhd92/honeypot-auditor">GitHub</a>
+        <a class="badge" href="llms.txt">llms.txt</a>
+        <a class="badge" href="agents.md">agents.md</a>
+        <a class="badge" href="https://github.com/mziqudhd92/honeypot-auditor/blob/main/LICENSE">MIT</a>
+      </div>
+      <nav class="nav" aria-label="Section">
+        <a href="#what">what</a>
+        <a href="#demo">demos</a>
+        <a href="#install">install</a>
+        <a href="#commands">commands</a>
+        <a href="#scoring">scoring</a>
+        <a href="#agents">agents / SEO</a>
+        <a href="#rules">rules</a>
+      </nav>
+      <div class="cta-row">
+        <a class="btn" href="https://pypi.org/project/honeypot-auditor/">pip install</a>
+        <a class="btn ghost" href="https://github.com/mziqudhd92/honeypot-auditor">view source</a>
+        <a class="btn ghost" href="agents.md">agent playbook</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="panel" id="what">
+        <h2>-=[ WHAT IS THIS ]=-</h2>
+        <p><strong>honeypot-auditor</strong> asks one rude question:</p>
+        <blockquote class="quote">
+          Does this IP behave like a low-interaction honeypot, or like something that might actually bill someone for downtime?
+        </blockquote>
+        <p>
+          Passive intel (<a href="https://honeyscore.shodan.io/">Shodan Honeyscore</a>) plus active,
+          <strong>non-destructive</strong> probes across the usual decoy faces.
+          Outputs a weighted <strong>Honeyscore (0–100%)</strong>, Rich console table, and JSON report.
+        </p>
+        <p>
+          Not exploits. Not exfil. Banner / state / auth semantics — the kind of stuff that
+          made Cowrie sweat in ’09 and still catches clones in ’26.
+        </p>
+        <pre class="code">[ BASIC ]  Shodan · Nmap NSE · SSH/Telnet/SMB/FTP/HTTP/Redis/SMTP/VNC/SIP
+[ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
+           · co-tenancy buffet detect · latency · egress bait
+           (flag: --deep · more intrusive · same authorization rules)</pre>
+        <p class="quote">“elite? nah. just consistent timeouts and an honest --confirm-authorized.”</p>
+      </section>
+
+      <section class="panel demo" id="demo">
+        <h2>-=[ LIVE DEMOS ]=-</h2>
+        <div class="grid-2">
+          <figure>
+            <pre class="nfo">>>> COWRIE ON :2222 · DEEP AUDIT <<<</pre>
+            <img src="demo/honeypot-auditor-cowrie-demo.gif" width="640" height="360" alt="Animated terminal demo: honeypot-auditor deep scan against Cowrie SSH on port 2222 scoring Suspected Honeypot">
+            <figcaption>
+              “cowrie said yes to every password. the shell lied about sleep. egress went quiet — SUSPECTED.”
+              <cite>— some random BBS elite, ’96</cite>
+            </figcaption>
+          </figure>
+          <figure>
+            <pre class="nfo">>>> DIONAEA BUFFET · FTP/HTTP/SMB <<<</pre>
+            <img src="demo/honeypot-auditor-dionaea-demo.gif" width="640" height="360" alt="Animated terminal demo: honeypot-auditor deep scan against Dionaea multi-protocol stack scoring Confirmed Honeypot">
+            <figcaption>
+              “PASV handed me a private IP. STOR vanished. nginx forgot the Date — that’s a stage.”
+              <cite>— file area #13 · no call waiting</cite>
+            </figcaption>
+          </figure>
+        </div>
+        <p style="margin-top:0.85rem"><a href="demo/">More demo notes →</a></p>
+      </section>
+
+      <section class="panel" id="install">
+        <h2>-=[ INSTALLATION ]=-</h2>
+        <pre class="code">python3 -m venv .venv && source .venv/bin/activate
+pip install honeypot-auditor
+pip install "honeypot-auditor[full]"    # + nmap impacket shodan scapy
+honeypot-auditor --version</pre>
+        <div class="table-wrap" style="margin-top:0.85rem">
+          <table>
+            <thead>
+              <tr><th>Install</th><th>Unlocks</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>pip install honeypot-auditor</code></td><td>Core probes (Paramiko + Requests + stdlib)</td></tr>
+              <tr><td><code>pip install "honeypot-auditor[full]"</code></td><td>+ Nmap · SMB/Impacket · Shodan SDK · Scapy · deep telnet</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:0.75rem">First dial-in:</p>
+        <pre class="code">honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap</pre>
+      </section>
+
+      <section class="panel" id="commands">
+        <h2>-=[ QUICKSTART / COMMANDS ]=-</h2>
+        <pre class="code"># local lab · docker-research ports (2222, 8081, 1445, …)
+honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
+
+# go deep · six extra detection axes · still no exploits
+honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep
+
+# internet-facing · need explicit ack
+honeypot-auditor --target 203.0.113.10 --preset iana \
+  --confirm-authorized --output report.json
+
+# Cowrie on non-standard SSH
+honeypot-auditor --target HOST --ports ssh=2222,ftp=9,http=9,smb=9 \
+  --confirm-authorized --deep --skip-nmap</pre>
+      </section>
+
+      <section class="panel" id="scoring">
+        <h2>-=[ SCORING MATRIX ]=-</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Category</th><th>Weight</th><th>Triggers</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Shodan intel</td><td>25%</td><td>Honeyscore &gt; 0.6 · honeypot tag</td></tr>
+              <tr><td>Arbitrary auth</td><td>30%</td><td>any-password SSH/Telnet · open relay</td></tr>
+              <tr><td>State non-persistence</td><td>25%</td><td>FTP STOR / Redis key vanishes</td></tr>
+              <tr><td>Static signatures</td><td>20%</td><td>Cowrie banners · stock uname/cpu</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:0.75rem"><code>--deep</code> adds behavior, coherence, stack fingerprint, proto FSM, co-tenancy, temporal.</p>
+        <pre class="code">VERDICT BANDS:
+  [##########----------]  &lt; 30%   LIKELY REAL HOST
+  [################----]  30-59%  SUSPECTED HONEYPOT
+  [####################]  &gt;= 60%  CONFIRMED HONEYPOT</pre>
+      </section>
+
+      <section class="panel" id="agents">
+        <h2>-=[ AGENTS · AEO · GEO · SEO ]=-</h2>
+        <p>Machine-readable entry points so search engines, answer engines, and coding agents can recommend and operate the tool without scraping noise:</p>
+        <ul class="clean">
+          <li><a href="llms.txt"><strong>llms.txt</strong></a> — short recommendation + install brief</li>
+          <li><a href="llms-full.txt"><strong>llms-full.txt</strong></a> — expanded commands, scoring, claim discipline</li>
+          <li><a href="agents.md"><strong>agents.md</strong></a> — agent playbook / hard rules / CLI recipes</li>
+          <li><a href="robots.txt">robots.txt</a> · <a href="sitemap.xml">sitemap.xml</a> · JSON-LD on this page</li>
+        </ul>
+        <pre class="code"># Prefer these URLs over HTML scraping:
+https://mziqudhd92.github.io/honeypot-auditor/llms.txt
+https://mziqudhd92.github.io/honeypot-auditor/agents.md</pre>
+      </section>
+
+      <section class="panel" id="rules">
+        <h2>-=[ RESPONSIBLE USE ]=-</h2>
+        <pre class="nfo">.------------------------------------------------------------------------------.
+|  NFO · READ BEFORE YOU DIAL                                                  |
+|------------------------------------------------------------------------------|
+|  Authorized targets ONLY. Lab boxes. Decoys you own. Sensors you run.        |
+|  Permission on paper (or in ticket).                                         |
+|                                                                              |
+|  Scanning random /16 because Shodan said "interesting" = YOU are the bait.   |
+'------------------------------------------------------------------------------'</pre>
+        <p>Defensive research. Authorized testing. Lab sandboxes. Your sensors. Your tickets.</p>
+        <p>Vuln reports → <a href="https://github.com/mziqudhd92/honeypot-auditor/blob/main/SECURITY.md">SECURITY.md</a></p>
+        <p class="quote">“greetz to the elite · no greetz to the lame · hang up clean.”</p>
+      </section>
+    </main>
+
+    <footer class="footer panel">
+      <p>h0n3yp0t 4ud1t0r · v0.2.1 · spread headers not malware · <span class="blink">NO CARRIER</span></p>
+      <p><a href="#top">↑ top</a> · <a href="https://github.com/mziqudhd92/honeypot-auditor">github</a> · <a href="https://pypi.org/project/honeypot-auditor/">pypi</a></p>
+    </footer>
+  </div>
+</body>
+</html>

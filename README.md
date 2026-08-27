@@ -12,6 +12,10 @@
 [![Python](https://img.shields.io/pypi/pyversions/honeypot-auditor?style=flat-square)](https://pypi.org/project/honeypot-auditor/)
 [![tests](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml/badge.svg)](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Pages](https://img.shields.io/badge/site-BBS%20Pages-33ff66?style=flat-square&labelColor=050805)](https://mziqudhd92.github.io/honeypot-auditor/)
+
+**Site (BBS / NFO):** https://mziqudhd92.github.io/honeypot-auditor/  
+**Agents / AEO:** [llms.txt](https://mziqudhd92.github.io/honeypot-auditor/llms.txt) · [agents.md](https://mziqudhd92.github.io/honeypot-auditor/agents.md)
 
 ```
   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
