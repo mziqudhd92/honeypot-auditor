@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- **IPv4 CIDR subnet scans** via `--target 192.168.1.0/24` (max `/24`, 254 hosts)
+- `--scan-concurrency` for parallel host audits (default 8); subnet JSON with summary + per-host reports
+- **CLI help UX:** `-h`, `--help`, `/help`, `/?` aliases; Rich-styled help; compact figlet **H-AUDITOR** ANSI header on run and help
+- BBS-style GitHub Pages site (`docs/`) with `llms.txt`, `llms-full.txt`, `agents.md`, SEO/AEO/GEO files
+- Animated Cowrie/Dionaea demo GIFs in README and `docs/demo/`
+- Dionaea detection: FTP PASV private IP, STOR non-persistence, SMB framing fallback, HTTP/nginx tells, co-tenancy threshold tuning
+
+### Changed
+
+- Dependencies: `pyfiglet`, `rich-argparse` (figlet header + colored help)
+
 ## [0.2.1] - 2026-08-26
 
 ### Fixed

@@ -85,3 +85,32 @@ def _status(ind: Indicator) -> str:
     if ind.triggered:
         return "[red]HIT[/red]"
     return "[green]clean[/green]"
+
+
+def render_subnet_summary(
+    target: str,
+    reports: list[AuditReport],
+    console: Console | None = None,
+) -> None:
+    console = console or Console()
+    table = Table(title=f"Subnet scan — {target}", show_header=True)
+    table.add_column("IP")
+    table.add_column("Score", justify="right")
+    table.add_column("Threat level")
+    table.add_column("Hits", justify="right")
+    for report in sorted(reports, key=lambda r: r.score, reverse=True):
+        style = _LEVEL_STYLE.get(report.threat_level, "")
+        table.add_row(
+            report.resolved_ip,
+            f"{report.score:.1f}%",
+            Text(report.threat_level, style=style),
+            str(len(report.triggered())),
+        )
+    console.print(table)
+    flagged = [r for r in reports if r.score >= 30.0]
+    if flagged:
+        console.print(
+            f"[bold]{len(flagged)}[/bold] host(s) scored ≥30% (suspected or confirmed honeypot)."
+        )
+    else:
+        console.print("[dim]No hosts scored ≥30% in this subnet.[/dim]")

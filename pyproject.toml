@@ -25,6 +25,8 @@ classifiers = [
 ]
 dependencies = [
   "rich>=13.0",
+  "rich-argparse>=1.5",
+  "pyfiglet>=1.0",
   "paramiko>=3.0",
   "requests>=2.31",
 ]

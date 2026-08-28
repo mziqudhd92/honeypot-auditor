@@ -56,6 +56,46 @@ def test_resolve_target_ip():
     assert resolve_target("127.0.0.1") == "127.0.0.1"
 
 
+def test_resolve_target_rejects_cidr():
+    from honeypot_auditor.config import resolve_target
+
+    with pytest.raises(ValueError, match="CIDR"):
+        resolve_target("192.168.1.0/24")
+
+
+def test_expand_scan_targets_host():
+    from honeypot_auditor.config import expand_scan_targets
+
+    kind, hosts = expand_scan_targets("10.0.0.5")
+    assert kind == "host"
+    assert hosts == ["10.0.0.5"]
+
+
+def test_expand_scan_targets_slash24():
+    from honeypot_auditor.config import expand_scan_targets
+
+    kind, hosts = expand_scan_targets("192.168.1.0/24")
+    assert kind == "subnet"
+    assert len(hosts) == 254
+    assert hosts[0] == "192.168.1.1"
+    assert hosts[-1] == "192.168.1.254"
+
+
+def test_expand_scan_targets_rejects_large_subnet():
+    from honeypot_auditor.config import expand_scan_targets
+
+    with pytest.raises(ValueError, match="too large"):
+        expand_scan_targets("10.0.0.0/16")
+
+
+def test_expand_scan_targets_slash32():
+    from honeypot_auditor.config import expand_scan_targets
+
+    kind, hosts = expand_scan_targets("192.168.1.99/32")
+    assert kind == "subnet"
+    assert hosts == ["192.168.1.99"]
+
+
 @patch("honeypot_auditor.config.socket.gethostbyname", return_value="93.184.216.34")
 def test_resolve_target_hostname(mock_dns):
     from honeypot_auditor.config import resolve_target

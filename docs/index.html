@@ -127,8 +127,18 @@
           },
           {
             "@type": "HowToStep",
+            "name": "Show help",
+            "text": "honeypot-auditor --help"
+          },
+          {
+            "@type": "HowToStep",
             "name": "Audit lab target",
             "text": "honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep"
+          },
+          {
+            "@type": "HowToStep",
+            "name": "Subnet sweep (authorized, max /24)",
+            "text": "honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 --confirm-authorized"
           },
           {
             "@type": "HowToStep",
@@ -180,6 +190,7 @@
         <a href="#demo">demos</a>
         <a href="#install">install</a>
         <a href="#commands">commands</a>
+        <a href="#cli-flags">flags</a>
         <a href="#scoring">scoring</a>
         <a href="#agents">agents / SEO</a>
         <a href="#rules">rules</a>
@@ -255,16 +266,25 @@ honeypot-auditor --version</pre>
           </table>
         </div>
         <p style="margin-top:0.75rem">First dial-in:</p>
-        <pre class="code">honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap</pre>
+        <pre class="code">honeypot-auditor --help          # -h, --help, or /help
+honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap</pre>
+        <p style="margin-top:0.5rem">Startup shows a cyan figlet <strong>H0N3YP0T-AUD1T0R</strong> header (pyfiglet + Rich).</p>
       </section>
 
       <section class="panel" id="commands">
         <h2>-=[ QUICKSTART / COMMANDS ]=-</h2>
-        <pre class="code"># local lab · docker-research ports (2222, 8081, 1445, …)
+        <pre class="code"># help · figlet header + Rich options
+honeypot-auditor --help
+
+# local lab · docker-research ports (2222, 8081, 1445, …)
 honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
 
 # go deep · six extra detection axes · still no exploits
 honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep
+
+# subnet sweep · IPv4 CIDR up to /24 · parallel (Shodan skipped per host)
+honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 \
+  --confirm-authorized --output subnet-audit.json
 
 # internet-facing · need explicit ack
 honeypot-auditor --target 203.0.113.10 --preset iana \
@@ -274,6 +294,28 @@ honeypot-auditor --target 203.0.113.10 --preset iana \
 honeypot-auditor --target HOST --ports ssh=2222,ftp=9,http=9,smb=9 \
   --confirm-authorized --deep --skip-nmap</pre>
       </section>
+
+      <section class="panel" id="cli-flags">
+        <h2>-=[ CLI FLAGS ]=-</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Flag</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>-h</code>, <code>--help</code>, <code>/help</code></td><td>Show options (figlet header)</td></tr>
+              <tr><td><code>--target</code></td><td>IP, hostname, or IPv4 CIDR (max /24)</td></tr>
+              <tr><td><code>--scan-concurrency</code></td><td>Parallel hosts for subnet scans (default 8)</td></tr>
+              <tr><td><code>--preset</code></td><td><code>docker-research</code> (default) or <code>iana</code></td></tr>
+              <tr><td><code>--ports</code></td><td>Per-protocol override; map unused to <code>=9</code></td></tr>
+              <tr><td><code>--confirm-authorized</code></td><td>Required if any scanned IP is public</td></tr>
+              <tr><td><code>--deep</code></td><td>Shell semantics, OS coherence, HASSH, FSM, co-tenancy, temporal</td></tr>
+              <tr><td><code>--skip-nmap</code></td><td>Skip Nmap NSE phase</td></tr>
+              <tr><td><code>--timeout</code></td><td>Socket timeout in seconds (default 3)</td></tr>
+              <tr><td><code>--output</code></td><td>JSON path (subnet: combined summary + hosts)</td></tr>
+            </tbody>
+          </table>
+        </div>
 
       <section class="panel" id="scoring">
         <h2>-=[ SCORING MATRIX ]=-</h2>

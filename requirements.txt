@@ -1,0 +1,7 @@
+rich>=13.0
+paramiko>=3.0
+requests>=2.31
+
+# Optional (figlet header + colored help — installed by default via pip)
+pyfiglet>=1.0
+rich-argparse>=1.5

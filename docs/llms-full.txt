@@ -16,8 +16,10 @@ honeypot-auditor is a Python CLI that fingerprints whether a host behaves like a
 | Concept | Meaning |
 |---------|---------|
 | Basic probes | Shodan intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/HTTP/Redis/SMTP/VNC/SIP |
+| Subnet scan | IPv4 CIDR up to `/24` (254 hosts); `--scan-concurrency`; combined JSON report |
 | Deep mode (`--deep`) | Shell semantics, OS coherence, HASSH/TCP stack, protocol FSM, co-tenancy, temporal/latency/egress |
-| Authorization | Private/loopback OK; public IPs require `--confirm-authorized` |
+| CLI UX | Figlet `H0N3YP0T-AUD1T0R` header; `-h` / `--help` / `/help`; Rich-styled help text |
+| Authorization | Private/loopback OK; public IPs (or subnets with public hosts) require `--confirm-authorized` |
 | Non-goals | Not exploits, not exfil, not a prompt-injection detector, not UHBS decoy quality grading |
 
 ## Install
@@ -41,11 +43,18 @@ pip install -e ".[full,dev]"
 ## Commands agents should use
 
 ```bash
+# Help
+honeypot-auditor --help
+
 # Lab preset (docker-research ports: ssh=2222, http=8081, …)
 honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
 
 # Deep lab audit
 honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep
+
+# Subnet sweep (max /24; Shodan skipped; default 8 parallel hosts)
+honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 --confirm-authorized \
+  --output subnet-report.json
 
 # Custom ports (Cowrie on 2222)
 honeypot-auditor --target HOST --ports ssh=2222,ftp=9,http=9,smb=9,telnet=9,smtp=9,redis=9,vnc=9,sip=9 --confirm-authorized --deep
@@ -53,7 +62,7 @@ honeypot-auditor --target HOST --ports ssh=2222,ftp=9,http=9,smb=9,telnet=9,smtp
 # Dionaea-style buffet
 honeypot-auditor --target HOST --ports ftp=21,http=80,smb=445,ssh=9 --confirm-authorized --deep --timeout 5
 
-# JSON out
+# JSON out (single host)
 honeypot-auditor --target HOST --preset iana --confirm-authorized --output report.json
 ```
 
@@ -87,15 +96,30 @@ Observed lab demos (authorized EC2): Cowrie SSH :2222 ≈ 58% Suspected; Dionaea
 
 ## CLI flags
 
-- `--target HOST`
+- `-h`, `--help`, `/help`, `/?` — show options (figlet header + Rich help)
+- `--version`
+- `--target HOST` — IP, hostname, or IPv4 CIDR (max `/24`)
+- `--scan-concurrency N` — parallel hosts for subnet scans (default 8)
 - `--preset docker-research|iana`
-- `--ports ssh=2222,http=8081`
-- `--shodan-key` / `SHODAN_API_KEY`
-- `--output report.json`
-- `--confirm-authorized` (required for public IPs)
+- `--ports ssh=2222,http=8081` — map unused protocols to `=9` to skip
+- `--shodan-key` / `SHODAN_API_KEY` (skipped automatically on subnet scans)
+- `--output report.json` — subnet default: `honeypot-audit-subnet-<cidr>.json`
+- `--confirm-authorized` (required if any scanned IP is public)
 - `--skip-nmap`
 - `--deep`
 - `--timeout SECS` (default 3)
+
+## Subnet JSON shape
+
+```json
+{
+  "scan_type": "subnet",
+  "target": "192.168.1.0/24",
+  "host_count": 254,
+  "summary": [{ "resolved_ip": "...", "score": 0.0, "threat_level": "...", "triggered_count": 0 }],
+  "hosts": [ { "...": "full per-host audit report" } ]
+}
+```
 
 ## Responsible use (hard rule)
 

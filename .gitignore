@@ -22,3 +22,8 @@ honeypot-audit-*.json
 .vscode/
 *.swp
 .DS_Store
+
+# Accidental root venv (python -m venv .)
+pyvenv.cfg
+/bin/
+/lib/

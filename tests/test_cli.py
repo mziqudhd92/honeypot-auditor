@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -26,6 +26,15 @@ def test_parser_version():
     with pytest.raises(SystemExit) as exc:
         main(["--version"])
     assert exc.value.code == 0
+
+
+def test_help_flags(capsys):
+    for flag in ("-h", "--help", "/help"):
+        code = main(["--target", "127.0.0.1", flag])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "--target" in out
+        assert "H-AUDITOR" in out or "honeypot-auditor" in out
 
 
 def test_public_ip_refused_without_confirm():
@@ -102,6 +111,48 @@ def test_run_audit_local_smoke(
     assert code == 0
     mock_export.assert_called_once()
     mock_render.assert_called_once()
+
+
+@patch("honeypot_auditor.cli.export_subnet")
+@patch("honeypot_auditor.cli.render_subnet_summary")
+@patch("honeypot_auditor.cli._audit_host", new_callable=AsyncMock)
+def test_run_audit_subnet_smoke(mock_audit_host, mock_render_summary, mock_export_subnet, tmp_path):
+    from honeypot_auditor.models import AuditReport
+
+    mock_audit_host.return_value = AuditReport(
+        target="192.168.1.1",
+        resolved_ip="192.168.1.1",
+        score=0.0,
+        threat_level="Likely Real Host",
+        category_hits={},
+    )
+    args = build_parser().parse_args(
+        [
+            "--target",
+            "192.168.1.0/30",
+            "--skip-nmap",
+            "--scan-concurrency",
+            "2",
+            "--output",
+            str(tmp_path / "subnet.json"),
+        ]
+    )
+    code = asyncio.run(run_audit(args))
+    assert code == 0
+    assert mock_audit_host.await_count == 2
+    mock_render_summary.assert_called_once()
+    mock_export_subnet.assert_called_once()
+
+
+def test_subnet_public_requires_confirm():
+    args = build_parser().parse_args(["--target", "8.8.8.0/30", "--skip-nmap"])
+    code = asyncio.run(run_audit(args))
+    assert code == 2
+
+
+def test_parser_scan_concurrency():
+    args = build_parser().parse_args(["--target", "127.0.0.1", "--scan-concurrency", "4"])
+    assert args.scan_concurrency == 4
 
 
 @patch("honeypot_auditor.cli.asyncio.to_thread", side_effect=RuntimeError("probe boom"))

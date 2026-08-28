@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H0N3YP0T-AUD1T0R :: v0.2.1 :: "DIALING IN... CARRIER DETECTED" ::       |
+|  :: H-AUDITOR :: v0.2.1 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -102,7 +102,7 @@ made Cowrie sweat in `'09 and still catches clones in `'26.
 
 | Install | Unlocks |
 |---------|---------|
-| `pip install honeypot-auditor` | Core probes (Paramiko + Requests + stdlib) |
+| `pip install honeypot-auditor` | Core probes (Paramiko + Requests + Rich + figlet header) |
 | `pip install "honeypot-auditor[full]"` | + Nmap · SMB/Impacket · Shodan SDK · Scapy · deep telnet |
 
 `SHODAN_API_KEY` or `--shodan-key` is still **your** key — `[full]` only installs the client lib.
@@ -110,6 +110,7 @@ made Cowrie sweat in `'09 and still catches clones in `'26.
 **First dial-in:**
 
 ```bash
+honeypot-auditor --help          # -h, --help, or /help (BBS figlet header)
 honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
 ```
 
@@ -121,6 +122,16 @@ honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
   │  make test-cov && make lint                                                │
   └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+**No pip install** (git checkout — install minimal deps once):
+
+```bash
+pip install -r requirements.txt    # or: pip install rich paramiko requests
+python3 honeypot-auditor.py --help
+python3 honeypot-auditor.py --target 127.0.0.1 --skip-nmap
+```
+
+`pyfiglet` / `rich-argparse` are optional for the script path (plain header + stdlib help if missing). Full probes need `pip install -e ".[full]"`.
 
 Release maintainers → [docs/PUBLISHING.md](docs/PUBLISHING.md)
 
@@ -138,6 +149,11 @@ honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep
 # internet-facing target · need explicit ack + Shodan key if you want intel
 honeypot-auditor --target 203.0.113.10 --preset iana \
   --shodan-key "$SHODAN_API_KEY" --confirm-authorized
+
+# subnet sweep · IPv4 CIDR up to /24 (254 hosts) · parallel by default
+honeypot-auditor --target 192.168.1.0/24 --preset docker-research \
+  --skip-nmap --scan-concurrency 16 --confirm-authorized
+# subnet JSON → honeypot-audit-subnet-192.168.1.0_24.json (summary + per-host reports)
 
 # benchmark lab · cowrie + dionaea in docker
 ./scripts/benchmark-lab.sh
@@ -181,13 +197,16 @@ research stacks with 11 open faces). Needs another tell first. By design.
 ## -=[ CLI FLAGS ]=-
 
 ```
-  --target HOST              victim^W subject under authorized test
+  -h, --help, /help          show options (figlet H-AUDITOR header + Rich help)
+  --version                  print version and exit
+  --target HOST              IP, hostname, or IPv4 CIDR (max /24)
+  --scan-concurrency N       parallel hosts for CIDR scans (default 8; Shodan skipped)
   --preset docker-research   lab ports (default)
   --preset iana              well-known ports (22, 80, 445, …)
-  --ports ssh=2222,http=8081 per-protocol override
+  --ports ssh=2222,http=8081 per-protocol override (map unused protos to =9)
   --shodan-key KEY           or env SHODAN_API_KEY
-  --output report.json       JSON artifact path
-  --confirm-authorized       REQUIRED for public IPs
+  --output report.json       JSON path (subnet default: honeypot-audit-subnet-<cidr>.json)
+  --confirm-authorized       REQUIRED if any scanned IP is public
   --skip-nmap                skip Nmap NSE phase
   --deep                     advanced six-axis probes
   --timeout SECS             socket timeout (default 3)

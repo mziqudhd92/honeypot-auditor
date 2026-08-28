@@ -224,11 +224,64 @@ def resolve_target(target: str) -> str:
     target = (target or "").strip()
     if not target:
         raise ValueError("target is empty")
+    if "/" in target:
+        raise ValueError(
+            "target looks like a CIDR subnet; use expand_scan_targets() or pass a single IP/hostname"
+        )
     try:
         ipaddress.ip_address(target)
         return target
     except ValueError:
         return socket.gethostbyname(target)
+
+
+# Largest allowed IPv4 scan: /24 (256 addresses). Smaller prefixes are rejected.
+MAX_SUBNET_PREFIX_IPV4 = 24
+MAX_SUBNET_HOSTS = 256
+DEFAULT_SCAN_CONCURRENCY = 8
+
+
+def expand_scan_targets(target: str) -> tuple[str, list[str]]:
+    """
+    Expand --target to one or more probe addresses.
+
+    Returns (scan_kind, addresses) where scan_kind is ``host`` or ``subnet``.
+  Single IPs and hostnames resolve to one address. IPv4 CIDR up to /24 expands
+    to host addresses (network/broadcast omitted when applicable).
+    """
+    target = (target or "").strip()
+    if not target:
+        raise ValueError("target is empty")
+
+    if "/" not in target:
+        return "host", [resolve_target(target)]
+
+    try:
+        network = ipaddress.ip_network(target, strict=False)
+    except ValueError as exc:
+        raise ValueError(f"invalid CIDR target {target!r}: {exc}") from exc
+
+    if network.version != 4:
+        raise ValueError("subnet scans support IPv4 CIDR only")
+
+    if network.prefixlen < MAX_SUBNET_PREFIX_IPV4:
+        raise ValueError(
+            f"subnet {target} is too large; maximum allowed prefix is /{MAX_SUBNET_PREFIX_IPV4}"
+        )
+
+    if network.num_addresses > MAX_SUBNET_HOSTS:
+        raise ValueError(
+            f"subnet {target} has {network.num_addresses} addresses; "
+            f"maximum is {MAX_SUBNET_HOSTS} (/{MAX_SUBNET_PREFIX_IPV4})"
+        )
+
+    hosts = [str(addr) for addr in network.hosts()]
+    if not hosts and network.num_addresses <= 2:
+        hosts = [str(addr) for addr in network]
+    if not hosts:
+        raise ValueError(f"subnet {target} has no scannable host addresses")
+
+    return "subnet", hosts
 
 
 def is_private_or_loopback(ip: str) -> bool:
