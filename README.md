@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v0.2.1 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v0.2.2 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -260,10 +260,10 @@ Use this one if you just need a fast external fingerprint.
 
 ## -=[ GREETS / SHOUTS ]=-
 
-```
+<pre>
   Proper respect to:
     Cowrie · Dionaea · Conpot · the old Kippo crew
-    UHBS lab rats · CyberHalluciNet purple-team night shift
+    <a href="https://uhbs.github.io/uhbs-standard/">UHBS lab rats</a> · <a href="https://cyberhallucinet.org/">CyberHalluciNet</a> purple-team night shift
     Shodan · Salesforce HASSH · everyone who ever typed USER anonymous
     BBS sysops who ran 9600 baud file areas for "utilz"
     and the three people who still read NFO files in 2026
@@ -272,7 +272,7 @@ Use this one if you just need a fast external fingerprint.
     script kiddies scanning /0
     vendors who call Cowrie "AI-powered threat intelligence"
     anyone who STORs malware on decoys then writes a LinkedIn post about it
-```
+</pre>
 
 ```
   "greetz to the elite · no greetz to the lame · hang up clean."
@@ -292,13 +292,13 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ## -=[ LICENSE ]=-
 
-```
-  MIT · do what you want · keep the copyright · no warranty
-  see LICENSE for the lawyer-safe version (boring but binding)
-```
+<pre>
+  <a href="LICENSE">MIT</a> · do what you want · keep the copyright · no warranty
+  see <a href="LICENSE">LICENSE</a> for the lawyer-safe version (boring but binding)
+</pre>
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v0.2.1 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v0.2.2 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```

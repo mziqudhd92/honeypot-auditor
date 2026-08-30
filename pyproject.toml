@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "honeypot-auditor"
-version = "0.2.1"
+version = "0.2.2"
 description = "Multi-protocol CLI that fingerprints whether an authorized target behaves like a low-interaction honeypot."
 readme = "README.md"
 license = "MIT"

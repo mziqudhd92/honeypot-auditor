@@ -2,6 +2,6 @@
 [0.010792, "o", "\r\n\u001b[1mHONEYPOT AUDITOR — Cowrie demo\u001b[0m\r\nInstall from PyPI + nmap → audit SSH honeypot on port 2222\r\nTarget: 54.84.251.249  (Cowrie SSH :2222 on combined lab)\r\n"]
 [19.545281, "o", "debconf: delaying package configuration, since apt-utils is not installed\r\n"]
 [87.515862, "o", "\r\n"]
-[87.580601, "o", "Installed: honeypot-auditor 0.2.1\r\n"]
+[87.580601, "o", "Installed: honeypot-auditor 0.2.2\r\n"]
 [87.587092, "o", "           nmap 7.94SVN\r\n\r\nRunning:\r\n  honeypot-auditor --target 54.84.251.249 --ports ssh=2222,telnet=9,smtp=9,http=9,ftp=9,smb=9,redis=9,vnc=9,sip=9 --confirm-authorized --deep\r\n  (includes Nmap NSE banner / honeypot scripts)\r\n\r\nProbing target (this takes ~45-90 seconds)...\r\n\r\n"]
 [202.588047, "o", "\r\n==========================================================\r\n  Cowrie (SSH honeypot)\r\n==========================================================\r\n  Target  : 54.84.251.249\r\n  Score   : 58%\r\n  Verdict : Suspected Honeypot\r\n\r\n  Key findings:\r\n  • [SSH] SSH arbitrary credential acceptance — random user_a28:**** accepted\r\n  • [SSH] Shell execution semantics inconsistent with real OS\r\n  • [SSH] Auth engagement curve suggests honeypot any-password policy — random creds accepted on attempts [1, 2, 3, 4, 5]\r\n  • [SSH] Contained honeypot egress silence after bait command — egress bait command failed: Channel closed.\r\n==========================================================\r\n\r\n"]

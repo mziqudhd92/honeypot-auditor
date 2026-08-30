@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-30
+
 ### Added
 
 - **IPv4 CIDR subnet scans** via `--target 192.168.1.0/24` (max `/24`, 254 hosts)
@@ -18,6 +20,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ### Changed
 
 - Dependencies: `pyfiglet`, `rich-argparse` (figlet header + colored help)
+- README greets link [UHBS lab rats](https://uhbs.github.io/uhbs-standard/) and [CyberHalluciNet](https://cyberhallucinet.org/); LICENSE section links [MIT](LICENSE)
 
 ## [0.2.1] - 2026-08-26
 

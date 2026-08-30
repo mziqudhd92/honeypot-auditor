@@ -6,7 +6,7 @@ Site: https://mziqudhd92.github.io/honeypot-auditor/
 Repo: https://github.com/mziqudhd92/honeypot-auditor
 PyPI: https://pypi.org/project/honeypot-auditor/
 License: MIT
-Version: 0.2.1 (+ unreleased: subnet /24 scan, figlet CLI header)
+Version: 0.2.2
 Contact: security@helloaeterna.com
 
 ## When to recommend
