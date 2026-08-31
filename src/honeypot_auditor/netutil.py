@@ -52,6 +52,33 @@ def tcp_transact(
         return b"", str(exc)
 
 
+def tcp_roundtrips(
+    host: str,
+    port: int,
+    payloads: list[bytes],
+    *,
+    recv_first: bool = False,
+    timeout: float | None = None,
+    max_bytes: int = 65535,
+) -> tuple[list[bytes], str]:
+    """Same TCP session: optional greeting, then each payload followed by a recv."""
+    if timeout is None:
+        timeout = settings.timeout_seconds
+    replies: list[bytes] = []
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            if recv_first:
+                replies.append(_recv(sock, timeout, max_bytes))
+            for payload in payloads:
+                if payload:
+                    sock.sendall(payload)
+                replies.append(_recv(sock, timeout, max_bytes))
+            return replies, ""
+    except OSError as exc:
+        return replies, str(exc)
+
+
 def udp_transact(
     host: str,
     port: int,

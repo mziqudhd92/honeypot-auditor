@@ -7,6 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from honeypot_auditor.config import BASIC_STRATEGIES, STRATEGY_LABELS
 from honeypot_auditor.models import AuditReport, Indicator
 
 _LEVEL_STYLE = {
@@ -17,7 +18,7 @@ _LEVEL_STYLE = {
 }
 
 
-def render(report: AuditReport, console: Console | None = None) -> None:
+def render(report: AuditReport, console: Console | None = None, *, verbose: bool = False) -> None:
     console = console or Console()
     style = _LEVEL_STYLE.get(report.threat_level, "bold")
 
@@ -29,38 +30,43 @@ def render(report: AuditReport, console: Console | None = None) -> None:
     head.add_row("Threat level", Text(report.threat_level, style=style))
     console.print(Panel(head, title="Honeypot Auditor", border_style="cyan"))
 
-    weights = Table(title="Category contributions", show_lines=False)
-    weights.add_column("Category")
+    if not verbose:
+        return
+
+    weights = Table(title="Strategy contributions", show_lines=False)
+    weights.add_column("Strategy")
     weights.add_column("Weight", justify="right")
     weights.add_column("Hit", justify="center")
     weights.add_column("Contribution", justify="right")
-    labels = {
-        "shodan": "Shodan Honeyscore / tags",
-        "arbitrary_auth": "Arbitrary credential acceptance",
-        "state_nonpersist": "State non-persistence",
-        "static_signature": "Static software / banner match",
-        "behavior": "Shell execution semantics",
-        "coherence": "Cross-artifact OS coherence",
-        "stack_fingerprint": "HASSH / TCP stack fingerprint",
-        "proto_conformance": "Protocol FSM conformance",
-        "cotenancy": "Multi-service honeypot buffet",
-        "temporal": "Temporal / latency behavior",
-    }
     for key, row in report.category_hits.items():
         hit = row.get("triggered")
         attempted = row.get("attempted")
         mark = "[red]yes[/red]" if hit else ("[dim]skip[/dim]" if not attempted else "[green]no[/green]")
         weights.add_row(
-            labels.get(key, key),
-            f"{row.get('weight', 0) * 100:.0f}%",
+            STRATEGY_LABELS.get(key, key),
+            "bonus" if row.get("dynamic") else f"{row.get('weight', 0) * 100:.0f}%",
             mark,
             f"{row.get('contribution', 0):.0f}%",
         )
     console.print(weights)
 
+    if report.protocol_strategies:
+        proto = Table(title="Protocol strategies", show_lines=False)
+        proto.add_column("Protocol", width=12)
+        proto.add_column("Ports", width=12)
+        for key in BASIC_STRATEGIES:
+            proto.add_column(STRATEGY_LABELS.get(key, key))
+        for row in report.protocol_strategies:
+            proto.add_row(
+                row["protocol"],
+                ",".join(str(p) for p in row.get("ports") or []),
+                *(_strategy_cell(row.get(key) or {}) for key in BASIC_STRATEGIES),
+            )
+        console.print(proto)
+
     bullets = Table(title="Indicators", show_header=True)
     bullets.add_column("Status", width=10)
-    bullets.add_column("Protocol", width=10)
+    bullets.add_column("Protocol", width=14)
     bullets.add_column("Finding")
     bullets.add_column("Detail")
     for ind in report.indicators:
@@ -77,6 +83,22 @@ def render(report: AuditReport, console: Console | None = None) -> None:
 
     for note in report.notes:
         console.print(f"[dim]{note}[/dim]")
+
+
+def _strategy_cell(cell: dict) -> str:
+    status = cell.get("status") or "n/a"
+    playbook = (cell.get("playbook") or "").strip()
+    if status == "n/a":
+        return "[dim]—[/dim]"
+    if status == "hit":
+        mark = "[red]HIT[/red]"
+    elif status == "skip":
+        mark = "[dim]skip[/dim]"
+    else:
+        mark = "[green]clean[/green]"
+    if playbook:
+        return f"{mark}  {playbook}"
+    return mark
 
 
 def _status(ind: Indicator) -> str:

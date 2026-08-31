@@ -111,7 +111,7 @@ made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ```bash
 honeypot-auditor --help          # -h, --help, or /help (BBS figlet header)
-honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
+honeypot-auditor --target 127.0.0.1 --skip-nmap
 ```
 
 ```
@@ -140,19 +140,21 @@ Release maintainers → [docs/PUBLISHING.md](docs/PUBLISHING.md)
 ## -=[ QUICKSTART / COMMANDS ]=-
 
 ```bash
-# local lab · docker-compose research ports (2222, 8081, 1445, …)
-honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
+# local lab · default probes IANA + docker/lab ports (22 and 2222, 80 and 8081, …)
+honeypot-auditor --target 127.0.0.1 --skip-nmap
 
 # go deep · six extra detection axes · still no exploits
-honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep
+honeypot-auditor --target 127.0.0.1 --skip-nmap --deep
 
 # internet-facing target · need explicit ack + Shodan key if you want intel
-honeypot-auditor --target 203.0.113.10 --preset iana \
-  --shodan-key "$SHODAN_API_KEY" --confirm-authorized
+honeypot-auditor --target 203.0.113.10 --confirm-authorized
+
+# SSH 22 only (does not scan the rest of the preset)
+honeypot-auditor --target 203.0.113.10 -p 22 --confirm-authorized
 
 # subnet sweep · IPv4 CIDR up to /24 (254 hosts) · parallel by default
-honeypot-auditor --target 192.168.1.0/24 --preset docker-research \
-  --skip-nmap --scan-concurrency 16 --confirm-authorized
+honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 \
+  --confirm-authorized
 # subnet JSON → honeypot-audit-subnet-192.168.1.0_24.json (summary + per-host reports)
 
 # benchmark lab · cowrie + dionaea in docker
@@ -161,16 +163,18 @@ honeypot-auditor --target 192.168.1.0/24 --preset docker-research \
 
 ---
 
-## -=[ SCORING MATRIX ]=-
+## -=[ STRATEGIES ]=-
+
+Every protocol uses the same three detection strategies (weights are global, one hit per strategy):
 
 ```
   ╭──────────────────────────┬────────┬───────────────────────────────────────╮
-  │ CATEGORY                 │ WEIGHT │ TRIGGERS                              │
+  │ STRATEGY                 │ WEIGHT │ HOW IT FIRES                           │
   ├──────────────────────────┼────────┼───────────────────────────────────────┤
   │ Shodan intel             │  25%   │ Honeyscore > 0.6 · honeypot tag       │
-  │ Arbitrary auth           │  30%   │ any-password SSH/Telnet · open relay│
-  │ State non-persistence    │  25%   │ FTP STOR / Redis key vanishes         │
-  │ Static signatures        │  20%   │ Cowrie banners · stock uname/cpu      │
+  │ Arbitrary auth           │  30%   │ random or stock decoy credentials accepted │
+  │ State non-persistence    │  25%   │ session / FSM / filesystem does not keep state │
+  │ Static signature         │  20%   │ stock banner · unknown nmap -sV (any proto) · banner vs -sV family mismatch │
   ╰──────────────────────────┴────────┴───────────────────────────────────────╯
 
   --deep ADDS (lab brain mode):
@@ -201,12 +205,15 @@ research stacks with 11 open faces). Needs another tell first. By design.
   --version                  print version and exit
   --target HOST              IP, hostname, or IPv4 CIDR (max /24)
   --scan-concurrency N       parallel hosts for CIDR scans (default 8; Shodan skipped)
-  --preset docker-research   lab ports (default)
-  --preset iana              well-known ports (22, 80, 445, …)
+  --preset both              IANA + lab ports (default: SSH 22 and 2222, …)
+  --preset iana              well-known ports only (22, 80, 445, …)
+  --preset docker-research   lab ports only (2222, 8081, 1445, …)
+  -p, --port 22              only these TCP ports (nmap-style; 22,2222 or -p 22 -p 80)
   --ports ssh=2222,http=8081 per-protocol override (map unused protos to =9)
   --shodan-key KEY           or env SHODAN_API_KEY
   --output report.json       JSON path (subnet default: honeypot-audit-subnet-<cidr>.json)
   --confirm-authorized       REQUIRED if any scanned IP is public
+  -v, --verbose              strategy breakdown, per-protocol matrix, indicators, notes
   --skip-nmap                skip Nmap NSE phase
   --deep                     advanced six-axis probes
   --timeout SECS             socket timeout (default 3)
@@ -214,21 +221,38 @@ research stacks with 11 open faces). Needs another tell first. By design.
 
 ---
 
-## -=[ PORT PRESETS ]=-
+## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-```
-  PROTOCOL    iana    docker-research
-  ──────────────────────────────────
-  SSH          22         2222
-  HTTP         80         8081
-  FTP          21         2121
-  Telnet       23         2323
-  SMTP         25         2525
-  SMB         445         1445
-  SIP        5060         5060
-  VNC        5900         5900
-  Redis      6379         6379
-```
+Fifteen first-class probes. Default (`--preset both`) is IANA **and** lab/docker ports.
+Restrict with `-p 22` (nmap-style: only those ports). Override with `--ports ssh=2222`.
+Map unused faces to a closed port (`ftp=9`) so skips do not inflate the score.
+
+Every protocol uses the **same three strategies**. A `—` means that strategy is not on the basic path for that service.
+
+| Protocol | iana | lab | Arbitrary auth | State non-persistence | Static signature |
+|----------|------:|----:|----------------|----------------------|------------------|
+| SSH | 22 | 2222 | any-password (2 logins) | exec vs fake PTY · /tmp canary | banner · lure whoami · honeyfs |
+| Telnet | 23 | 2323 | any-password (2 logins) | canned reject · /tmp canary | UAV / IAC spray · unknown-option WILL · lure whoami · fake tty/pipes |
+| FTP | 21 | 2121 | stock decoy login (`test`) | PASV mismatch · canned 530 · STOR/SIZE · FEAT/PWD desert | stock `220` · SYST L8 · PORT bounce |
+| SMTP | 25 | 2525 | AUTH any-password · open relay | MAIL then RCPT 503 (lost envelope) | loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone |
+| HTTP | 80 / 443 | 8081 | — | — | empty PUT 405 · GET / → index.html login skin · 407 Via localhost |
+| SMB | 445 | 1445 | — | — | emulator native-OS / dialect |
+| SIP | 5060 | 5060 | — | — | default User-Agent template |
+| VNC | 5900 | 5000 | — | RFB auth always canned failure | RFB 3.8 VNC-auth only · canned Authentication failure · type-0 still challenges |
+| Redis | 6379 | 6379 | AUTH any-password | FLUSHALL no-op · key vanishes after reconnect | COMMAND stub · AUTH-invalid+COMMAND NOAUTH wall · frozen INFO · missing ECHO/SELECT |
+| MySQL | 3306 | 3306 | — | drop after one 1045 · SSL-request silent drop | EOL 5.5.x ubuntu greeting |
+| Postgres | 5432 | 5432 | — | frozen `auth.c:326` fail blob | SSLRequest → N · cleartext-only |
+| Git | 9418 | 9418 | — | — | git-upload-pack always ERR no such repository |
+| RDP | 3389 | 3389 | — | canned negotiation failure | canned NLA cookie 0x1234 |
+| HTTP proxy | 3128 | 8080 | — | — | 407 Via localhost · frozen squid 3.3.8 · ISA deny phrase |
+| MSSQL | 1433 | 1433 | — | TLS close after ENCRYPT_NOT_SUP | canned TDS prelogin · PRELOGIN encrypt NOT SUP |
+| MongoDB | 27017 | 27017 | — | ping unauthorized after hello | hello connectionId frozen at 1 |
+
+`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `5061` → SIP, `5000`/`5901` → VNC, `3306` → MySQL, `9418` → Git, `3389` → RDP, `1433` → MSSQL, `27017` → MongoDB. Unknown numbers are probed as SSH.
+
+`--deep` adds SSH/Telnet shell semantics, HASSH, TCP stack, HTTP/FTP/SMTP FSM, and TLS JA4S when HTTP is on **443/8443**. Co-tenancy also pokes Modbus (1502), SNMP (161), DNS (15353), IPP (631), and POP (1110) only to count how many lures sit on one IP — not as standalone detectors.
+
+Shodan Honeyscore and Nmap NSE are intel layers, not protocol engines. Closed faces are skipped, not scored.
 
 ---
 

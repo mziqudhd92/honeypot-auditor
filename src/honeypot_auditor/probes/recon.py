@@ -9,16 +9,17 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from honeypot_auditor.config import (
-    NMAP_HONEYPOT_TELLS,
     NMAP_HOST_TIMEOUT,
-    NMAP_MAX_OPEN_PORTS,
     NMAP_PORT_PRIORITY,
     NMAP_SCRIPTS,
     SHODAN_HONEYSCORE_URL,
     SHODAN_HOST_URL,
     SHODAN_SCORE_THRESHOLD,
     USER_AGENT,
+    all_tcp_ports,
     is_private_or_loopback,
+    match_nmap_service_tell,
+    protocol_by_port,
 )
 from honeypot_auditor.models import Indicator, optional_import, skipped_indicator
 from honeypot_auditor.settings import settings
@@ -123,14 +124,14 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
     return out
 
 
-def nmap_scan(ip: str, ports: dict[str, int], enabled: bool = True) -> list[Indicator]:
+def nmap_scan(ip: str, ports: dict[str, int | list[int]], enabled: bool = True) -> list[Indicator]:
     if not enabled:
         return [
             skipped_indicator(
                 "nmap.nse",
-                "Nmap NSE honeypot / banner scripts",
+                "Nmap -sV / NSE honeypot tells",
                 "static_signature",
-                "disabled (--skip-nmap)",
+                "disabled (pass --with-nmap / -n to enable)",
                 protocol="nmap",
             )
         ]
@@ -138,7 +139,7 @@ def nmap_scan(ip: str, ports: dict[str, int], enabled: bool = True) -> list[Indi
         return [
             skipped_indicator(
                 "nmap.nse",
-                "Nmap NSE honeypot / banner scripts",
+                "Nmap -sV / NSE honeypot tells",
                 "static_signature",
                 "nmap binary not on PATH",
                 protocol="nmap",
@@ -149,27 +150,27 @@ def nmap_scan(ip: str, ports: dict[str, int], enabled: bool = True) -> list[Indi
         return [
             skipped_indicator(
                 "nmap.nse",
-                "Nmap NSE honeypot / banner scripts",
+                "Nmap -sV / NSE honeypot tells",
                 "static_signature",
                 "python-nmap not installed (pip install honeypot-auditor[full])",
                 protocol="nmap",
             )
         ]
 
-    port_list = sorted({int(p) for p in ports.values()})
+    port_list = sorted(all_tcp_ports(ports))
     open_ports = _open_tcp_ports(ip, port_list, min(2.0, settings.timeout_seconds))
     if not open_ports:
         return [
             skipped_indicator(
                 "nmap.nse",
-                "Nmap NSE honeypot / banner scripts",
+                "Nmap -sV / NSE honeypot tells",
                 "static_signature",
                 "no open TCP ports in preset to scan",
                 protocol="nmap",
             )
         ]
-    # Version scan is expensive; prefer telnet/ssh/ftp where honeypot product names show up.
-    name_by_port = {int(v): k for k, v in ports.items()}
+    # Version-scan every open preset port (unknown -sV on any protocol is a tell).
+    name_by_port = protocol_by_port(ports)
     prioritized: list[int] = []
     for proto_name in NMAP_PORT_PRIORITY:
         for port in open_ports:
@@ -178,7 +179,7 @@ def nmap_scan(ip: str, ports: dict[str, int], enabled: bool = True) -> list[Indi
     for port in open_ports:
         if port not in prioritized:
             prioritized.append(port)
-    scan_ports = prioritized[:NMAP_MAX_OPEN_PORTS]
+    scan_ports = prioritized
     port_spec = ",".join(str(p) for p in scan_ports)
     arguments = (
         f"-Pn -sV --script={NMAP_SCRIPTS} -p {port_spec} "
@@ -191,7 +192,7 @@ def nmap_scan(ip: str, ports: dict[str, int], enabled: bool = True) -> list[Indi
         return [
             skipped_indicator(
                 "nmap.nse",
-                "Nmap NSE honeypot / banner scripts",
+                "Nmap -sV / NSE honeypot tells",
                 "static_signature",
                 f"nmap failed: {exc}",
                 protocol="nmap",
@@ -213,34 +214,36 @@ def nmap_scan(ip: str, ports: dict[str, int], enabled: bool = True) -> list[Indi
             for _port in ports_found:
                 data = bucket.get(_port) or {}
                 scripts = data.get("script") or {}
+                merged = dict(data)
+                if scripts:
+                    merged["script_blob"] = " ".join(str(v) for v in scripts.values())
                 svc_bits = " ".join(
                     str(data.get(k) or "")
                     for k in ("name", "product", "version", "extrainfo", "cpe")
                 ).strip()
                 if svc_bits:
                     banners.append(f"{_port}/{proto} {svc_bits}")
-                    low_svc = svc_bits.lower()
-                    if any(tell in low_svc for tell in NMAP_HONEYPOT_TELLS):
-                        triggers.append(f"service@{_port}: {svc_bits[:180]}")
-                for name, output in scripts.items():
-                    text = str(output)
-                    banners.append(f"{name}: {text[:200]}")
-                    low = text.lower()
-                    if any(tell in low for tell in NMAP_HONEYPOT_TELLS):
-                        triggers.append(f"{name}@{_port}: {text[:180]}")
+                hit = match_nmap_service_tell(merged)
+                if hit:
+                    triggers.append(f"{_port}/{proto}: {hit}")
+                for sname, output in scripts.items():
+                    banners.append(f"{sname}: {str(output)[:200]}")
+                    script_hit = match_nmap_service_tell({"name": sname, "extrainfo": str(output)})
+                    if script_hit:
+                        triggers.append(f"{sname}@{_port}: {script_hit}")
 
     detail = "; ".join(triggers) if triggers else (
-        "NSE ran; no honeypot script flags. " + "; ".join(banners[:6])
+        "-sV ran; no unknown fingerprint or lure flags. " + "; ".join(banners[:6])
     )
     return [
         Indicator(
             id="nmap.nse",
-            title="Nmap NSE honeypot / banner scripts",
+            title="Nmap -sV / NSE honeypot tells",
             category="static_signature",
             triggered=bool(triggers),
             protocol="nmap",
             detail=detail[:800],
-            evidence="\n".join(triggers[:12]),
+            evidence="\n".join(triggers[:12] or banners[:8]),
         )
     ]
 

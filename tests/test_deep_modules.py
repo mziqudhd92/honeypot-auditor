@@ -87,7 +87,11 @@ def test_ftp_fsm_pasv_non_routable(mock_import):
     mock_import.return_value = mock_ftplib
     ftp = MagicMock()
     mock_ftplib.FTP.return_value = ftp
-    ftp.sendcmd.side_effect = ["211 end", "227 Entering Passive Mode (127,0,0,1,31,144)"]
+    ftp.sendcmd.side_effect = [
+        "211 end",
+        "350 Restarting at 0",
+        "227 Entering Passive Mode (127,0,0,1,31,144)",
+    ]
     ftp.storbinary.side_effect = OSError("connection refused")
 
     inds = probe_ftp_fsm("127.0.0.1", 21)
@@ -127,6 +131,8 @@ def test_smtp_fsm_open_relay_tell(mock_import):
 
     inds = probe_smtp_fsm("127.0.0.1", 25)
     assert inds[0].triggered
+    assert isinstance(inds[0].evidence, str)
+    assert "ok" in inds[0].evidence
 
 
 @patch("honeypot_auditor.probes.deep.temporal.time.sleep")
@@ -199,3 +205,13 @@ def test_tcp_stack_scapy_missing(mock_connect):
 def test_tls_skipped(mock_connect):
     inds = probe_tls_ja4s("127.0.0.1", 443)
     assert inds[0].skipped
+
+
+@patch("honeypot_auditor.probes.deep.fsm.tcp_transact")
+def test_telnet_fsm_blind_option(mock_tcp):
+    from honeypot_auditor.probes.deep.fsm import probe_telnet_fsm
+
+    mock_tcp.side_effect = [(b"\xff\xfb\x63Username: ", ""), (b"login: ", "")]
+    inds = probe_telnet_fsm("127.0.0.1", 23)
+    assert inds[0].triggered
+    assert "option 99" in inds[0].detail

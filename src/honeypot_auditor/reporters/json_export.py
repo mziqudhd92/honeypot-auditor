@@ -15,6 +15,7 @@ def _report_payload(report: AuditReport) -> dict:
         "score": report.score,
         "threat_level": report.threat_level,
         "category_hits": report.category_hits,
+        "protocol_strategies": report.protocol_strategies,
         "ports": report.ports,
         "notes": report.notes,
         "started_at": report.started_at,
@@ -24,10 +25,21 @@ def _report_payload(report: AuditReport) -> dict:
     }
 
 
+def _json_default(obj: object) -> str:
+    if isinstance(obj, bytes):
+        return obj.decode("utf-8", "replace")
+    if isinstance(obj, bytearray):
+        return bytes(obj).decode("utf-8", "replace")
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 def export(report: AuditReport, path: str | Path) -> Path:
     dest = Path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(json.dumps(_report_payload(report), indent=2) + "\n", encoding="utf-8")
+    dest.write_text(
+        json.dumps(_report_payload(report), indent=2, default=_json_default) + "\n",
+        encoding="utf-8",
+    )
     return dest
 
 
@@ -61,5 +73,5 @@ def export_subnet(
         "summary": summary,
         "hosts": [_report_payload(r) for r in reports],
     }
-    dest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    dest.write_text(json.dumps(payload, indent=2, default=_json_default) + "\n", encoding="utf-8")
     return dest

@@ -5,6 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+def _as_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "replace")
+    if isinstance(value, bytearray):
+        return bytes(value).decode("utf-8", "replace")
+    return value if isinstance(value, str) else str(value)
+
+
 @dataclass
 class Indicator:
     id: str
@@ -17,6 +27,16 @@ class Indicator:
     skipped: bool = False
     skip_reason: str = ""
     error: str = ""
+
+    def __post_init__(self) -> None:
+        self.id = _as_text(self.id)
+        self.title = _as_text(self.title)
+        self.category = _as_text(self.category)
+        self.detail = _as_text(self.detail)
+        self.protocol = _as_text(self.protocol)
+        self.evidence = _as_text(self.evidence)
+        self.skip_reason = _as_text(self.skip_reason)
+        self.error = _as_text(self.error)
 
     def as_dict(self) -> dict:
         return {
@@ -66,6 +86,7 @@ class AuditReport:
     notes: list[str] = field(default_factory=list)
     started_at: str = ""
     finished_at: str = ""
+    protocol_strategies: list[dict] = field(default_factory=list)
 
     def triggered(self) -> list[Indicator]:
         return [i for i in self.indicators if i.triggered and not i.skipped]

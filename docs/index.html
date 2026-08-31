@@ -107,6 +107,14 @@
           },
           {
             "@type": "Question",
+            "name": "Which protocols does honeypot-auditor support?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Fifteen first-class probes: SSH, Telnet, FTP, SMTP, HTTP, SMB, SIP, VNC, Redis, MySQL, Git, RDP, HTTP proxy, MSSQL, and MongoDB. By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, and so on). -p/--port selects only those ports (nmap-style). --deep adds shell semantics, HASSH, TCP stack, HTTP/FTP/SMTP FSM, and TLS JA4S on 443/8443."
+            }
+          },
+          {
+            "@type": "Question",
             "name": "How is this different from UHBS?",
             "acceptedAnswer": {
               "@type": "Answer",
@@ -133,7 +141,7 @@
           {
             "@type": "HowToStep",
             "name": "Audit lab target",
-            "text": "honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep"
+            "text": "honeypot-auditor --target 127.0.0.1 --skip-nmap --deep"
           },
           {
             "@type": "HowToStep",
@@ -143,7 +151,7 @@
           {
             "@type": "HowToStep",
             "name": "Public target (authorized)",
-            "text": "honeypot-auditor --target HOST --preset iana --confirm-authorized --deep --output report.json"
+            "text": "honeypot-auditor --target HOST --confirm-authorized --deep --output report.json"
           }
         ]
       }
@@ -187,6 +195,7 @@
       </div>
       <nav class="nav" aria-label="Section">
         <a href="#what">what</a>
+        <a href="#protocols">protocols</a>
         <a href="#demo">demos</a>
         <a href="#install">install</a>
         <a href="#commands">commands</a>
@@ -219,10 +228,55 @@
           made Cowrie sweat in ’09 and still catches clones in ’26.
         </p>
         <pre class="code">[ BASIC ]  Shodan · Nmap NSE · SSH/Telnet/SMB/FTP/HTTP/Redis/SMTP/VNC/SIP
+           · MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB
 [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
            · co-tenancy buffet detect · latency · egress bait
            (flag: --deep · more intrusive · same authorization rules)</pre>
         <p class="quote">“elite? nah. just consistent timeouts and an honest --confirm-authorized.”</p>
+      </section>
+
+      <section class="panel" id="protocols">
+        <h2>-=[ SUPPORTED PROTOCOLS ]=-</h2>
+        <p>
+          Fifteen first-class probes. <strong>Default:</strong> both IANA and lab/docker ports
+          (SSH 22 <em>and</em> 2222, HTTP 80 and 8081, …).
+          Restrict with <code>-p 22</code> / <code>--port 22,2222</code>
+          (nmap-style: only those ports; omit <code>-p</code> for the full preset).
+          Override a protocol with <code>--ports ssh=2222</code>.
+          Map unused faces to a closed port (<code>ftp=9</code>) so skips do not inflate the score.
+        </p>
+        <p>Every protocol uses the <strong>same three strategies</strong>. A dash means that strategy is not on the basic path.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Protocol</th><th>iana</th><th>lab</th><th>Arbitrary auth</th><th>State non-persistence</th><th>Static signature</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SSH</td><td>22</td><td>2222</td><td>any-password (2 logins)</td><td>exec vs fake PTY · /tmp canary</td><td>banner · lure whoami · honeyfs</td></tr>
+              <tr><td>Telnet</td><td>23</td><td>2323</td><td>any-password (2 logins)</td><td>canned reject · /tmp canary</td><td>UAV / IAC spray · unknown-option WILL · lure whoami · fake tty/pipes</td></tr>
+              <tr><td>FTP</td><td>21</td><td>2121</td><td>stock decoy login (test)</td><td>PASV mismatch · canned 530 · STOR/SIZE</td><td>stock 220 · SYST L8 · PORT bounce</td></tr>
+              <tr><td>SMTP</td><td>25</td><td>2525</td><td>AUTH any-password · open relay</td><td>MAIL then RCPT 503 (lost envelope)</td><td>loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone</td></tr>
+              <tr><td>HTTP</td><td>80 / 443</td><td>8081</td><td>—</td><td>—</td><td>empty PUT 405 · GET / → index.html login skin · 407 Via localhost</td></tr>
+              <tr><td>SMB</td><td>445</td><td>1445</td><td>—</td><td>—</td><td>emulator native-OS / dialect</td></tr>
+              <tr><td>SIP</td><td>5060</td><td>5060</td><td>—</td><td>—</td><td>default User-Agent template</td></tr>
+              <tr><td>VNC</td><td>5900</td><td>5000</td><td>—</td><td>RFB auth always canned failure</td><td>RFB 3.8 VNC-auth only · canned Authentication failure · type-0 still challenges</td></tr>
+              <tr><td>Redis</td><td>6379</td><td>6379</td><td>AUTH any-password</td><td>FLUSHALL no-op · key vanishes after reconnect</td><td>COMMAND stub · AUTH-invalid+COMMAND NOAUTH wall · frozen INFO · missing ECHO/SELECT</td></tr>
+              <tr><td>MySQL</td><td>3306</td><td>3306</td><td>—</td><td>drop after one 1045</td><td>EOL 5.5.x ubuntu greeting</td></tr>
+              <tr><td>Git</td><td>9418</td><td>9418</td><td>—</td><td>—</td><td>git-upload-pack always ERR no such repository</td></tr>
+              <tr><td>RDP</td><td>3389</td><td>3389</td><td>—</td><td>canned negotiation failure</td><td>canned NLA cookie 0x1234</td></tr>
+              <tr><td>HTTP proxy</td><td>3128</td><td>8080</td><td>—</td><td>—</td><td>407 Via localhost · frozen squid 3.3.8 · ISA deny phrase</td></tr>
+              <tr><td>MSSQL</td><td>1433</td><td>1433</td><td>—</td><td>—</td><td>canned TDS prelogin (nmap-probe-shaped)</td></tr>
+              <tr><td>MongoDB</td><td>27017</td><td>27017</td><td>—</td><td>ping unauthorized after hello</td><td>hello connectionId frozen at 1</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:0.75rem">
+          <code>--deep</code> adds SSH/Telnet shell semantics, HASSH, TCP stack, HTTP/FTP/SMTP FSM,
+          and TLS JA4S when HTTP is on <strong>443/8443</strong>.
+          Co-tenancy also pokes Modbus (1502), SNMP (161), DNS (15353), IPP (631), and POP (1110)
+          only to count how many lures sit on one IP — not as standalone detectors.
+        </p>
+        <p>Shodan Honeyscore and Nmap NSE are intel layers, not protocol engines.</p>
       </section>
 
       <section class="panel demo" id="demo">
@@ -267,7 +321,7 @@ honeypot-auditor --version</pre>
         </div>
         <p style="margin-top:0.75rem">First dial-in:</p>
         <pre class="code">honeypot-auditor --help          # -h, --help, or /help
-honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap</pre>
+honeypot-auditor --target 127.0.0.1 --skip-nmap</pre>
         <p style="margin-top:0.5rem">Startup shows a cyan figlet <strong>H0N3YP0T-AUD1T0R</strong> header (pyfiglet + Rich).</p>
       </section>
 
@@ -276,23 +330,21 @@ honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap</pre>
         <pre class="code"># help · figlet header + Rich options
 honeypot-auditor --help
 
-# local lab · docker-research ports (2222, 8081, 1445, …)
-honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
+# local lab · default = IANA + docker/lab ports (22 and 2222, …)
+honeypot-auditor --target 127.0.0.1 --skip-nmap
 
 # go deep · six extra detection axes · still no exploits
-honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep
+honeypot-auditor --target 127.0.0.1 --skip-nmap --deep
 
 # subnet sweep · IPv4 CIDR up to /24 · parallel (Shodan skipped per host)
 honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 \
   --confirm-authorized --output subnet-audit.json
 
 # internet-facing · need explicit ack
-honeypot-auditor --target 203.0.113.10 --preset iana \
-  --confirm-authorized --output report.json
+honeypot-auditor --target 203.0.113.10 --confirm-authorized --output report.json
 
-# Cowrie on non-standard SSH
-honeypot-auditor --target HOST --ports ssh=2222,ftp=9,http=9,smb=9 \
-  --confirm-authorized --deep --skip-nmap</pre>
+# extra SSH port (in addition to 22 and 2222)
+honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pre>
       </section>
 
       <section class="panel" id="cli-flags">
@@ -306,29 +358,32 @@ honeypot-auditor --target HOST --ports ssh=2222,ftp=9,http=9,smb=9 \
               <tr><td><code>-h</code>, <code>--help</code>, <code>/help</code></td><td>Show options (figlet header)</td></tr>
               <tr><td><code>--target</code></td><td>IP, hostname, or IPv4 CIDR (max /24)</td></tr>
               <tr><td><code>--scan-concurrency</code></td><td>Parallel hosts for subnet scans (default 8)</td></tr>
-              <tr><td><code>--preset</code></td><td><code>docker-research</code> (default) or <code>iana</code></td></tr>
+              <tr><td><code>--preset</code></td><td><code>both</code> (default: IANA + lab), <code>iana</code>, or <code>docker-research</code></td></tr>
+              <tr><td><code>-p</code>, <code>--port</code></td><td>Only these TCP ports (nmap-style; <code>-p 22</code> or <code>-p 22,2222</code>)</td></tr>
               <tr><td><code>--ports</code></td><td>Per-protocol override; map unused to <code>=9</code></td></tr>
               <tr><td><code>--confirm-authorized</code></td><td>Required if any scanned IP is public</td></tr>
               <tr><td><code>--deep</code></td><td>Shell semantics, OS coherence, HASSH, FSM, co-tenancy, temporal</td></tr>
+              <tr><td><code>-v</code>, <code>--verbose</code></td><td>Strategy breakdown, per-protocol matrix, indicator table, why-this-score, run notes</td></tr>
               <tr><td><code>--skip-nmap</code></td><td>Skip Nmap NSE phase</td></tr>
               <tr><td><code>--timeout</code></td><td>Socket timeout in seconds (default 3)</td></tr>
               <tr><td><code>--output</code></td><td>JSON path (subnet: combined summary + hosts)</td></tr>
             </tbody>
           </table>
         </div>
+      </section>
 
       <section class="panel" id="scoring">
-        <h2>-=[ SCORING MATRIX ]=-</h2>
+        <h2>-=[ STRATEGIES ]=-</h2>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Category</th><th>Weight</th><th>Triggers</th></tr>
+              <tr><th>Strategy</th><th>Weight</th><th>How it fires</th></tr>
             </thead>
             <tbody>
               <tr><td>Shodan intel</td><td>25%</td><td>Honeyscore &gt; 0.6 · honeypot tag</td></tr>
-              <tr><td>Arbitrary auth</td><td>30%</td><td>any-password SSH/Telnet · open relay</td></tr>
-              <tr><td>State non-persistence</td><td>25%</td><td>FTP STOR / Redis key vanishes</td></tr>
-              <tr><td>Static signatures</td><td>20%</td><td>Cowrie banners · stock uname/cpu</td></tr>
+              <tr><td>Arbitrary auth</td><td>30%</td><td>random or stock decoy credentials accepted</td></tr>
+              <tr><td>State non-persistence</td><td>25%</td><td>session / FSM / filesystem does not keep state</td></tr>
+              <tr><td>Static signature</td><td>20%</td><td>stock banner · unknown nmap -sV (any proto) · banner vs -sV family mismatch</td></tr>
             </tbody>
           </table>
         </div>

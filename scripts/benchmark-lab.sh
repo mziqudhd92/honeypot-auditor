@@ -20,7 +20,7 @@ run_case() {
   shift
   echo ""
   echo "========== $name =========="
-  "$CLI" "$@" --skip-nmap --deep || true
+  "$CLI" "$@" --deep || true
 }
 
 # CyberHalluciNet research sensor (should NOT be flagged)

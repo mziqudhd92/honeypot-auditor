@@ -14,23 +14,20 @@ from honeypot_auditor import __version__
 from honeypot_auditor.analyzer import build_report
 from honeypot_auditor.banner import TAGLINE, print_cli_header
 from honeypot_auditor.config import (
+    DEFAULT_PORT_PRESET,
     DEFAULT_SCAN_CONCURRENCY,
     DEFAULT_TIMEOUT_SECONDS,
+    PORT_PRESET_CHOICES,
+    PROTOCOL_STRATEGIES,
     expand_scan_targets,
     is_private_or_loopback,
-    merge_ports,
+    parse_port_numbers,
     parse_port_overrides,
+    probe_port_map,
 )
 from honeypot_auditor.models import AuditReport, Indicator
-from honeypot_auditor.probes.core import probe_ftp, probe_smb, probe_ssh, probe_telnet
+from honeypot_auditor.probes import PROBE_BY_PROTOCOL
 from honeypot_auditor.probes.deep import run_deep_probes
-from honeypot_auditor.probes.extended import (
-    probe_http,
-    probe_redis,
-    probe_sip,
-    probe_smtp,
-    probe_vnc,
-)
 from honeypot_auditor.probes.recon import nmap_scan, shodan_lookup
 from honeypot_auditor.reporters.console import render, render_subnet_summary
 from honeypot_auditor.reporters.json_export import export, export_subnet
@@ -48,9 +45,10 @@ BANNER = (
 
 CLI_EPILOG = """
 examples:
-  honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
+  honeypot-auditor --target 127.0.0.1
   honeypot-auditor --target 203.0.113.10 --confirm-authorized --deep
-  honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16
+  honeypot-auditor --target 35.171.9.193 -p 22 --confirm-authorized -n
+  honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16
 
 help:
   -h, --help, /help    show this message and exit (H-AUDITOR figlet header)
@@ -66,6 +64,33 @@ def _normalize_argv(argv: list[str] | None) -> list[str]:
         else:
             out.append(arg)
     return out
+
+
+def _flatten_extra_ports(raw: list[str]) -> list[int]:
+    extra: list[int] = []
+    for spec in raw:
+        extra.extend(parse_port_numbers(spec))
+    return extra
+
+
+def _stamp_port(indicators: list[Indicator], proto: str, port: int) -> list[Indicator]:
+    label = f"{proto}:{port}"
+    for ind in indicators:
+        current = ind.protocol or proto
+        if ":" not in current:
+            ind.protocol = f"{current}:{port}" if current else label
+        elif current == proto:
+            ind.protocol = label
+    return indicators
+
+
+def _port_note(ports: dict[str, list[int]]) -> str:
+    bits = []
+    for proto in PROTOCOL_STRATEGIES:
+        nums = ports.get(proto) or []
+        if nums:
+            bits.append(f"{proto}:{','.join(str(n) for n in nums)}")
+    return " ".join(bits)
 
 
 def _wants_help(argv: list[str]) -> bool:
@@ -94,9 +119,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output", default="", help="JSON report path (default: honeypot-audit-<ip>.json)")
     p.add_argument(
         "--preset",
-        default="docker-research",
-        choices=("iana", "docker-research"),
-        help="Port map preset (iana=well-known ports, docker-research=non-privileged lab ports)",
+        default=DEFAULT_PORT_PRESET,
+        choices=PORT_PRESET_CHOICES,
+        help="Port map: both=IANA+lab (default), iana=22/80/445/…, docker-research=2222/8081/…",
+    )
+    p.add_argument(
+        "-p",
+        "--port",
+        action="append",
+        default=[],
+        metavar="PORT",
+        dest="extra_ports",
+        help="Only these TCP ports (nmap-style; repeatable or 22,2222). 22→ssh, 80→http; unknown numbers probed as SSH. Omit to use --preset",
     )
     p.add_argument("--ports", default="", help="Override ports, e.g. ssh=2222,http=8081")
     p.add_argument(
@@ -104,7 +138,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Required when any scanned IP is public (single host or subnet)",
     )
-    p.add_argument("--skip-nmap", action="store_true", help="Skip Nmap NSE scripts")
+    p.add_argument(
+        "-n",
+        "--with-nmap",
+        action="store_true",
+        help="Run Nmap -sV / NSE phase (slow; off by default)",
+    )
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Print strategy breakdown, per-protocol matrix, indicator table, why-this-score, and run notes",
+    )
     p.add_argument(
         "--deep",
         action="store_true",
@@ -147,15 +192,27 @@ async def _run_named(name: str, fn: Callable[[], list[Indicator]], progress, tas
             progress.update(task_id, advance=1, description=f"Finished {name}")
 
 
-def _build_notes(args: argparse.Namespace, *, subnet: bool, public_target: bool) -> list[str]:
+def _build_notes(
+    args: argparse.Namespace,
+    *,
+    subnet: bool,
+    public_target: bool,
+    ports: dict[str, list[int]] | None = None,
+) -> list[str]:
     notes = [
         f"preset={args.preset} timeout={args.timeout}s deep={args.deep}",
         "Closed ports are skipped and do not raise the score.",
     ]
+    if args.extra_ports:
+        notes.append("-p/--port selects only the listed ports (preset not applied)")
+    if ports:
+        notes.append(f"ports {_port_note(ports)}")
     if public_target and args.confirm_authorized:
         notes.append(
             "Public target: operator asserted authorization via --confirm-authorized."
         )
+    if not args.with_nmap:
+        notes.append("Nmap omitted by default; pass --with-nmap / -n for -sV/NSE tells.")
     if args.deep:
         notes.append("Deep mode: co-tenancy requires corroboration from another emulator tell.")
     if subnet:
@@ -167,7 +224,7 @@ def _build_notes(args: argparse.Namespace, *, subnet: bool, public_target: bool)
 
 def _probe_jobs(
     ip: str,
-    ports: dict[str, int],
+    ports: dict[str, list[int]],
     args: argparse.Namespace,
     *,
     include_shodan: bool,
@@ -175,20 +232,16 @@ def _probe_jobs(
     jobs: list[tuple[str, Callable[[], list[Indicator]]]] = []
     if include_shodan:
         jobs.append(("shodan", lambda: shodan_lookup(ip, args.shodan_key or None)))
-    jobs.extend(
-        [
-            ("nmap", lambda: nmap_scan(ip, ports, enabled=not args.skip_nmap)),
-            ("ssh", lambda: probe_ssh(ip, ports["ssh"])),
-            ("telnet", lambda: probe_telnet(ip, ports["telnet"])),
-            ("smb", lambda: probe_smb(ip, ports["smb"])),
-            ("ftp", lambda: probe_ftp(ip, ports["ftp"])),
-            ("http", lambda: probe_http(ip, ports["http"])),
-            ("redis", lambda: probe_redis(ip, ports["redis"])),
-            ("smtp", lambda: probe_smtp(ip, ports["smtp"])),
-            ("vnc", lambda: probe_vnc(ip, ports["vnc"])),
-            ("sip", lambda: probe_sip(ip, ports["sip"])),
-        ]
-    )
+    if args.with_nmap:
+        jobs.append(("nmap", lambda: nmap_scan(ip, ports)))
+    for proto, fn in PROBE_BY_PROTOCOL.items():
+        for port in ports.get(proto, []):
+            jobs.append(
+                (
+                    f"{proto}:{port}",
+                    lambda f=fn, p=port, pr=proto: _stamp_port(f(ip, p), pr, p),
+                )
+            )
     if args.deep:
         jobs.append(("deep", lambda: run_deep_probes(ip, ports)))
     return jobs
@@ -197,14 +250,14 @@ def _probe_jobs(
 async def _audit_host(
     ip: str,
     args: argparse.Namespace,
-    ports: dict[str, int],
+    ports: dict[str, list[int]],
     *,
     include_shodan: bool,
     progress=None,
     task_id=None,
 ) -> AuditReport:
     started = datetime.now(timezone.utc).isoformat()
-    notes = _build_notes(args, subnet=False, public_target=not is_private_or_loopback(ip))
+    notes = _build_notes(args, subnet=False, public_target=not is_private_or_loopback(ip), ports=ports)
     jobs = _probe_jobs(ip, ports, args, include_shodan=include_shodan)
 
     indicators: list[Indicator] = []
@@ -242,7 +295,7 @@ async def _audit_subnet(
     target: str,
     hosts: list[str],
     args: argparse.Namespace,
-    ports: dict[str, int],
+    ports: dict[str, list[int]],
     console,
 ) -> list[AuditReport]:
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
@@ -282,7 +335,8 @@ async def run_audit(args: argparse.Namespace) -> int:
 
     try:
         scan_kind, hosts = expand_scan_targets(args.target)
-        ports = merge_ports(args.preset, parse_port_overrides(args.ports))
+        extra = _flatten_extra_ports(args.extra_ports)
+        ports = probe_port_map(args.preset, parse_port_overrides(args.ports), extra)
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
         return 2
@@ -312,6 +366,7 @@ async def run_audit(args: argparse.Namespace) -> int:
     settings.timeout_seconds = float(args.timeout)
     settings.deep = bool(args.deep)
     started = datetime.now(timezone.utc).isoformat()
+    console.print(f"[dim]ports {_port_note(ports) or '(none)'}[/dim]\n")
 
     if scan_kind == "host":
         ip = hosts[0]
@@ -336,6 +391,7 @@ async def run_audit(args: argparse.Namespace) -> int:
             args,
             subnet=False,
             public_target=bool(public_hosts),
+            ports=ports,
         )
         report = build_report(
             target=args.target,
@@ -347,18 +403,20 @@ async def run_audit(args: argparse.Namespace) -> int:
             finished_at=finished,
             deep=args.deep,
         )
-        render(report, console=console)
+        render(report, console=console, verbose=args.verbose)
         out = args.output or f"honeypot-audit-{ip.replace(':', '_')}.json"
         dest = export(report, out)
-        console.print(f"[dim]JSON written to {dest}[/dim]")
+        if args.verbose:
+            console.print(f"[dim]JSON written to {dest}[/dim]")
         return 0
 
     reports = await _audit_subnet(args.target, hosts, args, ports, console)
     finished = datetime.now(timezone.utc).isoformat()
-    notes = _build_notes(args, subnet=True, public_target=bool(public_hosts))
+    notes = _build_notes(args, subnet=True, public_target=bool(public_hosts), ports=ports)
     render_subnet_summary(args.target, reports, console=console)
-    for note in notes:
-        console.print(f"[dim]{note}[/dim]")
+    if args.verbose:
+        for note in notes:
+            console.print(f"[dim]{note}[/dim]")
     out = _subnet_output_path(args.target, args.output)
     dest = export_subnet(
         target=args.target,
@@ -368,7 +426,8 @@ async def run_audit(args: argparse.Namespace) -> int:
         started_at=started,
         finished_at=finished,
     )
-    console.print(f"[dim]JSON written to {dest}[/dim]")
+    if args.verbose:
+        console.print(f"[dim]JSON written to {dest}[/dim]")
     return 0
 
 

@@ -3,12 +3,31 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from honeypot_auditor.cli import build_parser, main, run_audit
 from honeypot_auditor.models import Indicator
+from honeypot_auditor.probes import PROBE_BY_PROTOCOL
+
+
+def _clean_indicator(**kwargs) -> Indicator:
+    defaults = {
+        "id": "test.ind",
+        "title": "test",
+        "category": "static_signature",
+        "triggered": False,
+    }
+    defaults.update(kwargs)
+    return Indicator(**defaults)
+
+
+def _stub_cli_probes(**overrides):
+    stubs = {name: MagicMock(return_value=[]) for name in PROBE_BY_PROTOCOL}
+    stubs.update(overrides)
+    return patch.dict("honeypot_auditor.cli.PROBE_BY_PROTOCOL", stubs, clear=True)
+
 
 
 def _clean_indicator(**kwargs) -> Indicator:
@@ -35,10 +54,12 @@ def test_help_flags(capsys):
         out = capsys.readouterr().out
         assert "--target" in out
         assert "H-AUDITOR" in out or "honeypot-auditor" in out
+        assert "--port" in out
+        assert "--verbose" in out
 
 
 def test_public_ip_refused_without_confirm():
-    code = main(["--target", "8.8.8.8", "--skip-nmap"])
+    code = main(["--target", "8.8.8.8"])
     assert code == 2
 
 
@@ -50,11 +71,17 @@ def test_public_ip_allowed_with_confirm(mock_run):
             "--target",
             "8.8.8.8",
             "--confirm-authorized",
-            "--skip-nmap",
         ]
     )
     assert code == 0
     mock_run.assert_called_once()
+
+
+def test_parser_verbose_flag():
+    parser = build_parser()
+    assert parser.parse_args(["--target", "127.0.0.1", "-v"]).verbose is True
+    assert parser.parse_args(["--target", "127.0.0.1", "--verbose"]).verbose is True
+    assert parser.parse_args(["--target", "127.0.0.1"]).verbose is False
 
 
 def test_parser_deep_flag():
@@ -62,55 +89,101 @@ def test_parser_deep_flag():
     assert args.deep is True
 
 
+def test_parser_port_flags():
+    args = build_parser().parse_args(["--target", "127.0.0.1", "-p", "22", "--port", "2223,8080"])
+    assert args.preset == "both"
+    assert args.extra_ports == ["22", "2223,8080"]
+
+
+def test_parser_attached_short_port():
+    args = build_parser().parse_args(["--target", "127.0.0.1", "-p22"])
+    assert args.extra_ports == ["22"]
+
+
+def test_parser_with_nmap_flag():
+    parser = build_parser()
+    assert parser.parse_args(["--target", "127.0.0.1", "-n"]).with_nmap is True
+    assert parser.parse_args(["--target", "127.0.0.1", "--with-nmap"]).with_nmap is True
+    assert parser.parse_args(["--target", "127.0.0.1"]).with_nmap is False
+
+
+def test_invalid_extra_port():
+    code = main(["--target", "127.0.0.1", "-p", "0"])
+    assert code == 2
+
+
 def test_invalid_timeout():
-    code = main(["--target", "127.0.0.1", "--timeout", "0", "--skip-nmap"])
+    code = main(["--target", "127.0.0.1", "--timeout", "0"])
     assert code == 2
 
 
 def test_invalid_target():
-    code = main(["--target", "", "--skip-nmap"])
+    code = main(["--target", ""])
     assert code == 2
 
 
 @patch("honeypot_auditor.cli.export")
 @patch("honeypot_auditor.cli.render")
 @patch("honeypot_auditor.cli.run_deep_probes", return_value=[])
-@patch("honeypot_auditor.cli.probe_sip", return_value=[])
-@patch("honeypot_auditor.cli.probe_vnc", return_value=[])
-@patch("honeypot_auditor.cli.probe_smtp", return_value=[])
-@patch("honeypot_auditor.cli.probe_redis", return_value=[])
-@patch("honeypot_auditor.cli.probe_http", return_value=[])
-@patch("honeypot_auditor.cli.probe_ftp", return_value=[])
-@patch("honeypot_auditor.cli.probe_smb", return_value=[])
-@patch("honeypot_auditor.cli.probe_telnet", return_value=[])
-@patch("honeypot_auditor.cli.probe_ssh", return_value=[_clean_indicator(id="ssh.banner", triggered=True)])
 @patch("honeypot_auditor.cli.nmap_scan", return_value=[])
 @patch("honeypot_auditor.cli.shodan_lookup", return_value=[])
 def test_run_audit_local_smoke(
     mock_shodan,
     mock_nmap,
-    mock_ssh,
-    mock_telnet,
-    mock_smb,
-    mock_ftp,
-    mock_http,
-    mock_redis,
-    mock_smtp,
-    mock_vnc,
-    mock_sip,
     mock_deep,
     mock_render,
     mock_export,
     tmp_path,
 ):
+    ssh = MagicMock(return_value=[_clean_indicator(id="ssh.banner", triggered=True)])
     out = tmp_path / "audit.json"
     args = build_parser().parse_args(
-        ["--target", "127.0.0.1", "--skip-nmap", "--output", str(out), "--deep"]
+        ["--target", "127.0.0.1", "--output", str(out), "--deep"]
     )
-    code = asyncio.run(run_audit(args))
+    with _stub_cli_probes(ssh=ssh):
+        code = asyncio.run(run_audit(args))
     assert code == 0
+    mock_nmap.assert_not_called()
     mock_export.assert_called_once()
     mock_render.assert_called_once()
+    assert mock_render.call_args.kwargs.get("verbose") is False
+    ssh_ports = sorted(call.args[1] for call in ssh.call_args_list)
+    assert ssh_ports == [22, 2222]
+
+
+@patch("honeypot_auditor.cli.export")
+@patch("honeypot_auditor.cli.render")
+@patch("honeypot_auditor.cli.run_deep_probes", return_value=[])
+@patch("honeypot_auditor.cli.nmap_scan", return_value=[])
+@patch("honeypot_auditor.cli.shodan_lookup", return_value=[])
+def test_run_audit_dash_p_only_selected_ports(
+    mock_shodan,
+    mock_nmap,
+    mock_deep,
+    mock_render,
+    mock_export,
+    tmp_path,
+):
+    ssh = MagicMock(return_value=[])
+    sip = MagicMock(return_value=[])
+    http = MagicMock(return_value=[])
+    telnet = MagicMock(return_value=[])
+    args = build_parser().parse_args(
+        [
+            "--target",
+            "127.0.0.1",
+            "-p22",
+            "--output",
+            str(tmp_path / "audit.json"),
+        ]
+    )
+    with _stub_cli_probes(ssh=ssh, sip=sip, http=http, telnet=telnet):
+        code = asyncio.run(run_audit(args))
+    assert code == 0
+    ssh.assert_called_once_with("127.0.0.1", 22)
+    sip.assert_not_called()
+    http.assert_not_called()
+    telnet.assert_not_called()
 
 
 @patch("honeypot_auditor.cli.export_subnet")
@@ -130,7 +203,6 @@ def test_run_audit_subnet_smoke(mock_audit_host, mock_render_summary, mock_expor
         [
             "--target",
             "192.168.1.0/30",
-            "--skip-nmap",
             "--scan-concurrency",
             "2",
             "--output",
@@ -145,7 +217,7 @@ def test_run_audit_subnet_smoke(mock_audit_host, mock_render_summary, mock_expor
 
 
 def test_subnet_public_requires_confirm():
-    args = build_parser().parse_args(["--target", "8.8.8.0/30", "--skip-nmap"])
+    args = build_parser().parse_args(["--target", "8.8.8.0/30"])
     code = asyncio.run(run_audit(args))
     assert code == 2
 
@@ -159,29 +231,11 @@ def test_parser_scan_concurrency():
 @patch("honeypot_auditor.cli.export")
 @patch("honeypot_auditor.cli.render")
 @patch("honeypot_auditor.cli.run_deep_probes", return_value=[])
-@patch("honeypot_auditor.cli.probe_sip", return_value=[])
-@patch("honeypot_auditor.cli.probe_vnc", return_value=[])
-@patch("honeypot_auditor.cli.probe_smtp", return_value=[])
-@patch("honeypot_auditor.cli.probe_redis", return_value=[])
-@patch("honeypot_auditor.cli.probe_http", return_value=[])
-@patch("honeypot_auditor.cli.probe_ftp", return_value=[])
-@patch("honeypot_auditor.cli.probe_smb", return_value=[])
-@patch("honeypot_auditor.cli.probe_telnet", return_value=[])
-@patch("honeypot_auditor.cli.probe_ssh", return_value=[])
 @patch("honeypot_auditor.cli.nmap_scan", return_value=[])
 @patch("honeypot_auditor.cli.shodan_lookup", return_value=[])
 def test_run_audit_probe_error_indicator(
     mock_shodan,
     mock_nmap,
-    mock_ssh,
-    mock_telnet,
-    mock_smb,
-    mock_ftp,
-    mock_http,
-    mock_redis,
-    mock_smtp,
-    mock_vnc,
-    mock_sip,
     mock_deep,
     mock_render,
     mock_export,
@@ -189,7 +243,23 @@ def test_run_audit_probe_error_indicator(
     tmp_path,
 ):
     args = build_parser().parse_args(
-        ["--target", "127.0.0.1", "--skip-nmap", "--output", str(tmp_path / "audit.json")]
+        ["--target", "127.0.0.1", "--output", str(tmp_path / "audit.json")]
     )
-    code = asyncio.run(run_audit(args))
+    with _stub_cli_probes():
+        code = asyncio.run(run_audit(args))
     assert code == 0
+
+
+@patch("honeypot_auditor.cli.export")
+@patch("honeypot_auditor.cli.render")
+@patch("honeypot_auditor.cli.run_deep_probes", return_value=[])
+@patch("honeypot_auditor.cli.nmap_scan", return_value=[])
+@patch("honeypot_auditor.cli.shodan_lookup", return_value=[])
+def test_run_audit_with_nmap_opt_in(mock_shodan, mock_nmap, mock_deep, mock_render, mock_export, tmp_path):
+    args = build_parser().parse_args(
+        ["--target", "127.0.0.1", "-n", "--output", str(tmp_path / "audit.json")]
+    )
+    with _stub_cli_probes():
+        code = asyncio.run(run_audit(args))
+    assert code == 0
+    mock_nmap.assert_called_once()

@@ -15,6 +15,12 @@ from honeypot_auditor.netutil import (
 from honeypot_auditor.settings import settings
 
 
+def _smtp_blob(msg: object) -> str:
+    if isinstance(msg, bytes):
+        return msg.decode("utf-8", "replace")
+    return str(msg or "")
+
+
 def probe_http_fsm(host: str, port: int) -> list[Indicator]:
     failures: list[str] = []
     evidence: list[str] = []
@@ -100,6 +106,12 @@ def probe_ftp_fsm(host: str, port: int) -> list[Indicator]:
             feat = ftp.sendcmd("FEAT")
         except Exception:
             pass
+        try:
+            rest = ftp.sendcmd("REST 0")
+            if str(rest).startswith("200"):
+                failures.append("REST 0 returned 200 instead of 350")
+        except Exception:
+            pass
         pasv_addr = ""
         pasv_data_fail = False
         try:
@@ -164,12 +176,20 @@ def probe_smtp_fsm(host: str, port: int) -> list[Indicator]:
     try:
         smtp = smtplib.SMTP(host, port, timeout=settings.timeout_seconds)
         code, greeting = smtp.ehlo("auditor.local")
-        evidence = greeting[:200]
+        evidence = _smtp_blob(greeting)[:200]
         try:
             smtp.docmd("VRFY", "root")
         except smtplib.SMTPException as exc:
             if "502" not in str(exc) and "252" not in str(exc):
                 failures.append(f"VRFY unexpected: {exc}")
+        try:
+            smtp.docmd("EXPN", "root")
+        except smtplib.SMTPException:
+            pass
+        try:
+            smtp.docmd("ETRN", "auditor.invalid")
+        except smtplib.SMTPException:
+            pass
         try:
             smtp.docmd("RSET")
             rcpt_code, _rcpt_msg = smtp.docmd("RCPT TO:<fake@external-domain.com>")
@@ -178,6 +198,16 @@ def probe_smtp_fsm(host: str, port: int) -> list[Indicator]:
         except smtplib.SMTPException as exc:
             if "250" in str(exc):
                 failures.append("RSET+RCPT accepted external recipient without MAIL FROM")
+        try:
+            smtp.mail("probe@auditor.invalid")
+            smtp.rcpt("sink@auditor.invalid")
+            data_code, _ = smtp.docmd("DATA")
+            if int(data_code) == 354:
+                rset_code, _ = smtp.docmd("RSET")
+                if int(rset_code) == 354:
+                    failures.append("RSET during DATA did not abort (still 354)")
+        except Exception:
+            pass
         smtp.quit()
     except Exception as exc:
         return [
@@ -199,5 +229,51 @@ def probe_smtp_fsm(host: str, port: int) -> list[Indicator]:
             protocol="smtp",
             detail="; ".join(failures) if failures else "SMTP FSM plausible",
             evidence=evidence,
+        )
+    ]
+
+
+def probe_telnet_fsm(host: str, port: int) -> list[Indicator]:
+    """Rare IAC options, AUTH/NAWS subnegotiation, LF-only login line."""
+    failures: list[str] = []
+    evidence: list[str] = []
+    iac = bytes(
+        [
+            255, 251, 99,
+            255, 253, 37,
+            255, 250, 37, 0, 255, 240,
+            255, 250, 31, 0, 80, 0, 24, 255, 240,
+        ]
+    )
+    raw, err = tcp_transact(host, port, iac, recv_first=True)
+    evidence.append(f"iac={raw[:120]!r} err={err}")
+    if err and not raw:
+        return [
+            skipped_indicator(
+                "deep.telnet_fsm",
+                "Telnet IAC/RFC option negotiation failure",
+                "proto_conformance",
+                closed_reason(err),
+                protocol="telnet",
+                error=err,
+            )
+        ]
+    if b"\xff\xfb\x63" in raw or b"\xff\xfd\x63" in raw:
+        failures.append("accepted unknown Telnet option 99")
+    if err and "reset" in err.lower():
+        failures.append("connection reset on AUTH/NAWS subnegotiation")
+    lf_raw, lf_err = tcp_transact(host, port, b"root\npassword\n", recv_first=True)
+    evidence.append(f"lf={lf_raw[:80]!r} err={lf_err}")
+    if lf_err and "reset" in lf_err.lower() and lf_raw:
+        failures.append("reset on LF-only line (expected \\r\\n)")
+    return [
+        Indicator(
+            id="deep.telnet_fsm",
+            title="Telnet IAC/RFC option negotiation failure",
+            category="proto_conformance",
+            triggered=bool(failures),
+            protocol="telnet",
+            detail="; ".join(failures) if failures else "Telnet option negotiation looks plausible",
+            evidence="\n".join(evidence)[:1500],
         )
     ]

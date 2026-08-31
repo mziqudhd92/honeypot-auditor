@@ -47,20 +47,18 @@ make test-cov && make lint
 honeypot-auditor --help
 
 # Local lab
-honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap
+honeypot-auditor --target 127.0.0.1 --skip-nmap
 
 # Deep
-honeypot-auditor --target 127.0.0.1 --preset docker-research --skip-nmap --deep --timeout 5
+honeypot-auditor --target 127.0.0.1 --skip-nmap --deep --timeout 5
 
 # Subnet sweep (max /24; Shodan skipped per-host; parallel default 8)
-honeypot-auditor --target 192.168.1.0/24 --preset docker-research \
+honeypot-auditor --target 192.168.1.0/24 \
   --skip-nmap --scan-concurrency 16 --confirm-authorized \
   --output /tmp/subnet-audit.json
 
-# Cowrie-style SSH on non-standard port
-honeypot-auditor --target HOST \
-  --ports ssh=2222,ftp=9,telnet=9,smtp=9,http=9,smb=9,redis=9,vnc=9,sip=9 \
-  --confirm-authorized --deep --skip-nmap --output /tmp/cowrie.json
+# SSH on 22 only (does not scan the rest of the preset)
+honeypot-auditor --target HOST -p 22 --confirm-authorized
 
 # Dionaea-style multi-service (no SSH)
 honeypot-auditor --target HOST \
@@ -80,13 +78,20 @@ Single-host JSON: `target`, `resolved_ip`, `score`, `threat_level`, `indicators`
 
 Subnet JSON: `scan_type: subnet`, `summary[]` (per-IP scores), `hosts[]` (full per-host reports).
 
-Read triggered indicators in JSON (`indicators[].triggered`). Closed/skipped probes do not raise the score.
+Read triggered indicators in JSON (`indicators[].triggered`) or pass `-v` / `--verbose` for the full console breakdown (strategy table, per-protocol matrix, indicator table). Default console is the score panel only (`protocol_strategies` is always in JSON). Closed/skipped probes do not raise the score.
+
+Basic **strategies** (same three on every protocol): arbitrary auth, state non-persistence, static signature (includes unknown nmap `-sV` on any protocol, `-sV`/banner family mismatch, Redis COMMAND/INFO/FLUSHALL stubs, and canned MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB templates). When nmap is enabled, every open preset port is version-scanned. See `PROTOCOL_STRATEGIES` in config.
 
 ## Repo layout (short)
 
 ```
-src/honeypot_auditor/   CLI, probes, analyzer, banner (figlet header)
-tests/                  pytest suite
+src/honeypot_auditor/   CLI, analyzer, banner (figlet header)
+  probes/               one module per protocol (ssh.py, telnet.py, ftp.py, …)
+    common.py           shared skip/cred helpers
+    shell_cti.py        Cowrie/Kippo transcript tells
+    recon.py            Shodan + Nmap
+    deep/               --deep axes (behavior, coherence, stack, FSM, …)
+tests/                  pytest suite (test_ssh.py, test_telnet.py, …)
 deploy/                 docker-compose.benchmark.yml (Cowrie + Dionaea)
 scripts/                demo + benchmark helpers
 docs/                   GitHub Pages site + llms/agents briefs

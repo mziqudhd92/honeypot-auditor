@@ -34,6 +34,9 @@ def probe_os_coherence(host: str, port: int) -> list[Indicator]:
             ("os_release", "cat /etc/os-release 2>/dev/null | head -5"),
             ("cpuinfo", "grep -E 'model name|hypervisor|vendor_id' /proc/cpuinfo 2>/dev/null | head -6"),
             ("self_exe", "readlink /proc/self/exe 2>/dev/null"),
+            ("dmi", "cat /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor 2>/dev/null"),
+            ("netdev", "cat /proc/net/dev 2>/dev/null | head -8"),
+            ("devnodes", "ls -l /dev/null /dev/ptmx 2>/dev/null"),
         ):
             out, exec_err, _ = ssh_exec(client, cmd)
             if not exec_err and out:
@@ -65,6 +68,17 @@ def probe_os_coherence(host: str, port: int) -> list[Indicator]:
         # Real VMs often disclose; scrubbed cpuinfo on bare-metal claim is suspicious.
         if "model name" in cpuinfo.lower():
             mismatches.append("hypervisor flag in /proc/cpuinfo with non-VM uname")
+
+    dmi = artifacts.get("dmi", "")
+    if any(tok in dmi.lower() for tok in ("qemu", "virtualbox", "bochs", "vmware", "kvm")):
+        if uname and "qemu" not in uname.lower() and "kvm" not in uname.lower():
+            mismatches.append("DMI product is a hypervisor but uname is not")
+    netdev = artifacts.get("netdev", "")
+    if "veth" in netdev.lower():
+        mismatches.append("veth interface in /proc/net/dev (container netns)")
+    devnodes = artifacts.get("devnodes", "")
+    if uname and devnodes and " /dev/null" not in f" {devnodes}" and "null" not in devnodes.lower():
+        mismatches.append("/dev/null missing from device listing")
 
     if uname and not proc_version and not os_release:
         mismatches.append("uname present but /proc/version and os-release empty")

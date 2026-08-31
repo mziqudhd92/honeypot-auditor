@@ -52,6 +52,45 @@ def probe_latency_distribution(host: str, port: int, samples: int = 8) -> list[I
     ]
 
 
+def probe_idle_accept(host: str, port: int, n: int = 10) -> list[Indicator]:
+    """Many idle TCP handshakes with no backoff / 421 — synthetic accept loop."""
+    import socket
+
+    accepted = 0
+    elapsed: list[float] = []
+    socks: list[socket.socket] = []
+    try:
+        for _ in range(n):
+            start = time.monotonic()
+            try:
+                sock = socket.create_connection((host, port), timeout=min(1.5, settings.timeout_seconds))
+                socks.append(sock)
+                accepted += 1
+                elapsed.append(time.monotonic() - start)
+            except OSError:
+                break
+        mean = statistics.mean(elapsed) if elapsed else 0.0
+        triggered = accepted >= n and mean < 0.02
+        return [
+            Indicator(
+                id="deep.idle_accept",
+                title="Idle TCP handshakes accepted with no backoff",
+                category="temporal",
+                triggered=triggered,
+                skipped=accepted < 4,
+                skip_reason="" if accepted >= 4 else f"only {accepted} idle connects succeeded",
+                protocol="tcp",
+                detail=f"accepted {accepted}/{n} idle connects mean={mean*1000:.1f}ms",
+            )
+        ]
+    finally:
+        for sock in socks:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
 def probe_egress_silence(host: str, ssh_port: int) -> list[Indicator]:
     """
     Bait DNS lookup via shell when session exists; flag default-deny egress typical of contained honeypots.

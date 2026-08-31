@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from honeypot_auditor.config import as_port_list
 from honeypot_auditor.models import Indicator
 from honeypot_auditor.probes.deep.behavior import (
     probe_auth_curve,
@@ -10,37 +11,67 @@ from honeypot_auditor.probes.deep.behavior import (
 )
 from honeypot_auditor.probes.deep.coherence import probe_os_coherence
 from honeypot_auditor.probes.deep.cotenancy import probe_cotenancy
-from honeypot_auditor.probes.deep.fsm import probe_ftp_fsm, probe_http_fsm, probe_smtp_fsm
-from honeypot_auditor.probes.deep.stack import probe_hassh, probe_tcp_stack, probe_tls_ja4s
-from honeypot_auditor.probes.deep.temporal import probe_egress_silence, probe_latency_distribution
+from honeypot_auditor.probes.deep.fsm import (
+    probe_ftp_fsm,
+    probe_http_fsm,
+    probe_smtp_fsm,
+    probe_telnet_fsm,
+)
+from honeypot_auditor.probes.deep.stack import (
+    probe_banner_vs_stack,
+    probe_hassh,
+    probe_tcp_stack,
+    probe_tls_ja4s,
+)
+from honeypot_auditor.probes.deep.smb import probe_smb_negotiate, probe_smb_target_mismatch
+from honeypot_auditor.probes.deep.temporal import (
+    probe_egress_silence,
+    probe_idle_accept,
+    probe_latency_distribution,
+)
 
 
-def run_deep_probes(host: str, ports: dict[str, int], *, corroboration: bool = False) -> list[Indicator]:
-    ssh_port = ports.get("ssh", 22)
-    telnet_port = ports.get("telnet", 23)
-    http_port = ports.get("http", 80)
-    ftp_port = ports.get("ftp", 21)
-    smtp_port = ports.get("smtp", 25)
+def _stamp(indicators: list[Indicator], proto: str, port: int) -> list[Indicator]:
+    for ind in indicators:
+        current = ind.protocol or proto
+        if ":" not in current:
+            ind.protocol = f"{current}:{port}"
+    return indicators
+
+
+def run_deep_probes(host: str, ports: dict[str, int | list[int]], *, corroboration: bool = False) -> list[Indicator]:
+    ssh_ports = as_port_list(ports.get("ssh"))
+    telnet_ports = as_port_list(ports.get("telnet"))
+    http_ports = as_port_list(ports.get("http"))
+    ftp_ports = as_port_list(ports.get("ftp"))
+    smtp_ports = as_port_list(ports.get("smtp"))
+    smb_ports = as_port_list(ports.get("smb"))
 
     out: list[Indicator] = []
-    # 1 — execution semantics + auth curve (behavior/temporal)
-    out.extend(probe_shell_semantics(host, ssh_port))
-    out.extend(probe_telnet_shell_semantics(host, telnet_port))
-    out.extend(probe_auth_curve(host, ssh_port))
-    # 2 — OS coherence
-    out.extend(probe_os_coherence(host, ssh_port))
-    # 3 — stack fingerprinting
-    out.extend(probe_hassh(host, ssh_port))
-    out.extend(probe_tcp_stack(host, ssh_port))
-    if http_port in (443, 8443):
-        out.extend(probe_tls_ja4s(host, http_port))
-    # 4 — protocol FSM
-    out.extend(probe_http_fsm(host, http_port))
-    out.extend(probe_ftp_fsm(host, ftp_port))
-    out.extend(probe_smtp_fsm(host, smtp_port))
-    # 5 — co-tenancy (corroboration applied in analyzer pass)
+    for ssh_port in ssh_ports:
+        out.extend(_stamp(probe_shell_semantics(host, ssh_port), "ssh", ssh_port))
+        out.extend(_stamp(probe_auth_curve(host, ssh_port), "ssh", ssh_port))
+        out.extend(_stamp(probe_os_coherence(host, ssh_port), "ssh", ssh_port))
+        out.extend(_stamp(probe_hassh(host, ssh_port), "ssh", ssh_port))
+        out.extend(_stamp(probe_tcp_stack(host, ssh_port), "tcp", ssh_port))
+        out.extend(_stamp(probe_latency_distribution(host, ssh_port), "tcp", ssh_port))
+        out.extend(_stamp(probe_idle_accept(host, ssh_port), "tcp", ssh_port))
+        out.extend(_stamp(probe_egress_silence(host, ssh_port), "ssh", ssh_port))
+    for telnet_port in telnet_ports:
+        out.extend(_stamp(probe_telnet_shell_semantics(host, telnet_port), "telnet", telnet_port))
+        out.extend(_stamp(probe_telnet_fsm(host, telnet_port), "telnet", telnet_port))
+        out.extend(_stamp(probe_banner_vs_stack(host, telnet_port), "tcp", telnet_port))
+    for http_port in http_ports:
+        if http_port in (443, 8443):
+            out.extend(_stamp(probe_tls_ja4s(host, http_port), "tls", http_port))
+        out.extend(_stamp(probe_http_fsm(host, http_port), "http", http_port))
+    for ftp_port in ftp_ports:
+        out.extend(_stamp(probe_ftp_fsm(host, ftp_port), "ftp", ftp_port))
+    for smtp_port in smtp_ports:
+        out.extend(_stamp(probe_smtp_fsm(host, smtp_port), "smtp", smtp_port))
+        out.extend(_stamp(probe_banner_vs_stack(host, smtp_port), "tcp", smtp_port))
+    for smb_port in smb_ports:
+        out.extend(_stamp(probe_smb_negotiate(host, smb_port), "smb", smb_port))
+        out.extend(_stamp(probe_smb_target_mismatch(host, smb_port), "smb", smb_port))
     out.extend(probe_cotenancy(host, ports, corroboration=corroboration))
-    # 6 — temporal
-    out.extend(probe_latency_distribution(host, ssh_port))
-    out.extend(probe_egress_silence(host, ssh_port))
     return out
