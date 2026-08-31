@@ -183,9 +183,6 @@ Honeyscore adds triggered **category weights**. **Different categories stack** (
   CORROBORATION BONUS (dynamic):
     +5% per protocol with a basic-strategy hit, from the 2nd protocol up, max +35%
 
-  SHORTCUT:
-    any-password on two random accounts on one service → 100%
-
   --deep ADDS (on top of basic):
   ┌──────────────────────────┬────────┐
   │ behavior                 │  18%   │
