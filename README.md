@@ -214,7 +214,7 @@ research stacks with 11 open faces). Needs another tell first. By design.
   --output report.json       JSON path (subnet default: honeypot-audit-subnet-<cidr>.json)
   --confirm-authorized       REQUIRED if any scanned IP is public
   -v, --verbose              strategy breakdown, per-protocol matrix, indicators, notes
-  --skip-nmap                skip Nmap NSE phase
+  -n, --with-nmap            run Nmap -sV / NSE phase (slow; off by default)
   --deep                     advanced six-axis probes
   --timeout SECS             socket timeout (default 3)
 ```
@@ -223,36 +223,37 @@ research stacks with 11 open faces). Needs another tell first. By design.
 
 ## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-Fifteen first-class probes. Default (`--preset both`) is IANA **and** lab/docker ports.
-Restrict with `-p 22` (nmap-style: only those ports). Override with `--ports ssh=2222`.
-Map unused faces to a closed port (`ftp=9`) so skips do not inflate the score.
+**16** protocol engines in the current version. Each uses up to **3** basic detection
+strategies (arbitrary auth · state non-persistence · static signature). The
+**Strategies** column is how many of those three are active for that protocol in
+this release — not a count of individual indicator checks.
 
-Every protocol uses the **same three strategies**. A `—` means that strategy is not on the basic path for that service.
+Default preset (`--preset both`) probes IANA well-known ports **and** common
+lab/docker aliases on the same faces. Override ports with `-p` / `--ports`.
+Closed faces are skipped, not scored.
 
-| Protocol | iana | lab | Arbitrary auth | State non-persistence | Static signature |
-|----------|------:|----:|----------------|----------------------|------------------|
-| SSH | 22 | 2222 | any-password (2 logins) | exec vs fake PTY · /tmp canary | banner · lure whoami · honeyfs |
-| Telnet | 23 | 2323 | any-password (2 logins) | canned reject · /tmp canary | UAV / IAC spray · unknown-option WILL · lure whoami · fake tty/pipes |
-| FTP | 21 | 2121 | stock decoy login (`test`) | PASV mismatch · canned 530 · STOR/SIZE · FEAT/PWD desert | stock `220` · SYST L8 · PORT bounce |
-| SMTP | 25 | 2525 | AUTH any-password · open relay | MAIL then RCPT 503 (lost envelope) | loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone |
-| HTTP | 80 / 443 | 8081 | — | — | empty PUT 405 · GET / → index.html login skin · 407 Via localhost |
-| SMB | 445 | 1445 | — | — | emulator native-OS / dialect |
-| SIP | 5060 | 5060 | — | — | default User-Agent template |
-| VNC | 5900 | 5000 | — | RFB auth always canned failure | RFB 3.8 VNC-auth only · canned Authentication failure · type-0 still challenges |
-| Redis | 6379 | 6379 | AUTH any-password | FLUSHALL no-op · key vanishes after reconnect | COMMAND stub · AUTH-invalid+COMMAND NOAUTH wall · frozen INFO · missing ECHO/SELECT |
-| MySQL | 3306 | 3306 | — | drop after one 1045 · SSL-request silent drop | EOL 5.5.x ubuntu greeting |
-| Postgres | 5432 | 5432 | — | frozen `auth.c:326` fail blob | SSLRequest → N · cleartext-only |
-| Git | 9418 | 9418 | — | — | git-upload-pack always ERR no such repository |
-| RDP | 3389 | 3389 | — | canned negotiation failure | canned NLA cookie 0x1234 |
-| HTTP proxy | 3128 | 8080 | — | — | 407 Via localhost · frozen squid 3.3.8 · ISA deny phrase |
-| MSSQL | 1433 | 1433 | — | TLS close after ENCRYPT_NOT_SUP | canned TDS prelogin · PRELOGIN encrypt NOT SUP |
-| MongoDB | 27017 | 27017 | — | ping unauthorized after hello | hello connectionId frozen at 1 |
+| Protocol | Default ports (iana · lab) | Strategies |
+|----------|---------------------------:|:----------:|
+| SSH | 22 · 2222 | 3 |
+| Telnet | 23 · 2323 | 3 |
+| FTP | 21 · 2121 | 3 |
+| SMTP | 25 · 2525 | 3 |
+| Redis | 6379 · 6379 | 3 |
+| SMB | 445 · 1445 | 2 |
+| VNC | 5900 · 5000 | 2 |
+| MySQL | 3306 · 3306 | 2 |
+| Postgres | 5432 · 5432 | 2 |
+| RDP | 3389 · 3389 | 2 |
+| MSSQL | 1433 · 1433 | 2 |
+| MongoDB | 27017 · 27017 | 2 |
+| HTTP | 80 / 443 · 8081 | 1 |
+| SIP | 5060 · 5060 | 1 |
+| Git | 9418 · 9418 | 1 |
+| HTTP proxy | 3128 · 8080 | 1 |
 
-`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `5061` → SIP, `5000`/`5901` → VNC, `3306` → MySQL, `9418` → Git, `3389` → RDP, `1433` → MSSQL, `27017` → MongoDB. Unknown numbers are probed as SSH.
+`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
-`--deep` adds SSH/Telnet shell semantics, HASSH, TCP stack, HTTP/FTP/SMTP FSM, and TLS JA4S when HTTP is on **443/8443**. Co-tenancy also pokes Modbus (1502), SNMP (161), DNS (15353), IPP (631), and POP (1110) only to count how many lures sit on one IP — not as standalone detectors.
-
-Shodan Honeyscore and Nmap NSE are intel layers, not protocol engines. Closed faces are skipped, not scored.
+`--deep` adds cross-protocol axes (shell semantics, HASSH/TCP stack, FSM fuzz, co-tenancy, latency) on top of the basic strategies above. Shodan Honeyscore and Nmap NSE (`-n`) are optional intel layers, not protocol engines.
 
 ---
 

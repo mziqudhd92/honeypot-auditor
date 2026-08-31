@@ -18,7 +18,7 @@ class _AbortAuth(Exception):
 def optional_impacket():
     try:
         import impacket  # noqa: F401
-        from impacket.smbconnection import SMBConnection, SessionError
+        from impacket.smbconnection import SessionError, SMBConnection
 
         return SMBConnection, SessionError
     except ImportError:

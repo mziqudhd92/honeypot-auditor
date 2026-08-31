@@ -17,13 +17,13 @@ from honeypot_auditor.probes.deep.fsm import (
     probe_smtp_fsm,
     probe_telnet_fsm,
 )
+from honeypot_auditor.probes.deep.smb import probe_smb_negotiate, probe_smb_target_mismatch
 from honeypot_auditor.probes.deep.stack import (
     probe_banner_vs_stack,
     probe_hassh,
     probe_tcp_stack,
     probe_tls_ja4s,
 )
-from honeypot_auditor.probes.deep.smb import probe_smb_negotiate, probe_smb_target_mismatch
 from honeypot_auditor.probes.deep.temporal import (
     probe_egress_silence,
     probe_idle_accept,

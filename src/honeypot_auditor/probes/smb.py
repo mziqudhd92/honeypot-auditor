@@ -13,7 +13,7 @@ from honeypot_auditor.config import (
     match_smb_static_ntlm_challenge,
 )
 from honeypot_auditor.models import Indicator, skipped_indicator
-from honeypot_auditor.netutil import closed_reason, tcp_transact
+from honeypot_auditor.netutil import tcp_transact
 from honeypot_auditor.probes.common import skip_suite
 from honeypot_auditor.settings import settings
 from honeypot_auditor.smbutil import (
