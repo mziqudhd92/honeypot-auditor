@@ -223,10 +223,6 @@
           <strong>non-destructive</strong> probes across the usual decoy faces.
           Outputs a weighted <strong>Honeyscore (0–100%)</strong>, Rich console table, and JSON report.
         </p>
-        <p>
-          Not exploits. Not exfil. Banner / state / auth semantics — the kind of stuff that
-          made Cowrie sweat in ’09 and still catches clones in ’26.
-        </p>
         <pre class="code">[ BASIC ]  Shodan · Nmap NSE · 16 protocol engines · 4 detection strategies each
 [ DEEP  ]  +6 cross-protocol behavioral axes (shell · OS · stack · FSM · co-tenancy · temporal)
            (flag: --deep · more intrusive · same authorization rules)</pre>
@@ -353,7 +349,10 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
             </tbody>
           </table>
         </div>
-        <p style="margin-top:0.75rem">
+        <details class="read-more">
+          <summary>Read more</summary>
+          <div class="read-more-body">
+        <p>
           The <a href="#protocols">protocol table</a> shows how many of the <strong>three probe
           strategies</strong> (arbitrary auth · state non-persistence · static signature) are active
           per face — up to 3. Shodan and co-tenancy are host-level, not counted in that column.
@@ -385,6 +384,8 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
   [##########----------]  &lt; 30%   LIKELY REAL HOST
   [################----]  30-59%  SUSPECTED HONEYPOT
   [####################]  &gt;= 60%  CONFIRMED HONEYPOT</pre>
+          </div>
+        </details>
       </section>
 
       <section class="panel" id="protocols">
@@ -403,6 +404,9 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
           <code>--ports ssh=2222</code>. Map unused faces to a closed port (<code>ftp=9</code>) so skips
           do not inflate the score. Closed faces are skipped, not scored.
         </p>
+        <details class="read-more">
+          <summary>Read more</summary>
+          <div class="read-more-body">
         <div class="table-wrap">
           <table>
             <thead>
@@ -438,6 +442,8 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
           Shodan Honeyscore and Nmap NSE (<code>-n</code> / <code>--with-nmap</code>) are optional intel
           layers, not protocol engines.
         </p>
+          </div>
+        </details>
       </section>
 
       <section class="panel" id="agents">

@@ -334,3 +334,40 @@ ul.clean li {
   clip: rect(0, 0, 0, 0);
   border: 0;
 }
+
+.read-more {
+  margin-top: 0.85rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.65rem;
+}
+
+.read-more > summary {
+  cursor: pointer;
+  color: var(--cyan);
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  list-style: none;
+  user-select: none;
+}
+
+.read-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.read-more > summary::before {
+  content: "▸ ";
+  color: var(--green-dim);
+}
+
+.read-more[open] > summary::before {
+  content: "▾ ";
+}
+
+.read-more > summary:hover {
+  color: var(--amber);
+}
+
+.read-more-body {
+  margin-top: 0.75rem;
+  padding-top: 0.15rem;
+}
