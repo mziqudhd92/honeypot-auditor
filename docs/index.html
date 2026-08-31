@@ -303,27 +303,44 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
 
       <section class="panel" id="cli-flags">
         <h2>-=[ CLI FLAGS ]=-</h2>
+        <p>
+          The CLI is built on <strong>Rich</strong> — colored help, a figlet header on <code>--help</code>,
+          and a live progress bar while probes run in parallel. Most flags tune a single audit:
+          which ports to hit, how deep to go, timeouts, and where to write JSON.
+        </p>
+        <p>
+          For analysis, use <code>-v</code> / <code>--verbose</code>. The default view is the score
+          panel only; verbose mode prints the strategy breakdown, per-protocol matrix, full indicator
+          table, why-this-score notes, and run metadata — the fastest way to understand what fired and why.
+        </p>
+        <details class="read-more">
+          <summary>Read more</summary>
+          <div class="read-more-body">
         <div class="table-wrap">
           <table>
             <thead>
               <tr><th>Flag</th><th>Description</th></tr>
             </thead>
             <tbody>
-              <tr><td><code>-h</code>, <code>--help</code>, <code>/help</code></td><td>Show options (figlet header)</td></tr>
-              <tr><td><code>--target</code></td><td>IP, hostname, or IPv4 CIDR (max /24)</td></tr>
-              <tr><td><code>--scan-concurrency</code></td><td>Parallel hosts for subnet scans (default 8)</td></tr>
+              <tr><td><code>-h</code>, <code>--help</code>, <code>/help</code>, <code>/?</code></td><td>Rich-styled options + figlet <strong>H-AUDITOR</strong> header</td></tr>
+              <tr><td><code>--version</code></td><td>Print version and exit</td></tr>
+              <tr><td><code>--target</code></td><td>IP, hostname, or IPv4 CIDR (max /24, 254 hosts)</td></tr>
+              <tr><td><code>--confirm-authorized</code></td><td>Required when any scanned IP is public (host or subnet)</td></tr>
               <tr><td><code>--preset</code></td><td><code>both</code> (default: IANA + lab), <code>iana</code>, or <code>docker-research</code></td></tr>
-              <tr><td><code>-p</code>, <code>--port</code></td><td>Only these TCP ports (nmap-style; <code>-p 22</code> or <code>-p 22,2222</code>)</td></tr>
-              <tr><td><code>--ports</code></td><td>Per-protocol override; map unused to <code>=9</code></td></tr>
-              <tr><td><code>--confirm-authorized</code></td><td>Required if any scanned IP is public</td></tr>
-              <tr><td><code>--deep</code></td><td>Shell semantics, OS coherence, HASSH, FSM, co-tenancy, temporal</td></tr>
+              <tr><td><code>-p</code>, <code>--port</code></td><td>Only these TCP ports (nmap-style; repeatable or <code>22,2222</code>). Omit for full preset</td></tr>
+              <tr><td><code>--ports</code></td><td>Per-protocol override (<code>ssh=2222,ftp=9</code>); map unused faces to <code>=9</code> to skip</td></tr>
               <tr><td><code>-v</code>, <code>--verbose</code></td><td>Strategy breakdown, per-protocol matrix, indicator table, why-this-score, run notes</td></tr>
-              <tr><td><code>--skip-nmap</code></td><td>Skip Nmap NSE phase</td></tr>
+              <tr><td><code>--deep</code></td><td>Shell semantics, OS coherence, HASSH/TCP stack, FSM fuzz, co-tenancy, temporal/egress</td></tr>
+              <tr><td><code>-n</code>, <code>--with-nmap</code></td><td>Run Nmap <code>-sV</code> / NSE phase (slow; off by default)</td></tr>
+              <tr><td><code>--shodan-key</code></td><td>Shodan API key (or set <code>SHODAN_API_KEY</code>); skipped per-host on subnet scans</td></tr>
+              <tr><td><code>--scan-concurrency</code></td><td>Parallel hosts for CIDR scans (default 8)</td></tr>
               <tr><td><code>--timeout</code></td><td>Socket timeout in seconds (default 3)</td></tr>
-              <tr><td><code>--output</code></td><td>JSON path (subnet: combined summary + hosts)</td></tr>
+              <tr><td><code>--output</code></td><td>JSON path (default <code>honeypot-audit-&lt;ip&gt;.json</code>; subnet → combined summary + hosts)</td></tr>
             </tbody>
           </table>
         </div>
+          </div>
+        </details>
       </section>
 
       <section class="panel" id="scoring">
