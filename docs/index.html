@@ -110,7 +110,7 @@
             "name": "Which protocols does honeypot-auditor support?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Fifteen first-class probes: SSH, Telnet, FTP, SMTP, HTTP, SMB, SIP, VNC, Redis, MySQL, Git, RDP, HTTP proxy, MSSQL, and MongoDB. By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, and so on). -p/--port selects only those ports (nmap-style). --deep adds shell semantics, HASSH, TCP stack, HTTP/FTP/SMTP FSM, and TLS JA4S on 443/8443."
+              "text": "Sixteen protocol engines: SSH, Telnet, FTP, SMTP, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, and MongoDB. Each uses 1–3 basic detection strategies in the current release (33 strategy slots total). By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, and so on). -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
             }
           },
           {
@@ -227,56 +227,62 @@
           Not exploits. Not exfil. Banner / state / auth semantics — the kind of stuff that
           made Cowrie sweat in ’09 and still catches clones in ’26.
         </p>
-        <pre class="code">[ BASIC ]  Shodan · Nmap NSE · SSH/Telnet/SMB/FTP/HTTP/Redis/SMTP/VNC/SIP
-           · MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB
-[ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
-           · co-tenancy buffet detect · latency · egress bait
+        <pre class="code">[ BASIC ]  Shodan · Nmap NSE · 16 protocol engines · 4 detection strategies each
+[ DEEP  ]  +6 cross-protocol behavioral axes (shell · OS · stack · FSM · co-tenancy · temporal)
            (flag: --deep · more intrusive · same authorization rules)</pre>
         <p class="quote">“elite? nah. just consistent timeouts and an honest --confirm-authorized.”</p>
       </section>
 
       <section class="panel" id="protocols">
-        <h2>-=[ SUPPORTED PROTOCOLS ]=-</h2>
+        <h2>-=[ SUPPORTED PROTOCOLS / PORTS ]=-</h2>
         <p>
-          Fifteen first-class probes. <strong>Default:</strong> both IANA and lab/docker ports
-          (SSH 22 <em>and</em> 2222, HTTP 80 and 8081, …).
-          Restrict with <code>-p 22</code> / <code>--port 22,2222</code>
-          (nmap-style: only those ports; omit <code>-p</code> for the full preset).
-          Override a protocol with <code>--ports ssh=2222</code>.
-          Map unused faces to a closed port (<code>ftp=9</code>) so skips do not inflate the score.
+          <strong>16</strong> protocol engines in the current version. Each uses up to <strong>3</strong> basic
+          detection strategies. The <strong>Strategies</strong> column is how many of those three are active
+          for that protocol in this release — not a count of individual indicator checks
+          (<strong>33</strong> active strategy slots across all protocols).
         </p>
-        <p>Every protocol uses the <strong>same three strategies</strong>. A dash means that strategy is not on the basic path.</p>
+        <p>
+          Default preset (<code>--preset both</code>) probes IANA well-known ports <strong>and</strong>
+          common lab/docker aliases on the same faces. Restrict with <code>-p 22</code> /
+          <code>--port 22,2222</code> (nmap-style). Override a protocol with
+          <code>--ports ssh=2222</code>. Map unused faces to a closed port (<code>ftp=9</code>) so skips
+          do not inflate the score. Closed faces are skipped, not scored.
+        </p>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Protocol</th><th>iana</th><th>lab</th><th>Arbitrary auth</th><th>State non-persistence</th><th>Static signature</th></tr>
+              <tr><th>Protocol</th><th>Default ports (iana · lab)</th><th>Strategies</th></tr>
             </thead>
             <tbody>
-              <tr><td>SSH</td><td>22</td><td>2222</td><td>any-password (2 logins)</td><td>exec vs fake PTY · /tmp canary</td><td>banner · lure whoami · honeyfs</td></tr>
-              <tr><td>Telnet</td><td>23</td><td>2323</td><td>any-password (2 logins)</td><td>canned reject · /tmp canary</td><td>UAV / IAC spray · unknown-option WILL · lure whoami · fake tty/pipes</td></tr>
-              <tr><td>FTP</td><td>21</td><td>2121</td><td>stock decoy login (test)</td><td>PASV mismatch · canned 530 · STOR/SIZE</td><td>stock 220 · SYST L8 · PORT bounce</td></tr>
-              <tr><td>SMTP</td><td>25</td><td>2525</td><td>AUTH any-password · open relay</td><td>MAIL then RCPT 503 (lost envelope)</td><td>loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone</td></tr>
-              <tr><td>HTTP</td><td>80 / 443</td><td>8081</td><td>—</td><td>—</td><td>empty PUT 405 · GET / → index.html login skin · 407 Via localhost</td></tr>
-              <tr><td>SMB</td><td>445</td><td>1445</td><td>—</td><td>—</td><td>emulator native-OS / dialect</td></tr>
-              <tr><td>SIP</td><td>5060</td><td>5060</td><td>—</td><td>—</td><td>default User-Agent template</td></tr>
-              <tr><td>VNC</td><td>5900</td><td>5000</td><td>—</td><td>RFB auth always canned failure</td><td>RFB 3.8 VNC-auth only · canned Authentication failure · type-0 still challenges</td></tr>
-              <tr><td>Redis</td><td>6379</td><td>6379</td><td>AUTH any-password</td><td>FLUSHALL no-op · key vanishes after reconnect</td><td>COMMAND stub · AUTH-invalid+COMMAND NOAUTH wall · frozen INFO · missing ECHO/SELECT</td></tr>
-              <tr><td>MySQL</td><td>3306</td><td>3306</td><td>—</td><td>drop after one 1045</td><td>EOL 5.5.x ubuntu greeting</td></tr>
-              <tr><td>Git</td><td>9418</td><td>9418</td><td>—</td><td>—</td><td>git-upload-pack always ERR no such repository</td></tr>
-              <tr><td>RDP</td><td>3389</td><td>3389</td><td>—</td><td>canned negotiation failure</td><td>canned NLA cookie 0x1234</td></tr>
-              <tr><td>HTTP proxy</td><td>3128</td><td>8080</td><td>—</td><td>—</td><td>407 Via localhost · frozen squid 3.3.8 · ISA deny phrase</td></tr>
-              <tr><td>MSSQL</td><td>1433</td><td>1433</td><td>—</td><td>—</td><td>canned TDS prelogin (nmap-probe-shaped)</td></tr>
-              <tr><td>MongoDB</td><td>27017</td><td>27017</td><td>—</td><td>ping unauthorized after hello</td><td>hello connectionId frozen at 1</td></tr>
+              <tr><td>SSH</td><td>22 · 2222</td><td>3</td></tr>
+              <tr><td>Telnet</td><td>23 · 2323</td><td>3</td></tr>
+              <tr><td>FTP</td><td>21 · 2121</td><td>3</td></tr>
+              <tr><td>SMTP</td><td>25 · 2525</td><td>3</td></tr>
+              <tr><td>Redis</td><td>6379 · 6379</td><td>3</td></tr>
+              <tr><td>SMB</td><td>445 · 1445</td><td>2</td></tr>
+              <tr><td>VNC</td><td>5900 · 5000</td><td>2</td></tr>
+              <tr><td>MySQL</td><td>3306 · 3306</td><td>2</td></tr>
+              <tr><td>Postgres</td><td>5432 · 5432</td><td>2</td></tr>
+              <tr><td>RDP</td><td>3389 · 3389</td><td>2</td></tr>
+              <tr><td>MSSQL</td><td>1433 · 1433</td><td>2</td></tr>
+              <tr><td>MongoDB</td><td>27017 · 27017</td><td>2</td></tr>
+              <tr><td>HTTP</td><td>80 / 443 · 8081</td><td>1</td></tr>
+              <tr><td>SIP</td><td>5060 · 5060</td><td>1</td></tr>
+              <tr><td>Git</td><td>9418 · 9418</td><td>1</td></tr>
+              <tr><td>HTTP proxy</td><td>3128 · 8080</td><td>1</td></tr>
             </tbody>
           </table>
         </div>
         <p style="margin-top:0.75rem">
-          <code>--deep</code> adds SSH/Telnet shell semantics, HASSH, TCP stack, HTTP/FTP/SMTP FSM,
-          and TLS JA4S when HTTP is on <strong>443/8443</strong>.
-          Co-tenancy also pokes Modbus (1502), SNMP (161), DNS (15353), IPP (631), and POP (1110)
-          only to count how many lures sit on one IP — not as standalone detectors.
+          <code>-p</code> maps well-known extras the same way: <code>443</code>/<code>8443</code> → HTTP (TLS),
+          <code>8080</code>/<code>3128</code> → HTTP proxy, <code>139</code> → SMB, <code>5061</code> → SIP,
+          <code>5000</code>/<code>5901</code> → VNC. Unknown numbers are probed as SSH.
         </p>
-        <p>Shodan Honeyscore and Nmap NSE are intel layers, not protocol engines.</p>
+        <p>
+          <code>--deep</code> adds cross-protocol behavioral axes on top of the basic strategies above.
+          Shodan Honeyscore and Nmap NSE (<code>-n</code> / <code>--with-nmap</code>) are optional intel
+          layers, not protocol engines.
+        </p>
       </section>
 
       <section class="panel demo" id="demo">
@@ -374,20 +380,33 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
 
       <section class="panel" id="scoring">
         <h2>-=[ STRATEGIES ]=-</h2>
+        <p>
+          Scoring is one hit per strategy category across the whole audit, not per protocol.
+          Every protocol draws from the same <strong>four basic detection strategies</strong>
+          (weights are global):
+        </p>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Strategy</th><th>Weight</th><th>How it fires</th></tr>
+              <tr><th>Basic strategy</th><th>Weight</th></tr>
             </thead>
             <tbody>
-              <tr><td>Shodan intel</td><td>25%</td><td>Honeyscore &gt; 0.6 · honeypot tag</td></tr>
-              <tr><td>Arbitrary auth</td><td>30%</td><td>random or stock decoy credentials accepted</td></tr>
-              <tr><td>State non-persistence</td><td>25%</td><td>session / FSM / filesystem does not keep state</td></tr>
-              <tr><td>Static signature</td><td>20%</td><td>stock banner · unknown nmap -sV (any proto) · banner vs -sV family mismatch</td></tr>
+              <tr><td>Shodan intel</td><td>25%</td></tr>
+              <tr><td>Arbitrary auth</td><td>30%</td></tr>
+              <tr><td>State non-persistence</td><td>25%</td></tr>
+              <tr><td>Static signature</td><td>20%</td></tr>
             </tbody>
           </table>
         </div>
-        <p style="margin-top:0.75rem"><code>--deep</code> adds behavior, coherence, stack fingerprint, proto FSM, co-tenancy, temporal.</p>
+        <p style="margin-top:0.75rem">
+          Not every protocol runs all four — see the <a href="#protocols">protocol table</a> for how many
+          are active per face in this release. Multiple protocols hitting the same category still count once
+          toward the score, with a corroboration bonus when several faces agree.
+        </p>
+        <p>
+          <code>--deep</code> adds <strong>six cross-protocol behavioral axes</strong> (behavior, coherence,
+          stack fingerprint, proto conformance, co-tenancy, temporal) on top of the basic strategies.
+        </p>
         <pre class="code">VERDICT BANDS:
   [##########----------]  &lt; 30%   LIKELY REAL HOST
   [################----]  30-59%  SUSPECTED HONEYPOT
