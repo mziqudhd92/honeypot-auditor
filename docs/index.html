@@ -236,9 +236,10 @@
       <section class="panel" id="protocols">
         <h2>-=[ SUPPORTED PROTOCOLS / PORTS ]=-</h2>
         <p>
-          <strong>16</strong> protocol engines in the current version. Each uses up to <strong>3</strong> basic
-          detection strategies. The <strong>Strategies</strong> column is how many of those three are active
-          for that protocol in this release — not a count of individual indicator checks
+          <strong>16</strong> protocol engines in the current version. Each uses up to <strong>3</strong>
+          probe strategies (arbitrary auth · state non-persistence · static signature). The
+          <strong>Strategies</strong> column is how many of those three are active for that protocol
+          in this release — not Shodan, co-tenancy, or individual indicator checks
           (<strong>33</strong> active strategy slots across all protocols).
         </p>
         <p>
@@ -381,31 +382,64 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
       <section class="panel" id="scoring">
         <h2>-=[ STRATEGIES ]=-</h2>
         <p>
-          Scoring is one hit per strategy category across the whole audit, not per protocol.
-          Every protocol draws from the same <strong>four basic detection strategies</strong>
-          (weights are global):
+          Scoring is <strong>one hit per category</strong> across the whole audit — not per protocol.
+          Two tells in the same category on the same service do not stack; the same category on a
+          second protocol also counts once toward that category’s weight.
         </p>
+        <p><strong>Basic mode</strong> uses these weighted categories (global weights):</p>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Basic strategy</th><th>Weight</th></tr>
+              <tr><th>Category</th><th>Weight</th></tr>
             </thead>
             <tbody>
               <tr><td>Shodan intel</td><td>25%</td></tr>
               <tr><td>Arbitrary auth</td><td>30%</td></tr>
               <tr><td>State non-persistence</td><td>25%</td></tr>
               <tr><td>Static signature</td><td>20%</td></tr>
+              <tr><td>Co-tenancy</td><td>15%</td></tr>
             </tbody>
           </table>
         </div>
         <p style="margin-top:0.75rem">
-          Not every protocol runs all four — see the <a href="#protocols">protocol table</a> for how many
-          are active per face in this release. Multiple protocols hitting the same category still count once
-          toward the score, with a corroboration bonus when several faces agree.
+          The <a href="#protocols">protocol table</a> shows how many of the <strong>three probe
+          strategies</strong> (arbitrary auth · state non-persistence · static signature) are active
+          per face — up to 3. Shodan and co-tenancy are host-level categories, not counted in that
+          column. Not every protocol runs all three probe strategies.
         </p>
         <p>
-          <code>--deep</code> adds <strong>six cross-protocol behavioral axes</strong> (behavior, coherence,
-          stack fingerprint, proto conformance, co-tenancy, temporal) on top of the basic strategies.
+          <strong>Multi-protocol corroboration bonus:</strong> once any corroborating tell has fired,
+          each <em>additional</em> protocol with a basic-strategy hit adds <strong>+5%</strong>,
+          capped at <strong>+35%</strong> (starting from the second protocol). This bonus is dynamic —
+          it is not a fixed row in the table above.
+        </p>
+        <p>
+          <strong>Co-tenancy</strong> (many decoy faces on one IP) only scores when another category
+          already corroborates — it will not fire alone on multi-lure research stacks. On the basic
+          path it triggers when ≥5 protocol lures hit with corroboration.
+        </p>
+        <p>
+          <strong>Any-password on two random accounts</strong> on the same service forces the score
+          to <strong>100%</strong>.
+        </p>
+        <p><code>--deep</code> adds five behavioral categories on top of the basic weights:</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Deep category</th><th>Weight</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Shell execution semantics</td><td>18%</td></tr>
+              <tr><td>Cross-artifact OS coherence</td><td>15%</td></tr>
+              <tr><td>HASSH / TCP stack fingerprint</td><td>12%</td></tr>
+              <tr><td>Protocol FSM conformance</td><td>12%</td></tr>
+              <tr><td>Temporal / latency behavior</td><td>10%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:0.75rem">
+          Deep co-tenancy probes (Modbus, SNMP, DNS, IPP, POP) count responsive IT lures but still
+          require corroboration before they contribute to the co-tenancy category.
         </p>
         <pre class="code">VERDICT BANDS:
   [##########----------]  &lt; 30%   LIKELY REAL HOST

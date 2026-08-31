@@ -165,27 +165,33 @@ honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 \
 
 ## -=[ STRATEGIES ]=-
 
-Every protocol uses the same three detection strategies (weights are global, one hit per strategy):
+Scoring is **one hit per category** across the audit (not per protocol). **Basic mode** weights:
 
 ```
-  ╭──────────────────────────┬────────┬───────────────────────────────────────╮
-  │ STRATEGY                 │ WEIGHT │ HOW IT FIRES                           │
-  ├──────────────────────────┼────────┼───────────────────────────────────────┤
-  │ Shodan intel             │  25%   │ Honeyscore > 0.6 · honeypot tag       │
-  │ Arbitrary auth           │  30%   │ random or stock decoy credentials accepted │
-  │ State non-persistence    │  25%   │ session / FSM / filesystem does not keep state │
-  │ Static signature         │  20%   │ stock banner · unknown nmap -sV (any proto) · banner vs -sV family mismatch │
-  ╰──────────────────────────┴────────┴───────────────────────────────────────╯
+  ╭──────────────────────────┬────────╮
+  │ CATEGORY                 │ WEIGHT │
+  ├──────────────────────────┼────────┤
+  │ Shodan intel             │  25%   │
+  │ Arbitrary auth           │  30%   │
+  │ State non-persistence    │  25%   │
+  │ Static signature         │  20%   │
+  │ Co-tenancy               │  15%   │
+  ╰──────────────────────────┴────────╯
 
-  --deep ADDS (lab brain mode):
-  ┌──────────────────────────┬────────┬───────────────────────────────────────┐
-  │ behavior                 │  18%   │ $((arith)) · sleep · channel lies     │
-  │ coherence                │  15%   │ uname vs /proc vs os-release drift    │
-  │ stack_fingerprint        │  12%   │ HASSH vs banner · TCP TTL mismatch  │
-  │ proto_conformance        │  12%   │ HTTP/FTP/SMTP FSM edge cases         │
-  │ co-tenancy               │   8%   │ honeypot buffet · needs corroboration│
-  │ temporal                 │  10%   │ robotic latency · egress silence      │
-  └──────────────────────────┴────────┴───────────────────────────────────────┘
+  CORROBORATION BONUS (dynamic, not in table):
+    +5% per extra protocol with a basic-strategy hit, from the 2nd protocol up, max +35%
+
+  SHORTCUT:
+    any-password on two random accounts on one service → 100%
+
+  --deep ADDS (on top of basic):
+  ┌──────────────────────────┬────────┐
+  │ behavior                 │  18%   │
+  │ coherence                │  15%   │
+  │ stack_fingerprint        │  12%   │
+  │ proto_conformance        │  12%   │
+  │ temporal                 │  10%   │
+  └──────────────────────────┴────────┘
 
   VERDICT BANDS:
     [##########----------]  < 30%   LIKELY REAL HOST
@@ -193,8 +199,9 @@ Every protocol uses the same three detection strategies (weights are global, one
     [####################]  >= 60%  CONFIRMED HONEYPOT
 ```
 
-Co-tenancy won't fire alone on multi-decoy platforms (looking at you,
-research stacks with 11 open faces). Needs another tell first. By design.
+The protocol table’s **Strategies** column counts only the three probe strategies per face (up to 3).
+Shodan and co-tenancy are host-level. Co-tenancy needs corroboration from another category first —
+it will not fire alone on multi-lure research stacks (≥5 protocol lures with corroboration on the basic path).
 
 ---
 
@@ -223,10 +230,10 @@ research stacks with 11 open faces). Needs another tell first. By design.
 
 ## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-**16** protocol engines in the current version. Each uses up to **3** basic detection
+**16** protocol engines in the current version. Each uses up to **3** probe
 strategies (arbitrary auth · state non-persistence · static signature). The
 **Strategies** column is how many of those three are active for that protocol in
-this release — not a count of individual indicator checks.
+this release — not Shodan, co-tenancy, or individual indicator checks.
 
 Default preset (`--preset both`) probes IANA well-known ports **and** common
 lab/docker aliases on the same faces. Override ports with `-p` / `--ports`.
