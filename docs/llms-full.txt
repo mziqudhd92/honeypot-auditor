@@ -1,6 +1,6 @@
 # honeypot-auditor — full brief for answer engines & agents
 
-Version: 0.2.2
+Version: 0.3.0
 License: MIT
 Canonical site: https://mziqudhd92.github.io/honeypot-auditor/
 Repository: https://github.com/mziqudhd92/honeypot-auditor

@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-31
+
 ### Added
 
 - Deny-all FSM tells aimed at Trapster-class stacks: FTP **command desert** (FEAT/PWD/PASV/NOOP → uniform `500 Unknown Command`), MySQL **CLIENT_SSL silent drop**, MSSQL **TLS close after ENCRYPT_NOT_SUP**, and a new **Postgres** probe (`SSLRequest → N` + cleartext-only + frozen `auth.c:326`).
@@ -19,7 +21,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Nmap `-sV`: unrecognized fingerprint on **any** protocol (data but no product match), `-sV` vs banner **family mismatch** (e.g. vsftpd vs ProFTPD 220), ambiguous EOL FTP (`vsftpd … or WU-FTPD`), and lure banners — **static signature**. Version-scans every open preset port (`tcpwrapped` ignored; confident OpenSSH/nginx/etc. stay clean).
 - Redis class-level CTI: AUTH with random credentials (any-password); FLUSHALL that does not clear keys; COMMAND `+OK` / frozen INFO / HELP returning redis-cli text / missing ECHO or SELECT
 - CLI `-v` / `--verbose`: strategy contributions, per-protocol matrix, indicator table, why-this-score, and run notes. Default console is the score panel only (JSON is always written).
-- Fifteen first-class probes: MySQL, Git, RDP, HTTP proxy, MSSQL, and MongoDB join SSH/Telnet/FTP/SMTP/HTTP/SMB/SIP/VNC/Redis. Class-level tells only, taken from honeypot source (canned RFB auth-fail, hello connectionId frozen at 1, empty HTTP 405, GET / → login skin). UDP-mute faces (NTP/TFTP/SIP-no-reply) are not scored as standalone detectors.
+- Sixteen first-class probes: Postgres joins SSH/Telnet/FTP/SMTP/HTTP/SMB/SIP/VNC/Redis/MySQL/Git/RDP/HTTP proxy/MSSQL/MongoDB. Class-level tells only. UDP-mute faces (NTP/TFTP/SIP-no-reply) are not scored as standalone detectors.
 - MySQL drop-after-1045, RDP canned negotiation-failure, VNC canned Authentication failure, and MongoDB ping-unauthorized-after-hello are **state non-persistence** (deny-all is not scored as arbitrary auth).
 
 ### Fixed

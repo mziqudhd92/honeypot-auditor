@@ -19,7 +19,7 @@ if [[ -d /hpaudit-src ]]; then
   cp -a /hpaudit-src /tmp/hpaudit-build
   /opt/venv/bin/pip install -q "/tmp/hpaudit-build[full]"
 else
-  /opt/venv/bin/pip install -q "honeypot-auditor[full]==0.2.2"
+  /opt/venv/bin/pip install -q "honeypot-auditor[full]==0.3.0"
 fi
 
 echo ""
