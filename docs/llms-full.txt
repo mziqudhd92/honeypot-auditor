@@ -70,8 +70,8 @@ Close unused preset ports by mapping them to a closed port (e.g. `=9`) so they a
 
 ## Scoring (claim-honest)
 
-Basic **strategies** (same three on every protocol): Shodan intel 25%, arbitrary auth 30%, state non-persistence 25%, static signature 20% (stock banner, unknown nmap `-sV` on any protocol, `-sV` vs banner family mismatch). Scoring is one hit per category across the audit, not per protocol. Default console prints the score panel only; pass `-v` for strategy breakdown and per-protocol HIT/clean/skip/— matrix. JSON always includes `protocol_strategies`. When nmap is enabled, every open preset port is version-scanned; `tcpwrapped` is ignored.
-Deep adds behavior/coherence/stack/FSM/co-tenancy/temporal (does not invent catch rates).
+Basic categories: Shodan 25%, arbitrary auth 30%, state non-persistence 25%, static signature 20%, co-tenancy 15%. Different categories stack. Multi-protocol corroboration: +5% per protocol with a basic-strategy hit from the 2nd protocol up (max +35%). Co-tenancy (≥5 protocol lures) needs corroboration. Any-password on two random accounts → 100%. Default console prints the score panel only; pass `-v` for strategy breakdown and per-protocol HIT/clean/skip/— matrix. JSON always includes `protocol_strategies`. When nmap is enabled, every open preset port is version-scanned; `tcpwrapped` is ignored.
+Deep adds behavior 18%, coherence 15%, stack 12%, proto FSM 12%, temporal 10% (does not invent catch rates).
 
 Verdict bands:
 - < 30% Likely Real Host

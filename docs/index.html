@@ -382,11 +382,17 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
       <section class="panel" id="scoring">
         <h2>-=[ STRATEGIES ]=-</h2>
         <p>
-          Scoring is <strong>one hit per category</strong> across the whole audit — not per protocol.
-          Two tells in the same category on the same service do not stack; the same category on a
-          second protocol also counts once toward that category’s weight.
+          Honeyscore adds triggered <strong>category weights</strong> from the table below.
+          <strong>Different categories stack</strong> — e.g. static signature (20%) plus
+          state non-persistence (25%) = 45%.
         </p>
-        <p><strong>Basic mode</strong> uses these weighted categories (global weights):</p>
+        <p>
+          <strong>Multi-protocol corroboration</strong> is how deny-all buffets score without Shodan
+          or any-password: when basic tells fire on more than one protocol, each protocol beyond the
+          first adds <strong>+5%</strong>, capped at <strong>+35%</strong>.
+          Example: telnet static tell + ftp state tell → 20 + 25 + 5 = <strong>50% Suspected</strong>.
+        </p>
+        <p><strong>Basic mode</strong> category weights:</p>
         <div class="table-wrap">
           <table>
             <thead>
@@ -404,23 +410,14 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
         <p style="margin-top:0.75rem">
           The <a href="#protocols">protocol table</a> shows how many of the <strong>three probe
           strategies</strong> (arbitrary auth · state non-persistence · static signature) are active
-          per face — up to 3. Shodan and co-tenancy are host-level categories, not counted in that
-          column. Not every protocol runs all three probe strategies.
+          per face — up to 3. Shodan and co-tenancy are host-level, not counted in that column.
         </p>
         <p>
-          <strong>Multi-protocol corroboration bonus:</strong> once any corroborating tell has fired,
-          each <em>additional</em> protocol with a basic-strategy hit adds <strong>+5%</strong>,
-          capped at <strong>+35%</strong> (starting from the second protocol). This bonus is dynamic —
-          it is not a fixed row in the table above.
+          <strong>Co-tenancy</strong> (15%) fires when ≥5 protocol lures hit and another tell already
+          corroborates — not on multi-face research stacks alone.
         </p>
         <p>
-          <strong>Co-tenancy</strong> (many decoy faces on one IP) only scores when another category
-          already corroborates — it will not fire alone on multi-lure research stacks. On the basic
-          path it triggers when ≥5 protocol lures hit with corroboration.
-        </p>
-        <p>
-          <strong>Any-password on two random accounts</strong> on the same service forces the score
-          to <strong>100%</strong>.
+          <strong>Any-password on two random accounts</strong> on the same service → <strong>100%</strong>.
         </p>
         <p><code>--deep</code> adds five behavioral categories on top of the basic weights:</p>
         <div class="table-wrap">

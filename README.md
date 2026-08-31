@@ -165,7 +165,9 @@ honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 \
 
 ## -=[ STRATEGIES ]=-
 
-Scoring is **one hit per category** across the audit (not per protocol). **Basic mode** weights:
+Honeyscore adds triggered **category weights**. **Different categories stack** (e.g. static 20% + state 25% = 45%).
+
+**Multi-protocol corroboration** — when basic tells fire on more than one protocol, each protocol beyond the first adds **+5%**, capped at **+35%**. Example: telnet static + ftp state → 20 + 25 + 5 = **50% Suspected**. Deny-all buffets with ≥5 protocol lures can also trigger **co-tenancy** (15%) once another tell corroborates.
 
 ```
   ╭──────────────────────────┬────────╮
@@ -178,8 +180,8 @@ Scoring is **one hit per category** across the audit (not per protocol). **Basic
   │ Co-tenancy               │  15%   │
   ╰──────────────────────────┴────────╯
 
-  CORROBORATION BONUS (dynamic, not in table):
-    +5% per extra protocol with a basic-strategy hit, from the 2nd protocol up, max +35%
+  CORROBORATION BONUS (dynamic):
+    +5% per protocol with a basic-strategy hit, from the 2nd protocol up, max +35%
 
   SHORTCUT:
     any-password on two random accounts on one service → 100%
@@ -200,8 +202,7 @@ Scoring is **one hit per category** across the audit (not per protocol). **Basic
 ```
 
 The protocol table’s **Strategies** column counts only the three probe strategies per face (up to 3).
-Shodan and co-tenancy are host-level. Co-tenancy needs corroboration from another category first —
-it will not fire alone on multi-lure research stacks (≥5 protocol lures with corroboration on the basic path).
+Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lure research stacks.
 
 ---
 
