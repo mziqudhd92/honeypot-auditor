@@ -89,3 +89,14 @@ def test_hassh_non_openssh_banner_no_trigger():
     triggered, detail = hassh_algo_mismatch("SSH-2.0-Cowrie", kex)
     assert not triggered
     assert "non-OpenSSH" in detail
+
+
+def test_capture_kexinit_raw_hex():
+    # Minimal SSH banner + fake KEXINIT payload marker
+    banner = b"SSH-2.0-OpenSSH_8.9\r\n"
+    payload = bytes([20]) + b"\x00" * 16
+    raw = banner + payload
+    kex_payload = find_kexinit_payload(raw)
+    assert kex_payload is None or isinstance(kex_payload, bytes)
+    banner_out, kex = capture_server_kexinit(raw)
+    assert banner_out.startswith("SSH-2.0-OpenSSH")

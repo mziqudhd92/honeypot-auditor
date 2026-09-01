@@ -9,7 +9,7 @@ from honeypot_auditor.models import AuditReport
 
 
 def _report_payload(report: AuditReport) -> dict:
-    return {
+    payload = {
         "target": report.target,
         "resolved_ip": report.resolved_ip,
         "score": report.score,
@@ -22,7 +22,21 @@ def _report_payload(report: AuditReport) -> dict:
         "finished_at": report.finished_at,
         "indicators": [i.as_dict() for i in report.indicators],
         "triggered": [i.as_dict() for i in report.triggered()],
+        "confidence": report.confidence,
+        "proxy_detected": report.proxy_detected,
+        "proxy_evidence": report.proxy_evidence,
+        "proxy_context": report.proxy_context,
+        "capability_warnings": report.capability_warnings,
+        "capabilities": report.capabilities,
     }
+    if report.tactical_action:
+        payload["tactical_action"] = report.tactical_action
+        payload["tactical_rationale"] = report.tactical_rationale
+    if report.deception_leaks:
+        payload["deception_leaks"] = report.deception_leaks
+    if report.dual_stack:
+        payload["dual_stack"] = report.dual_stack
+    return payload
 
 
 def _json_default(obj: object) -> str:
@@ -40,6 +54,21 @@ def export(report: AuditReport, path: str | Path) -> Path:
         json.dumps(_report_payload(report), indent=2, default=_json_default) + "\n",
         encoding="utf-8",
     )
+    return dest
+
+
+def export_nmap_exclude(ip: str, path: str | Path) -> Path:
+    """Append IP to nmap exclude list when Honeyscore >= 60."""
+    dest = Path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    line = f"{ip}\n"
+    if dest.exists():
+        existing = dest.read_text(encoding="utf-8")
+        if ip in existing.splitlines():
+            return dest
+        dest.write_text(existing + line, encoding="utf-8")
+    else:
+        dest.write_text(line, encoding="utf-8")
     return dest
 
 

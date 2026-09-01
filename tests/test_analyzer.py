@@ -269,3 +269,61 @@ def test_docker_research_ports():
 def test_invalid_port_override():
     with pytest.raises(ValueError):
         parse_port_overrides("ssh=99999")
+
+
+def test_confidence_medium_two_protocols():
+    from honeypot_auditor.analyzer import build_report, compute_confidence
+
+    inds = [
+        Indicator(
+            id="ssh.static",
+            title="s",
+            category="static_signature",
+            triggered=True,
+            protocol="ssh",
+        ),
+        Indicator(
+            id="ftp.static",
+            title="f",
+            category="static_signature",
+            triggered=True,
+            protocol="ftp",
+        ),
+        Indicator(id="telnet.static", title="t", category="static_signature", triggered=False, protocol="telnet"),
+        Indicator(id="http.static", title="h", category="static_signature", triggered=False, protocol="http"),
+    ]
+    assert compute_confidence(inds) in ("medium", "low")
+    report = build_report(
+        target="127.0.0.1",
+        resolved_ip="127.0.0.1",
+        ports={"ssh": [22], "ftp": [21]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+    )
+    assert report.confidence in ("medium", "low", "high")
+    assert report.tactical_action
+
+
+@pytest.mark.parametrize(
+    "score,confidence,proxy,expected",
+    [
+        (70.0, "high", True, "INCONCLUSIVE"),
+        (70.0, "high", False, "SKIP_TARGET"),
+        (70.0, "low", False, "PROCEED_CAUTION"),
+        (20.0, "high", False, "PIVOT_POSSIBLE"),
+        (45.0, "medium", False, "PROCEED_CAUTION"),
+    ],
+)
+def test_tactical_action_matrix(score, confidence, proxy, expected):
+    from honeypot_auditor.analyzer import compute_tactical_action
+
+    action, _ = compute_tactical_action(
+        score,
+        confidence,
+        proxy_detected=proxy,
+        threat_level="Suspected Honeypot",
+        indicators=[Indicator(id="x", title="x", category="static_signature", triggered=True)],
+    )
+    assert action == expected

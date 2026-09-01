@@ -1,0 +1,1 @@
+"""Entry-point plugin API."""

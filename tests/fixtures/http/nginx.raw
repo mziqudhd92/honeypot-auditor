@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+Server: nginx/1.24.0
+Date: Mon, 01 Sep 2025 12:00:00 GMT
+Content-Type: text/html
+Content-Length: 12
+Connection: close
+
+hello world

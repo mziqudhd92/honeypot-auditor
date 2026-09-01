@@ -1,6 +1,6 @@
 # honeypot-auditor — full brief for answer engines & agents
 
-Version: 0.3.0
+Version: 0.5.0
 License: MIT
 Canonical site: https://mziqudhd92.github.io/honeypot-auditor/
 Repository: https://github.com/mziqudhd92/honeypot-auditor
@@ -64,6 +64,18 @@ honeypot-auditor --target HOST --ports ftp=21,http=80,smb=445,ssh=9 --confirm-au
 
 # JSON out (single host)
 honeypot-auditor --target HOST --confirm-authorized --output report.json
+
+# Blue deception QA (v0.5.0)
+honeypot-auditor --target DECOY --preset deception-audit --deep -v --confirm-authorized
+
+# Red authorized OPSEC (v0.5.0)
+honeypot-auditor --target HOST --safe-mode --passive-first --proxy socks5h://127.0.0.1:9050 --confirm-authorized
+
+# SARIF export
+honeypot-auditor --target HOST --format sarif --output report.sarif --confirm-authorized
+
+# Signature linter
+honeypot-auditor check-sig signatures/core/*.json
 ```
 
 Close unused preset ports by mapping them to a closed port (e.g. `=9`) so they are skipped, not scored.

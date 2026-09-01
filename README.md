@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v0.3.0 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v0.5.0 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -221,6 +221,20 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
   -v, --verbose              strategy breakdown, per-protocol matrix, indicators, notes
   -n, --with-nmap            run Nmap -sV / NSE phase (slow; off by default)
   --deep                     advanced six-axis probes
+  --safe-mode                handshake-only; disables deep shell/path probes
+  --profile audit|blend       probe profile (default audit; blend=mimesis OPSEC)
+  --proxy socks5h://host:port  SOCKS5 egress (remote DNS enforced)
+  --passive-first            Shodan before active; skip active when score high
+  --osint-only               Shodan only — no TCP probes
+  --dual-stack               resolve A+AAAA and compare IPv4 vs IPv6
+  --jitter 0.3               fraction of timeout as max random delay (authorized OPSEC)
+  --jitter-ms 50-500         random delay range in ms before each probe (authorized OPSEC)
+  --max-concurrent 32        global socket concurrency budget
+  --seed N                   RNG seed for blend profile
+  --preset deception-audit   blue-team QA preset (both ports + --deep)
+  --format json|sarif        report format (default json)
+  --output-nmap-exclude path append IP when Honeyscore >= 60
+  check-sig PATH             validate declarative signature pack offline
   --timeout SECS             socket timeout (default 3)
 ```
 
@@ -329,6 +343,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v0.3.0 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v0.5.0 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```

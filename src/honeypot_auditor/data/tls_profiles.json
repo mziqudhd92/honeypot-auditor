@@ -1,0 +1,19 @@
+{
+  "_meta": {
+    "note": "Populate ja3s/ja4s via scripts/capture-tls-baseline.sh against authorized lab lures. Placeholder values are ignored by match_lure_profile().",
+    "capture": "scripts/capture-tls-baseline.sh HOST:PORT"
+  },
+  "lures": {
+    "cowrie_https": {
+      "ja3s": "placeholder_update_via_capture_script",
+      "ja4s": "",
+      "description": "Stock Cowrie/Dionaea HTTPS lure — run capture-tls-baseline.sh to fill"
+    }
+  },
+  "cdn_edge": {
+    "cloudflare": {
+      "ja3s": "placeholder",
+      "description": "Cloudflare edge TLS — optional; used for CDN classification only"
+    }
+  }
+}

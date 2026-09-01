@@ -189,3 +189,190 @@ def probe_telnet_shell_semantics(host: str, port: int) -> list[Indicator]:
             evidence=text[:1500],
         )
     ]
+
+
+def probe_shell_entropy(host: str, port: int) -> list[Indicator]:
+    """Check $RANDOM variance and urandom RTT when shell auth succeeds."""
+    if settings.safe_mode:
+        return [
+            skipped_indicator(
+                "deep.shell_entropy",
+                "Shell entropy / urandom latency anomaly",
+                "behavior",
+                "safe-mode",
+                protocol="ssh",
+            )
+        ]
+    user, password = random_creds()
+    client, err = try_ssh_auth(host, port, user, password)
+    if client is None:
+        return [
+            skipped_indicator(
+                "deep.shell_entropy",
+                "Shell entropy / urandom latency anomaly",
+                "behavior",
+                closed_reason(err) if err else "auth failed",
+                protocol="ssh",
+                error=err,
+            )
+        ]
+    random_vals: list[str] = []
+    failures: list[str] = []
+    try:
+        for _ in range(3):
+            out, exec_err, _ = ssh_exec(client, "echo $RANDOM")
+            if exec_err:
+                failures.append(f"random: {exec_err}")
+                break
+            random_vals.append(out.strip())
+        _, base_err, base_t = ssh_exec(client, "echo ok")
+        _, urandom_err, urandom_t = ssh_exec(client, "time head -c 512 /dev/urandom 2>&1")
+        if base_err:
+            failures.append(f"baseline: {base_err}")
+        elif urandom_err and "not found" not in urandom_err.lower():
+            failures.append(f"urandom: {urandom_err}")
+        elif urandom_t < base_t * 0.5 and urandom_t < 0.05:
+            failures.append(f"urandom too fast ({urandom_t:.3f}s vs baseline {base_t:.3f}s)")
+        if len(random_vals) >= 2 and len(set(random_vals)) == 1:
+            failures.append(f"static $RANDOM values: {random_vals}")
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+    return [
+        Indicator(
+            id="deep.shell_entropy",
+            title="Shell entropy / urandom latency anomaly",
+            category="behavior",
+            triggered=bool(failures),
+            protocol="ssh",
+            detail="; ".join(failures) if failures else "entropy/latency plausible",
+            evidence=f"random={random_vals}",
+            requires_corroboration=True,
+            tell_tier="behavior",
+        )
+    ]
+
+
+def probe_mtime_uniformity(host: str, port: int) -> list[Indicator]:
+    """Flag directory mtimes clustered within 1s (container bake artifact)."""
+    if settings.safe_mode:
+        return [
+            skipped_indicator(
+                "deep.mtime_uniformity",
+                "Directory timestamp uniformity",
+                "coherence",
+                "safe-mode",
+                protocol="ssh",
+            )
+        ]
+    user, password = random_creds()
+    client, err = try_ssh_auth(host, port, user, password)
+    if client is None:
+        return [
+            skipped_indicator(
+                "deep.mtime_uniformity",
+                "Directory timestamp uniformity",
+                "coherence",
+                closed_reason(err) if err else "auth failed",
+                protocol="ssh",
+                error=err,
+            )
+        ]
+    out, exec_err, _ = ssh_exec(client, "ls -l --time-style=+%s /etc/passwd /var/log /usr/bin 2>/dev/null | awk '{print $6}'")
+    try:
+        client.close()
+    except Exception:
+        pass
+    if exec_err or not out.strip():
+        return [
+            skipped_indicator(
+                "deep.mtime_uniformity",
+                "Directory timestamp uniformity",
+                "coherence",
+                exec_err or "no stat output",
+                protocol="ssh",
+            )
+        ]
+    stamps = [ln.strip() for ln in out.splitlines() if ln.strip().isdigit()]
+    triggered = False
+    detail = "mtime spread plausible"
+    if len(stamps) >= 3:
+        vals = [int(s) for s in stamps[:6]]
+        if max(vals) - min(vals) <= 1:
+            triggered = True
+            detail = f"mtimes cluster within 1s: {vals}"
+    return [
+        Indicator(
+            id="deep.mtime_uniformity",
+            title="Directory timestamp uniformity",
+            category="coherence",
+            triggered=triggered,
+            protocol="ssh",
+            detail=detail,
+            evidence=out[:500],
+            remediation="Vary file mtimes in container bake or use realistic filesystem layers",
+            tell_tier="behavior",
+        )
+    ]
+
+
+def probe_llm_hallucination(host: str, port: int) -> list[Indicator]:
+    """Experimental: flag plausible fake success on invalid commands (LLM decoys)."""
+    if settings.safe_mode or not settings.deep:
+        return [
+            skipped_indicator(
+                "deep.llm_hallucination",
+                "LLM hallucination probe (experimental)",
+                "behavior",
+                "requires --deep and not --safe-mode",
+                protocol="ssh",
+            )
+        ]
+    user, password = random_creds()
+    client, err = try_ssh_auth(host, port, user, password)
+    if client is None:
+        return [
+            skipped_indicator(
+                "deep.llm_hallucination",
+                "LLM hallucination probe (experimental)",
+                "behavior",
+                closed_reason(err) if err else "auth failed",
+                protocol="ssh",
+                error=err,
+            )
+        ]
+    probes = (
+        "cat /sys/kernel/debug/nonexistent_hpaudit_99887",
+        "ls --fake-flag-x99",
+    )
+    failures: list[str] = []
+    evidence: list[str] = []
+    try:
+        for cmd in probes:
+            out, exec_err, _ = ssh_exec(client, cmd)
+            evidence.append(f"{cmd}: {out[:120]!r} err={exec_err!r}")
+            text = out.lower()
+            if "no such file" in text or "unrecognized" in text or "invalid" in text:
+                continue
+            if out.strip() and "error" not in text and exec_err == "":
+                failures.append(f"plausible fake success for {cmd!r}")
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+    return [
+        Indicator(
+            id="deep.llm_hallucination",
+            title="LLM hallucination probe (experimental)",
+            category="behavior",
+            triggered=bool(failures),
+            protocol="ssh",
+            detail="; ".join(failures) if failures else "errors look standard",
+            evidence="\n".join(evidence)[:1500],
+            requires_corroboration=True,
+            tell_tier="behavior",
+        )
+    ]

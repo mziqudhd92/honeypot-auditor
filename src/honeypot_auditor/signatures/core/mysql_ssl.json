@@ -1,0 +1,16 @@
+{
+  "name": "core-mysql",
+  "version": "1",
+  "rules": [
+    {
+      "id": "mysql.ssl_drop",
+      "title": "MySQL CLIENT_SSL silent drop",
+      "category": "proto_conformance",
+      "primitive": "exact_bytes",
+      "params": {
+        "value": ""
+      },
+      "remediation": "Respond with proper MySQL error on SSL negotiation failure"
+    }
+  ]
+}

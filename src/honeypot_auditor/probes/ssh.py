@@ -9,14 +9,16 @@ import secrets
 import time
 
 from honeypot_auditor.config import match_ssh_banner
+from honeypot_auditor.hassh import capture_server_kexinit
 from honeypot_auditor.models import Indicator, optional_import, skipped_indicator
-from honeypot_auditor.netutil import closed_reason
-from honeypot_auditor.probes.common import random_creds, skip_suite
+from honeypot_auditor.netutil import closed_reason, tcp_transact
+from honeypot_auditor.probes.common import is_safe_mode, random_creds, skip_suite
 from honeypot_auditor.probes.shell_cti import (
     CTI_SHELL_COMMANDS,
     identity_tells,
     whoami_matches_lure,
 )
+from honeypot_auditor.proxy_transport import paramiko_proxy_sock
 from honeypot_auditor.settings import settings
 from honeypot_auditor.sshutil import try_ssh_auth
 
@@ -31,6 +33,8 @@ _SSH_SKIP = (
 
 
 def probe_ssh(host: str, port: int) -> list[Indicator]:
+    if is_safe_mode():
+        return _probe_ssh_safe(host, port)
     paramiko = optional_import("paramiko")
     if paramiko is None:
         return skip_suite(_SSH_SKIP, "paramiko not installed", protocol="ssh")
@@ -49,19 +53,23 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
     err = ""
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    connect_kwargs = {
+        "hostname": host,
+        "port": port,
+        "username": user,
+        "password": password,
+        "timeout": settings.timeout_seconds,
+        "banner_timeout": settings.timeout_seconds,
+        "auth_timeout": settings.timeout_seconds,
+        "allow_agent": False,
+        "look_for_keys": False,
+    }
+    proxy_sock = paramiko_proxy_sock(host, port, settings.timeout_seconds)
+    if proxy_sock is not None:
+        connect_kwargs["sock"] = proxy_sock
     try:
         try:
-            client.connect(
-                hostname=host,
-                port=port,
-                username=user,
-                password=password,
-                timeout=settings.timeout_seconds,
-                banner_timeout=settings.timeout_seconds,
-                auth_timeout=settings.timeout_seconds,
-                allow_agent=False,
-                look_for_keys=False,
-            )
+            client.connect(**connect_kwargs)
             auth_ok = True
         except paramiko.AuthenticationException:
             auth_ok = False
@@ -278,3 +286,39 @@ def _ssh_interactive(client, commands: list[str]) -> str:
         except Exception:
             pass
     return buf.decode("utf-8", "replace")
+
+
+_CLIENT_BANNER = b"SSH-2.0-honeypot_auditor_1.0\r\n"
+
+
+def _probe_ssh_safe(host: str, port: int) -> list[Indicator]:
+    """Safe mode: banner + KEXINIT only — no auth or shell commands."""
+    raw, err = tcp_transact(
+        host,
+        port,
+        _CLIENT_BANNER,
+        recv_first=True,
+        timeout=max(4.0, settings.timeout_seconds),
+        max_bytes=16384,
+    )
+    if err and not raw:
+        return skip_suite(_SSH_SKIP, closed_reason(err), protocol="ssh", error=err)
+    banner, kex = capture_server_kexinit(raw)
+    sig = match_ssh_banner(banner)
+    skipped = [
+        skipped_indicator(i, title, cat, "safe-mode: handshake-only", protocol="ssh")
+        for i, title, cat in _SSH_SKIP
+        if i != "ssh.banner"
+    ]
+    return [
+        Indicator(
+            id="ssh.banner",
+            title="SSH static banner signature",
+            category="static_signature",
+            triggered=bool(sig),
+            protocol="ssh",
+            detail=banner or "(no banner)",
+            evidence=raw[:800].decode("utf-8", "replace"),
+        ),
+        *skipped,
+    ]

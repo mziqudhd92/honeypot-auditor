@@ -1,0 +1,16 @@
+{
+  "name": "core-ftp",
+  "version": "1",
+  "rules": [
+    {
+      "id": "ftp.command_desert",
+      "title": "FTP command desert uniform 500",
+      "category": "state_nonpersist",
+      "primitive": "regex",
+      "params": {
+        "pattern": "500 Unknown [Cc]ommand"
+      },
+      "remediation": "Return protocol-specific FTP errors instead of uniform 500"
+    }
+  ]
+}

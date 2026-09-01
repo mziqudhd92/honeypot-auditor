@@ -6,6 +6,63 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Clock-drift tell (`deep.clock_drift`): HTTP Date skew/frozen samples; optional SMB SystemTime hook
+- HTTP invalid chunked length + SSH pre-KEXINIT FSM fuzz; SSH drop/reconnect continuity (`fsm.stateless_trap_behavior`)
+- CLI `--jitter` fraction (alongside `--jitter-ms`); TLS wildcard SNI tell (`tls.wildcard_sni`)
+- `docs/SIGNATURES.md` TLS JA3S/JA4S section; nginx service in benchmark compose; Docker golden integration job
+
+### Fixed
+
+- Wheel/package data: ship `signatures/core/*.json` and packaged `data/*.json`; TLS/HTTP2 loaders use package-relative paths
+- GitHub composite action: validate `target`/`preset` via env (no shell injection); install from checkout when present
+- Plugin/signature load failures log warnings instead of silent no-ops
+- SECURITY.md supported versions updated for 0.5.x
+- PyPI publish workflow with wheel package-data verification; golden CI packaging smoke + docs sync
+- SARIF golden shape assertions; config barrel-export regression test
+
+## [0.5.0] - 2026-09-01
+
+### Added
+
+- Declarative signature engine (`signatures/loader.py`, `signatures/core/*.json`) and `check-sig` linter subcommand
+- Entry-point plugin API (`plugins/api.py`) and SARIF export (`--format sarif`)
+- `--preset deception-audit`, ranked `deception_leaks` in JSON, GitHub Action (`.github/action/action.yml`)
+- Golden/replay CI (`.github/workflows/golden.yml`), `scripts/sync-public-docs.sh`, `docs/PLUGINS.md`
+- Experimental LLM hallucination probes (`deep.llm_hallucination`) behind `--deep`
+
+### Changed
+
+- Version 0.5.0; README and GitHub Pages updated for v0.3.1–v0.5.0 CLI flags
+
+## [0.4.1] - 2026-09-01
+
+### Added
+
+- HTTP/2 SETTINGS fingerprinting (`http2_fingerprint.py`, packaged `data/http2_settings_profiles.json`)
+- `ProbeTransportManager` with `--max-concurrent`, `--jitter-ms`, `--seed`; blend profile TLS/UA mimesis
+- Deep behavioral probes: state continuity (`fsm.stateless_trap_behavior`), shell entropy, mtime uniformity
+- GHCR Docker image (`Dockerfile`, `.github/workflows/publish-ghcr.yml`)
+
+## [0.4.0] - 2026-09-01
+
+### Added
+
+- Fixed ClientHello TLS fingerprinting wired into `probe_tls_stack` with JA3S/JA4S and packaged `data/tls_profiles.json`
+- Raw KEXINIT hex in HASSH probe evidence; TCP SYN-ACK option order tell (`deep.tcp_synack_options`)
+- `--passive-first`, `--osint-only`, `--dual-stack`; formal `tactical_action` matrix
+- Offline socket replay harness (`tests/fixtures/replays/`, `pytest -m replay`)
+- `scripts/capture-tls-baseline.sh` for lab TLS profile capture
+
+## [0.3.1] - 2026-09-01
+
+### Added
+
+- HTTP header-order tell, wildcard Host, tiered proxy detection, Confidence metric
+- `--safe-mode`, SOCKS5h proxy (`--proxy`), honeytoken redaction, Python SDK (`Auditor` class)
+- `--output-nmap-exclude`, capabilities degradation pipeline, TLS stack rename/stability
+
 ## [0.3.0] - 2026-08-31
 
 ### Added

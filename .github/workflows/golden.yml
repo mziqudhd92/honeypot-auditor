@@ -1,0 +1,70 @@
+name: Golden fixtures
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev,full]"
+      - run: pytest tests/ -q --no-cov -m replay
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev,full]"
+      - run: ruff check src tests
+      - run: pytest tests/ -q --no-cov -m "not integration"
+      - run: bash scripts/sync-public-docs.sh
+      - name: Wheel package-data smoke
+        run: |
+          python -m build -w -o /tmp/hpa-wheel
+          pip install --force-reinstall /tmp/hpa-wheel/honeypot_auditor-*.whl
+          python - <<'PY'
+          from honeypot_auditor.signatures.loader import load_core_pack
+          from honeypot_auditor.tls_fingerprint import load_tls_profiles
+          from honeypot_auditor.http2_fingerprint import load_http2_profiles
+          pack = load_core_pack()
+          assert len(pack.rules) >= 3, pack.rules
+          tls = load_tls_profiles()
+          assert "lures" in tls
+          h2 = load_http2_profiles()
+          assert h2.get("lures"), h2
+          print("package-data ok", len(pack.rules), "rules")
+          PY
+
+  docker-golden:
+    runs-on: ubuntu-latest
+    # Heavy lab images — allow failure so PRs stay green when registries flake
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev,full]"
+      - name: Start benchmark lab
+        run: docker compose -f deploy/docker-compose.benchmark.yml up -d
+      - name: Wait for ports
+        run: |
+          for i in $(seq 1 60); do
+            (echo >/dev/tcp/127.0.0.1/8022) 2>/dev/null && \
+            (echo >/dev/tcp/127.0.0.1/8088) 2>/dev/null && break
+            sleep 2
+          done
+      - name: Golden integration asserts
+        run: pytest tests/integration/test_golden.py -q --no-cov -m integration
+      - name: Tear down
+        if: always()
+        run: docker compose -f deploy/docker-compose.benchmark.yml down -v

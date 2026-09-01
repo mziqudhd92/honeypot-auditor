@@ -1,0 +1,37 @@
+name: Publish PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - name: Verify package data in wheel
+        run: |
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+          wheels = list(Path("dist").glob("honeypot_auditor-*.whl"))
+          assert wheels, "no wheel built"
+          with zipfile.ZipFile(wheels[0]) as zf:
+              names = zf.namelist()
+          assert any(n.endswith("signatures/core/ftp_desert.json") for n in names), names
+          assert any(n.endswith("data/tls_profiles.json") for n in names), names
+          assert any(n.endswith("data/http2_settings_profiles.json") for n in names), names
+          print("wheel package-data ok")
+          PY
+      - uses: pypa/gh-action-pypi-publish@release/v1

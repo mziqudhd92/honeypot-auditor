@@ -58,6 +58,17 @@ PROBE_BY_PROTOCOL: dict[str, ProbeFn] = {
     "mongodb": probe_mongodb,
 }
 
+try:
+    from honeypot_auditor.plugins.api import get_registered_probes
+
+    for _name, _fn in get_registered_probes().items():
+        if _name not in PROBE_BY_PROTOCOL:
+            PROBE_BY_PROTOCOL[_name] = _fn
+except Exception as exc:
+    import logging
+
+    logging.getLogger(__name__).warning("plugin probe merge failed: %s", exc)
+
 __all__ = [
     "PROBE_BY_PROTOCOL",
     "probe_ftp",

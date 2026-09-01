@@ -4,8 +4,10 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.2.x   | Yes       |
-| 0.1.x   | Yes       |
+| 0.5.x   | Yes       |
+| 0.4.x   | Yes       |
+| 0.3.x   | Yes       |
+| ≤ 0.2.x | No        |
 
 ## Reporting a vulnerability
 
@@ -46,10 +48,42 @@ It is for authorized defensive research, lab validation, and purple-team work on
 - TLS fingerprint probes use **certificate verification disabled** by design
   (banner/stack fingerprinting only).
 
+### Safe mode (`--safe-mode`)
+
+- Recommended for first touch on unknown subnets (authorized engagements).
+- Disables deep shell/path/auth probes even when `--deep` is passed.
+- Handshake-only: SSH KEXINIT/banner, HTTP GET/HEAD, pre-auth protocol phases.
+
+### Proxy egress (`--proxy socks5h://…`)
+
+- Prefer **`socks5h://`** (remote DNS) to avoid operator DNS leaks.
+- Bare `socks5://` with hostname targets is rejected unless `--proxy-allow-local-dns`.
+- Credentials are never logged; use `HONEYPOT_AUDITOR_PROXY` env var alternatively.
+
+### Passive-first / OSINT (`--passive-first`, `--osint-only`)
+
+- `--osint-only` runs Shodan intel only — no TCP probes.
+- `--passive-first` skips active probes when passive Shodan score is high.
+- Does not replace `--confirm-authorized` for public targets.
+
 ### External binaries
 
 - Optional **Nmap** integration executes the host `nmap` binary. Use a trusted
   installation on CI runners and operator workstations.
+
+### TLS lure profiles
+
+- Packaged `data/tls_profiles.json` ships with placeholder JA3S values until you run
+  `scripts/capture-tls-baseline.sh` against authorized lab lures. Placeholders are
+  ignored at match time (no false positives).
+
+### GitHub Action
+
+- Pass `target` / `preset` only from trusted workflow inputs. Values are validated
+  against a strict allowlist before argv construction.
+- Public targets require `confirm_authorized: true` (same as CLI `--confirm-authorized`).
+- Prefer installing from the checked-out repo (`pip install -e ".[full]"`) so CI uses
+  the same package data as the commit under test.
 
 ## Safe defaults
 

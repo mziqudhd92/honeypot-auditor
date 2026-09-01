@@ -42,13 +42,14 @@ def _open_tcp_ports(host: str, ports: list[int], timeout: float) -> list[int]:
 
 def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
     out: list[Indicator] = []
+    skip_reason = "no API key (--shodan-key or SHODAN_API_KEY)"
     if not api_key:
         out.append(
             skipped_indicator(
                 "shodan.honeyscore",
                 "Shodan Honeyscore > 0.6",
                 "shodan",
-                "no API key (--shodan-key or SHODAN_API_KEY)",
+                skip_reason,
                 protocol="shodan",
             )
         )
@@ -57,7 +58,25 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
                 "shodan.tags",
                 "Shodan host tag contains honeypot",
                 "shodan",
-                "no API key",
+                skip_reason,
+                protocol="shodan",
+            )
+        )
+        out.append(
+            skipped_indicator(
+                "shodan.open_ports",
+                "Shodan reports many open services",
+                "shodan",
+                skip_reason,
+                protocol="shodan",
+            )
+        )
+        out.append(
+            skipped_indicator(
+                "shodan.buffet",
+                "Shodan port buffet with identical product strings",
+                "shodan",
+                skip_reason,
                 protocol="shodan",
             )
         )
@@ -68,6 +87,8 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
         return [
             skipped_indicator("shodan.honeyscore", "Shodan Honeyscore > 0.6", "shodan", reason, protocol="shodan"),
             skipped_indicator("shodan.tags", "Shodan host tag contains honeypot", "shodan", reason, protocol="shodan"),
+            skipped_indicator("shodan.open_ports", "Shodan reports many open services", "shodan", reason, protocol="shodan"),
+            skipped_indicator("shodan.buffet", "Shodan port buffet with identical product strings", "shodan", reason, protocol="shodan"),
         ]
 
     score, score_err = _honeyscore(ip, api_key)
@@ -96,31 +117,54 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             )
         )
 
-    tags, tag_err = _host_tags(ip, api_key)
-    if tag_err:
+    host_info, host_err = _host_lookup(ip, api_key)
+    if host_err:
         out.append(
             skipped_indicator(
                 "shodan.tags",
                 "Shodan host tag contains honeypot",
                 "shodan",
-                tag_err,
+                host_err,
                 protocol="shodan",
-                error=tag_err,
+                error=host_err,
             )
         )
-    else:
-        hit = any("honeypot" in t.lower() for t in tags)
         out.append(
-            Indicator(
-                id="shodan.tags",
-                title="Shodan host tag contains honeypot",
-                category="shodan",
-                triggered=hit,
+            skipped_indicator(
+                "shodan.open_ports",
+                "Shodan reports many open services",
+                "shodan",
+                host_err,
                 protocol="shodan",
-                detail="tags=" + (", ".join(tags) if tags else "(none)"),
-                evidence=",".join(tags),
+                error=host_err,
             )
         )
+        out.append(
+            skipped_indicator(
+                "shodan.buffet",
+                "Shodan port buffet with identical product strings",
+                "shodan",
+                host_err,
+                protocol="shodan",
+                error=host_err,
+            )
+        )
+        return out
+
+    tags = [str(t) for t in (host_info.get("tags") or [])]
+    hit = any("honeypot" in t.lower() for t in tags)
+    out.append(
+        Indicator(
+            id="shodan.tags",
+            title="Shodan host tag contains honeypot",
+            category="shodan",
+            triggered=hit,
+            protocol="shodan",
+            detail="tags=" + (", ".join(tags) if tags else "(none)"),
+            evidence=",".join(tags),
+        )
+    )
+    out.extend(_shodan_port_indicators(host_info))
     return out
 
 
@@ -271,13 +315,13 @@ def _honeyscore(ip: str, key: str) -> tuple[float | None, str]:
         return None, f"non-numeric honeyscore: {body[:80]!r}"
 
 
-def _host_tags(ip: str, key: str) -> tuple[list[str], str]:
+def _host_lookup(ip: str, key: str) -> tuple[dict, str]:
     shodan = optional_import("shodan")
     if shodan is not None:
         try:
             api = shodan.Shodan(key)
             info = api.host(ip)
-            return [str(t) for t in (info.get("tags") or [])], ""
+            return info if isinstance(info, dict) else {}, ""
         except Exception as exc:
             sdk_err = str(exc)
     else:
@@ -285,12 +329,53 @@ def _host_tags(ip: str, key: str) -> tuple[list[str], str]:
 
     body, err = _http_get(SHODAN_HOST_URL.format(ip=ip), {"key": key})
     if err:
-        return [], err if not sdk_err else f"{sdk_err}; REST: {err}"
+        return {}, err if not sdk_err else f"{sdk_err}; REST: {err}"
     try:
         info = json.loads(body)
     except json.JSONDecodeError:
-        return [], f"invalid JSON from Shodan host API: {body[:80]!r}"
+        return {}, f"invalid JSON from Shodan host API: {body[:80]!r}"
     if isinstance(info, dict) and info.get("error"):
-        return [], str(info.get("error"))
-    tags = [str(t) for t in (info.get("tags") or [])] if isinstance(info, dict) else []
-    return tags, ""
+        return {}, str(info.get("error"))
+    return info if isinstance(info, dict) else {}, ""
+
+
+def _shodan_port_indicators(host_info: dict) -> list[Indicator]:
+    data = host_info.get("data") or []
+    open_count = len(data)
+    products: dict[str, int] = {}
+    for svc in data:
+        if not isinstance(svc, dict):
+            continue
+        product = str(svc.get("product") or (svc.get("_shodan") or {}).get("module") or "").strip()
+        if product:
+            products[product] = products.get(product, 0) + 1
+    max_same = max(products.values()) if products else 0
+    top_product = max(products, key=products.get) if products else ""
+    buffet_hit = open_count >= 8 and max_same >= 8
+    return [
+        Indicator(
+            id="shodan.open_ports",
+            title="Shodan reports many open services",
+            category="shodan",
+            triggered=open_count >= 8,
+            protocol="shodan",
+            detail=f"open_services={open_count}",
+            evidence=str(open_count),
+        ),
+        Indicator(
+            id="shodan.buffet",
+            title="Shodan port buffet with identical product strings",
+            category="shodan",
+            triggered=buffet_hit,
+            protocol="shodan",
+            detail=f"open_services={open_count}; top_product={top_product!r} count={max_same}",
+            evidence=f"{top_product}:{max_same}",
+        ),
+    ]
+
+
+def _host_tags(ip: str, key: str) -> tuple[list[str], str]:
+    info, err = _host_lookup(ip, key)
+    if err:
+        return [], err
+    return [str(t) for t in (info.get("tags") or [])], ""

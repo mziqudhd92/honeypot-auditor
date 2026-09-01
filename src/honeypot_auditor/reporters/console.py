@@ -27,6 +27,9 @@ def render(report: AuditReport, console: Console | None = None, *, verbose: bool
     head.add_column()
     head.add_row("Target", f"{report.target} ({report.resolved_ip})")
     head.add_row("Honeyscore", f"[bold]{report.score:.1f}%[/bold]")
+    head.add_row("Confidence", report.confidence or "medium")
+    if report.tactical_action:
+        head.add_row("Tactical", report.tactical_action)
     head.add_row("Threat level", Text(report.threat_level, style=style))
     console.print(Panel(head, title="Honeypot Auditor", border_style="cyan"))
 

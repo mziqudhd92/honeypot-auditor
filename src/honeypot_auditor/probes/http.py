@@ -12,13 +12,19 @@ import warnings
 
 from honeypot_auditor.config import (
     HTTP_DYNAMIC_HEADERS,
+    HTTP_HEADER_LURE_ORDERS,
     HTTP_SERVER_TELLS,
-    USER_AGENT,
+    WILDCARD_HOST,
+    effective_user_agent,
     match_http_proxy_lure,
 )
+from honeypot_auditor.httpwire import parse_header_map as _parse_headers
+from honeypot_auditor.httpwire import parse_header_names
 from honeypot_auditor.models import Indicator, optional_import
 from honeypot_auditor.netutil import closed_reason, tcp_transact
-from honeypot_auditor.probes.common import skip_suite
+from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.proxy_detect import detect_proxy_from_headers
+from honeypot_auditor.proxy_transport import configure_requests_proxy
 from honeypot_auditor.settings import settings
 
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
@@ -29,6 +35,8 @@ _HTTP_SKIP = (
     ("http.method_stub", "HTTP PUT/DELETE returns empty 405", "static_signature"),
     ("http.login_skin", "HTTP / redirects to a stock login form", "static_signature"),
     ("http.proxy_lure", "HTTP 407 looks like a stock proxy lure", "static_signature"),
+    ("http.header_order", "HTTP response header order matches lure profile", "static_signature"),
+    ("http.wildcard_host", "HTTP accepts invalid Host header", "proto_conformance"),
 )
 
 _TLS_PORTS = frozenset({443, 8443})
@@ -39,6 +47,8 @@ def _scheme(port: int) -> str:
 
 
 def probe_http(host: str, port: int) -> list[Indicator]:
+    if is_safe_mode():
+        return _probe_http_safe(host, port)
     requests = optional_import("requests")
     tls = port in _TLS_PORTS
     malformed = (
@@ -77,8 +87,9 @@ def probe_http(host: str, port: int) -> list[Indicator]:
                 f"{base}/",
                 timeout=settings.timeout_seconds,
                 allow_redirects=False,
-                headers={"User-Agent": USER_AGENT},
+                headers={"User-Agent": effective_user_agent()},
                 verify=False,
+                proxies=configure_requests_proxy() or None,
             )
             fetched = True
             get_headers = {k.lower(): v for k, v in resp.headers.items()}
@@ -106,8 +117,9 @@ def probe_http(host: str, port: int) -> list[Indicator]:
                     f"{base}/index.html",
                     timeout=settings.timeout_seconds,
                     allow_redirects=False,
-                    headers={"User-Agent": USER_AGENT},
+                    headers={"User-Agent": effective_user_agent()},
                     verify=False,
+                    proxies=configure_requests_proxy() or None,
                 )
                 low_form = form.content[:2048].lower()
                 if b'name="username"' in low_form and b'name="password"' in low_form:
@@ -118,9 +130,10 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             put = requests.put(
                 f"{base}/index.html",
                 timeout=settings.timeout_seconds,
-                headers={"User-Agent": USER_AGENT, "Content-Length": "0"},
+                headers={"User-Agent": effective_user_agent(), "Content-Length": "0"},
                 data=b"",
                 verify=False,
+                proxies=configure_requests_proxy() or None,
             )
             put_first = f"HTTP/1.1 {put.status_code}"
             put_text = put.content[:400].decode("latin-1", "replace")
@@ -162,7 +175,37 @@ def probe_http(host: str, port: int) -> list[Indicator]:
 
     static_http_face = missing_dynamic or (server_hit and static_200)
 
-    return [
+    header_order_hit = False
+    header_order_names: list[str] = []
+    proxy_result = detect_proxy_from_headers(header_map)
+    if text:
+        header_order_names = parse_header_names(text)
+        for lure_order in HTTP_HEADER_LURE_ORDERS:
+            if _header_order_prefix_match(header_order_names, lure_order):
+                header_order_hit = True
+                break
+
+    wildcard_host_hit = False
+    wildcard_detail = ""
+    if not tls:
+        wh_req = (
+            b"GET / HTTP/1.1\r\n"
+            b"Host: " + WILDCARD_HOST.encode("ascii") + b"\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+        )
+        wh_raw, _ = tcp_transact(host, port, wh_req, recv_first=False)
+        wh_text = wh_raw.decode("latin-1", "replace")
+        wh_first = wh_text.split("\r\n", 1)[0] if wh_text else ""
+        wildcard_host_hit = bool(wh_text) and " 200 " in wh_first
+        wildcard_detail = wh_first or "(no response)"
+
+    corroborating_http = static_http_face or login_skin or method_stub or static_200
+    header_order_trigger = (
+        header_order_hit and corroborating_http and not proxy_result.detected
+    )
+
+    indicators = [
         Indicator(
             id="http.malformed_200",
             title="HTTP static 200 OK on malformed POST",
@@ -209,15 +252,106 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             protocol="http",
             detail=proxy_hit or "no Via-localhost / squid-3.3.8 / ISA deny phrase",
         ),
+        Indicator(
+            id="http.header_order",
+            title="HTTP response header order matches lure profile",
+            category="static_signature",
+            triggered=header_order_trigger,
+            protocol="http",
+            fingerprint_type="http_header_order",
+            tell_tier="edge",
+            detail=(
+                f"order={header_order_names[:6]}"
+                if header_order_hit
+                else "header order does not match lure profile"
+            ),
+            remediation="Match production nginx/apache header ordering",
+            suppressed=header_order_hit and proxy_result.detected,
+            suppression_reason=(
+                "reverse_proxy_detected" if header_order_hit and proxy_result.detected else ""
+            ),
+        ),
+        Indicator(
+            id="http.wildcard_host",
+            title="HTTP accepts invalid Host header",
+            category="proto_conformance",
+            triggered=wildcard_host_hit,
+            protocol="http",
+            tell_tier="origin",
+            detail=wildcard_detail,
+            remediation="Reject unknown Host values with 400/421/444",
+        ),
+    ]
+    return indicators
+
+
+def _header_order_prefix_match(names: list[str], lure: tuple[str, ...]) -> bool:
+    if len(names) < len(lure):
+        return False
+    return tuple(names[: len(lure)]) == lure
+
+
+def _probe_http_safe(host: str, port: int) -> list[Indicator]:
+    """Safe mode: GET / and HEAD only — no PUT, wildcard Host, or malformed POST."""
+    requests = optional_import("requests")
+    tls = port in _TLS_PORTS
+    skipped = [
+        Indicator(
+            id=i,
+            title=title,
+            category=cat,
+            skipped=True,
+            skip_reason="safe-mode: GET/HEAD only",
+            protocol="http",
+            detail="safe-mode: GET/HEAD only",
+        )
+        for i, title, cat in _HTTP_SKIP
+        if i not in ("http.dynamic_headers",)
+    ]
+    if requests is None and tls:
+        return skip_suite(_HTTP_SKIP, "HTTPS probe needs the requests package", protocol="http")
+    text = ""
+    header_map: dict[str, str] = {}
+    if not tls:
+        get_req = (
+            b"GET / HTTP/1.1\r\n"
+            b"Host: " + host.encode("ascii", "replace") + b"\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+        )
+        raw, err = tcp_transact(host, port, get_req, recv_first=False)
+        if err and not raw:
+            return skip_suite(_HTTP_SKIP, closed_reason(err), protocol="http", error=err)
+        text = raw.decode("latin-1", "replace")
+        header_map = _parse_headers(text)
+    else:
+        base = f"{_scheme(port)}://{host}:{port}"
+        try:
+            resp = requests.get(
+                f"{base}/",
+                timeout=settings.timeout_seconds,
+                allow_redirects=False,
+                headers={"User-Agent": effective_user_agent()},
+                verify=False,
+                proxies=configure_requests_proxy() or None,
+            )
+            text = f"HTTP/1.1 {resp.status_code}\r\n" + "\r\n".join(
+                f"{k}: {v}" for k, v in resp.headers.items()
+            )
+            header_map = {k.lower(): v for k, v in resp.headers.items()}
+        except Exception as exc:
+            return skip_suite(_HTTP_SKIP, str(exc), protocol="http", error=str(exc))
+    missing_dynamic = "date" not in header_map
+    return [
+        Indicator(
+            id="http.dynamic_headers",
+            title="HTTP missing dynamic Date header",
+            category="static_signature",
+            triggered=missing_dynamic,
+            protocol="http",
+            detail=f"headers: {', '.join(sorted(header_map))}",
+            evidence=text.split("\r\n\r\n", 1)[0][:600] if text else "",
+        ),
+        *skipped,
     ]
 
-
-def _parse_headers(response: str) -> dict:
-    header_blob = response.split("\r\n\r\n", 1)[0]
-    out = {}
-    for line in header_blob.split("\r\n")[1:]:
-        if ":" not in line:
-            continue
-        k, v = line.split(":", 1)
-        out[k.strip().lower()] = v.strip()
-    return out

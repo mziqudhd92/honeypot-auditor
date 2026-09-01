@@ -33,6 +33,8 @@ def test_http_skipped_on_closed_port(mock_tcp):
         "http.method_stub",
         "http.login_skin",
         "http.proxy_lure",
+        "http.header_order",
+        "http.wildcard_host",
     }
     assert all(i.skipped for i in inds)
 
@@ -44,6 +46,7 @@ def test_http_put_empty_405(mock_tcp, _no_requests):
         (b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n", ""),
         (b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n", ""),
         (b"HTTP/1.1 405 Method Not Allowed\r\n\r\n", ""),
+        (b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n", ""),
     ]
     inds = http.probe_http("127.0.0.1", 80)
     by_id = {i.id: i for i in inds}

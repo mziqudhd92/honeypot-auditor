@@ -1,0 +1,72 @@
+name: Honeypot Auditor
+description: Run authorized deception QA audit and export SARIF
+inputs:
+  target:
+    description: Target IP or hostname (alphanumeric, dots, colons, hyphens only)
+    required: true
+  preset:
+    description: Audit preset (both|iana|docker-research|deception-audit)
+    required: false
+    default: deception-audit
+  deep:
+    description: Enable deep probes
+    required: false
+    default: "true"
+  confirm_authorized:
+    description: Required for public IPs (set "true" for internet-facing lab targets)
+    required: false
+    default: "false"
+outputs:
+  honeyscore:
+    description: Honeyscore percentage
+    value: ${{ steps.audit.outputs.honeyscore }}
+  confidence:
+    description: Confidence level
+    value: ${{ steps.audit.outputs.confidence }}
+  sarif-path:
+    description: Path to SARIF artifact
+    value: report.sarif
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        if [ -f pyproject.toml ]; then
+          pip install -e ".[full]"
+        else
+          pip install "honeypot-auditor[full]"
+        fi
+    - id: audit
+      shell: bash
+      env:
+        HPA_TARGET: ${{ inputs.target }}
+        HPA_PRESET: ${{ inputs.preset }}
+        HPA_DEEP: ${{ inputs.deep }}
+        HPA_CONFIRM: ${{ inputs.confirm_authorized }}
+      run: |
+        set -euo pipefail
+        # Validate before any argv construction (prevents CI shell injection)
+        if [[ ! "$HPA_TARGET" =~ ^[A-Za-z0-9._:\[\]%-]+$ ]]; then
+          echo "Invalid target (allowed: letters, digits, . _ : % [ ] -)" >&2
+          exit 2
+        fi
+        case "$HPA_PRESET" in
+          both|iana|docker-research|deception-audit) ;;
+          *)
+            echo "Invalid preset: $HPA_PRESET" >&2
+            exit 2
+            ;;
+        esac
+        ARGS=(--target "$HPA_TARGET" --preset "$HPA_PRESET" --format sarif --output report.sarif)
+        if [ "$HPA_DEEP" = "true" ]; then ARGS+=(--deep); fi
+        if [ "$HPA_CONFIRM" = "true" ]; then ARGS+=(--confirm-authorized); fi
+        honeypot-auditor "${ARGS[@]}"
+        SCORE=$(python -c "import json; print(json.load(open('report.sarif'))['runs'][0]['properties'].get('honeyscore',0))")
+        CONF=$(python -c "import json; print(json.load(open('report.sarif'))['runs'][0]['properties'].get('confidence',''))")
+        echo "honeyscore=$SCORE" >> "$GITHUB_OUTPUT"
+        echo "confidence=$CONF" >> "$GITHUB_OUTPUT"

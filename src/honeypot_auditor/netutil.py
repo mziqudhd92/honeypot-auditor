@@ -6,6 +6,7 @@ import ipaddress
 import re
 import socket
 
+from honeypot_auditor.proxy_transport import create_connection
 from honeypot_auditor.settings import settings
 
 _PASV_RE = re.compile(r"(\d+,\d+,\d+,\d+,\d+,\d+)")
@@ -41,14 +42,13 @@ def tcp_transact(
     if timeout is None:
         timeout = settings.timeout_seconds
     try:
-        with socket.create_connection((host, port), timeout=timeout) as sock:
-            sock.settimeout(timeout)
+        with create_connection(host, port, timeout) as sock:
             data = _recv(sock, timeout, max_bytes) if recv_first else b""
             if payload:
                 sock.sendall(payload)
                 data += _recv(sock, timeout, max_bytes)
             return data, ""
-    except OSError as exc:
+    except (OSError, ImportError) as exc:
         return b"", str(exc)
 
 
@@ -66,8 +66,7 @@ def tcp_roundtrips(
         timeout = settings.timeout_seconds
     replies: list[bytes] = []
     try:
-        with socket.create_connection((host, port), timeout=timeout) as sock:
-            sock.settimeout(timeout)
+        with create_connection(host, port, timeout) as sock:
             if recv_first:
                 replies.append(_recv(sock, timeout, max_bytes))
             for payload in payloads:
@@ -75,7 +74,7 @@ def tcp_roundtrips(
                     sock.sendall(payload)
                 replies.append(_recv(sock, timeout, max_bytes))
             return replies, ""
-    except OSError as exc:
+    except (OSError, ImportError) as exc:
         return replies, str(exc)
 
 

@@ -27,3 +27,11 @@ services:
       - "127.0.0.1:8026:5900/tcp"
       - "127.0.0.1:26379:6379/tcp"
     restart: unless-stopped
+
+  # Clean baseline control — should not score as a honeypot
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: hpaudit-nginx
+    ports:
+      - "127.0.0.1:8088:80/tcp"
+    restart: unless-stopped

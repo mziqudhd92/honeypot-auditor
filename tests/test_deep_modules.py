@@ -196,9 +196,14 @@ def test_tcp_stack_skipped(mock_connect):
 def test_tcp_stack_scapy_missing(mock_connect):
     mock_connect.return_value.__enter__.return_value = MagicMock()
     with patch.dict("sys.modules", {"scapy": None, "scapy.all": None}):
-        inds = probe_tcp_stack("127.0.0.1", 22, claimed_os="windows")
-    assert inds[0].skipped
-    assert "scapy" in inds[0].skip_reason.lower()
+        with patch.object(
+            __import__("honeypot_auditor.settings", fromlist=["settings"]).settings.capabilities,
+            "raw_sockets",
+            False,
+        ):
+            inds = probe_tcp_stack("127.0.0.1", 22, claimed_os="windows")
+    assert not inds[0].skipped
+    assert any(i.id == "deep.tcp_synack_options" and i.skipped for i in inds)
 
 
 @patch("honeypot_auditor.probes.deep.stack.socket.create_connection", side_effect=OSError("refused"))

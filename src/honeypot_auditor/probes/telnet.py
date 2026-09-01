@@ -18,7 +18,7 @@ from honeypot_auditor.config import (
 )
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason, tcp_transact
-from honeypot_auditor.probes.common import random_creds, skip_suite
+from honeypot_auditor.probes.common import is_safe_mode, random_creds, skip_suite
 from honeypot_auditor.probes.shell_cti import (
     CTI_SHELL_COMMANDS,
     identity_tells,
@@ -47,6 +47,8 @@ _IAC_PROBE = bytes(
 
 
 def probe_telnet(host: str, port: int) -> list[Indicator]:
+    if is_safe_mode():
+        return _probe_telnet_safe(host, port)
     user, password = random_creds()
     user2, password2 = random_creds()
     canary = secrets.token_hex(4)
@@ -246,3 +248,37 @@ def _looks_like_shell(text: str) -> bool:
     if re.search(r"user_a\d+@", text or ""):
         return True
     return any(tok in text for tok in ("$ ", "# ", ":~$", "~$"))
+
+
+def _probe_telnet_safe(host: str, port: int) -> list[Indicator]:
+    """Safe mode: pre-auth banner + IAC spray only."""
+    banner_raw, err = tcp_transact(host, port, b"", recv_first=True)
+    if err and not banner_raw:
+        return skip_suite(_TELNET_SKIP, closed_reason(err), protocol="telnet", error=err)
+    banner_text = _telnet_text(banner_raw)
+    iac_raw, _ = tcp_transact(host, port, _IAC_PROBE, recv_first=False)
+    iac_text = _telnet_text(iac_raw)
+    skipped = [
+        skipped_indicator(i, title, cat, "safe-mode: handshake-only", protocol="telnet")
+        for i, title, cat in _TELNET_SKIP
+        if i not in ("telnet.banner", "telnet.iac_negotiate")
+    ]
+    return [
+        Indicator(
+            id="telnet.banner",
+            title="Telnet pre-auth banner matches a known lure template",
+            category="static_signature",
+            triggered=bool(match_telnet_banner(banner_text)),
+            protocol="telnet",
+            detail=banner_text[:240] or "(no banner)",
+        ),
+        Indicator(
+            id="telnet.iac_negotiate",
+            title="Telnet IAC accepts unknown options or resets on AUTH/NAWS",
+            category="static_signature",
+            triggered=bool(match_telnet_option_spray(iac_text) or match_telnet_blind_option(iac_text)),
+            protocol="telnet",
+            detail=iac_text[:240] or "(no IAC response)",
+        ),
+        *skipped,
+    ]

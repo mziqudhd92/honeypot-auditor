@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from honeypot_auditor.models import Indicator
 
+pytest_plugins = ["conftest_replay"]
+
 
 def indicator(**kwargs) -> Indicator:
     defaults = {

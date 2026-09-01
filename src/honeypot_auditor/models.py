@@ -27,6 +27,12 @@ class Indicator:
     skipped: bool = False
     skip_reason: str = ""
     error: str = ""
+    remediation: str = ""
+    fingerprint_type: str = ""
+    requires_corroboration: bool = False
+    suppressed: bool = False
+    suppression_reason: str = ""
+    tell_tier: str = "origin"
 
     def __post_init__(self) -> None:
         self.id = _as_text(self.id)
@@ -37,6 +43,10 @@ class Indicator:
         self.evidence = _as_text(self.evidence)
         self.skip_reason = _as_text(self.skip_reason)
         self.error = _as_text(self.error)
+        self.remediation = _as_text(self.remediation)
+        self.fingerprint_type = _as_text(self.fingerprint_type)
+        self.suppression_reason = _as_text(self.suppression_reason)
+        self.tell_tier = _as_text(self.tell_tier) or "origin"
 
     def as_dict(self) -> dict:
         return {
@@ -50,6 +60,12 @@ class Indicator:
             "skipped": self.skipped,
             "skip_reason": self.skip_reason,
             "error": self.error,
+            "remediation": self.remediation,
+            "fingerprint_type": self.fingerprint_type,
+            "requires_corroboration": self.requires_corroboration,
+            "suppressed": self.suppressed,
+            "suppression_reason": self.suppression_reason,
+            "tell_tier": self.tell_tier,
         }
 
 
@@ -87,9 +103,19 @@ class AuditReport:
     started_at: str = ""
     finished_at: str = ""
     protocol_strategies: list[dict] = field(default_factory=list)
+    confidence: str = "medium"
+    proxy_detected: bool = False
+    proxy_evidence: list[str] = field(default_factory=list)
+    proxy_context: str = ""
+    capability_warnings: list[str] = field(default_factory=list)
+    capabilities: dict[str, bool] = field(default_factory=dict)
+    tactical_action: str = ""
+    tactical_rationale: str = ""
+    deception_leaks: list[dict] = field(default_factory=list)
+    dual_stack: dict = field(default_factory=dict)
 
     def triggered(self) -> list[Indicator]:
-        return [i for i in self.indicators if i.triggered and not i.skipped]
+        return [i for i in self.indicators if i.triggered and not i.skipped and not i.suppressed]
 
 
 def optional_import(module: str):

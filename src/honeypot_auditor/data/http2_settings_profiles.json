@@ -1,0 +1,14 @@
+{
+  "lures": {
+    "python_h2_minimal": {
+      "settings_order": "MAX_CONCURRENT_STREAMS,INITIAL_WINDOW_SIZE,MAX_FRAME_SIZE",
+      "description": "Minimal Python h2 trap"
+    }
+  },
+  "production": {
+    "nginx_default": {
+      "settings_order": "HEADER_TABLE_SIZE,MAX_CONCURRENT_STREAMS,INITIAL_WINDOW_SIZE,MAX_FRAME_SIZE",
+      "description": "Typical nginx/http2"
+    }
+  }
+}

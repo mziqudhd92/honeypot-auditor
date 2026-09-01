@@ -9,20 +9,20 @@ from honeypot_auditor.probes.recon import nmap_scan, shodan_lookup
 
 def test_shodan_skipped_without_api_key():
     inds = shodan_lookup("8.8.8.8", None)
-    assert len(inds) == 2
+    assert len(inds) == 4
     assert all(i.skipped for i in inds)
 
 
 def test_shodan_skipped_on_private_ip():
     inds = shodan_lookup("127.0.0.1", "fake-key")
-    assert len(inds) == 2
+    assert len(inds) == 4
     assert all(i.skipped for i in inds)
     assert "RFC1918" in inds[0].skip_reason or "loopback" in inds[0].skip_reason.lower()
 
 
 @patch("honeypot_auditor.probes.recon._honeyscore", return_value=(0.85, ""))
-@patch("honeypot_auditor.probes.recon._host_tags", return_value=(["honeypot"], ""))
-def test_shodan_honeyscore_and_tag_hit(mock_tags, mock_score):
+@patch("honeypot_auditor.probes.recon._host_lookup", return_value=({"tags": ["honeypot"], "data": []}, ""))
+def test_shodan_honeyscore_and_tag_hit(mock_lookup, mock_score):
     inds = shodan_lookup("8.8.8.8", "fake-key")
     by_id = {i.id: i for i in inds}
     assert by_id["shodan.honeyscore"].triggered
@@ -192,9 +192,9 @@ def test_shodan_honeyscore_api_error(mock_get):
     assert by_id["shodan.honeyscore"].skipped
 
 
-@patch("honeypot_auditor.probes.recon._host_tags", return_value=([], "rate limit"))
+@patch("honeypot_auditor.probes.recon._host_lookup", return_value=({}, "rate limit"))
 @patch("honeypot_auditor.probes.recon._honeyscore", return_value=(0.1, ""))
-def test_shodan_tag_api_error(mock_score, mock_tags):
+def test_shodan_tag_api_error(mock_score, mock_lookup):
     inds = shodan_lookup("8.8.8.8", "fake-key")
     by_id = {i.id: i for i in inds}
     assert not by_id["shodan.honeyscore"].triggered
@@ -213,8 +213,22 @@ def test_nmap_skipped_without_binary(mock_which):
 def test_host_tags_rest_fallback(mock_get, mock_import):
     mock_get.return_value = ('{"tags": ["scanner"]}', "")
 
-    from honeypot_auditor.probes.recon import _host_tags
+    from honeypot_auditor.probes.recon import _host_lookup
 
-    tags, err = _host_tags("8.8.8.8", "key")
+    info, err = _host_lookup("8.8.8.8", "key")
+    tags = [str(t) for t in (info.get("tags") or [])]
     assert tags == ["scanner"]
     assert err == ""
+
+
+def test_osint_only_skips_tcp_probes(monkeypatch):
+    from honeypot_auditor import cli
+    from honeypot_auditor.settings import settings
+
+    settings.osint_only = True
+    args = cli.build_parser().parse_args(["--target", "127.0.0.1"])
+    jobs = cli._probe_jobs("127.0.0.1", {"ssh": [22]}, args, include_shodan=True)
+    names = [n for n, _ in jobs]
+    assert "shodan" in names
+    assert not any(":" in n for n in names)
+    settings.osint_only = False

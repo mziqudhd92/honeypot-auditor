@@ -173,7 +173,7 @@ def test_expand_scan_targets_slash32():
     assert hosts == ["192.168.1.99"]
 
 
-@patch("honeypot_auditor.config.socket.gethostbyname", return_value="93.184.216.34")
+@patch("honeypot_auditor.config.ports.socket.gethostbyname", return_value="93.184.216.34")
 def test_resolve_target_hostname(mock_dns):
     from honeypot_auditor.config import resolve_target
 

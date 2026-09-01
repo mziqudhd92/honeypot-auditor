@@ -165,7 +165,7 @@
   <div class="wrap">
     <div class="marquee" aria-hidden="true">
       <span>
-        *** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v0.3.0 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
+        *** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v0.5.0 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
         &nbsp;&nbsp;&nbsp;*** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v0.3.0 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
       </span>
     </div>
@@ -175,7 +175,7 @@
       <h1>H0N3YP0T-AUD1T0R <span class="blink">█</span></h1>
       <p class="tagline">Multi-protocol decoy fingerprinter / lab util · Python 3.10+ · MIT · “dialing in…”</p>
       <pre class="nfo">.______________________________________________________________________________.
-|  :: RELEASE ........ v0.3.0                                                  |
+|  :: RELEASE ........ v0.5.0                                                  |
 |  :: TYPE ........... Multi-Protocol Decoy Fingerprinter                      |
 |  :: DISKS .......... 0 · pure electrons · no floppies harmed                 |
 |  :: PROTECTION ..... NONE · MIT · spread the sauce                           |
@@ -327,6 +327,19 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
               <tr><td><code>--ports</code></td><td>Per-protocol override (<code>ssh=2222,ftp=9</code>); map unused faces to <code>=9</code> to skip</td></tr>
               <tr><td><code>-v</code>, <code>--verbose</code></td><td>Strategy breakdown, per-protocol matrix, indicator table, why-this-score, run notes</td></tr>
               <tr><td><code>--deep</code></td><td>Shell semantics, OS coherence, HASSH/TCP stack, FSM fuzz, co-tenancy, temporal/egress</td></tr>
+              <tr><td><code>--safe-mode</code></td><td>Handshake-only; disables deep shell/path probes</td></tr>
+              <tr><td><code>--profile</code></td><td><code>audit</code> (default), <code>blend</code> (browser mimesis), <code>safe</code></td></tr>
+              <tr><td><code>--proxy</code></td><td>SOCKS5 egress (<code>socks5h://</code> remote DNS preferred)</td></tr>
+              <tr><td><code>--passive-first</code></td><td>Shodan before active; skip active when passive score high</td></tr>
+              <tr><td><code>--osint-only</code></td><td>Shodan only — no TCP probes</td></tr>
+              <tr><td><code>--dual-stack</code></td><td>Resolve A+AAAA and compare IPv4 vs IPv6 results</td></tr>
+              <tr><td><code>--jitter</code></td><td>Fraction of timeout as max random delay (e.g. <code>0.3</code>)</td></tr>
+              <tr><td><code>--jitter-ms</code></td><td>Random delay range before probes (e.g. <code>50-500</code>)</td></tr>
+              <tr><td><code>--max-concurrent</code></td><td>Global socket concurrency budget (default 32)</td></tr>
+              <tr><td><code>--seed</code></td><td>RNG seed for blend profile TLS/UA rotation</td></tr>
+              <tr><td><code>--preset deception-audit</code></td><td>Blue-team QA preset (both ports + deep)</td></tr>
+              <tr><td><code>--format sarif</code></td><td>Export SARIF 2.1.0 for DevSecOps pipelines</td></tr>
+              <tr><td><code>check-sig</code></td><td>Validate declarative signature pack offline</td></tr>
               <tr><td><code>-n</code>, <code>--with-nmap</code></td><td>Run Nmap <code>-sV</code> / NSE phase (slow; off by default)</td></tr>
               <tr><td><code>--shodan-key</code></td><td>Shodan API key (or set <code>SHODAN_API_KEY</code>); skipped per-host on subnet scans</td></tr>
               <tr><td><code>--scan-concurrency</code></td><td>Parallel hosts for CIDR scans (default 8)</td></tr>
@@ -495,7 +508,7 @@ https://mziqudhd92.github.io/honeypot-auditor/agents.md</pre>
     </main>
 
     <footer class="footer panel">
-      <p>h0n3yp0t 4ud1t0r · v0.3.0 · spread headers not malware · <span class="blink">NO CARRIER</span></p>
+      <p>h0n3yp0t 4ud1t0r · v0.5.0 · spread headers not malware · <span class="blink">NO CARRIER</span></p>
       <p><a href="#top">↑ top</a> · <a href="https://github.com/mziqudhd92/honeypot-auditor">github</a> · <a href="https://pypi.org/project/honeypot-auditor/">pypi</a></p>
     </footer>
   </div>

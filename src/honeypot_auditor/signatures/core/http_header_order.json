@@ -1,0 +1,16 @@
+{
+  "name": "core-http",
+  "version": "1",
+  "rules": [
+    {
+      "id": "http.header_order_lure",
+      "title": "HTTP header order matches lure template",
+      "category": "static_signature",
+      "primitive": "header_sequence",
+      "params": {
+        "names": ["Server", "Date", "Content-Type", "Content-Length"]
+      },
+      "remediation": "Randomize or normalize header order on decoy HTTP skins"
+    }
+  ]
+}

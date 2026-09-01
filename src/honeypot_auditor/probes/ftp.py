@@ -21,7 +21,7 @@ from honeypot_auditor.config import (
 )
 from honeypot_auditor.models import Indicator, optional_import, skipped_indicator
 from honeypot_auditor.netutil import closed_reason, is_non_routable_ip, parse_ftp_pasv_host
-from honeypot_auditor.probes.common import random_creds, skip_suite
+from honeypot_auditor.probes.common import is_safe_mode, random_creds, skip_suite
 from honeypot_auditor.settings import settings
 
 _FTP_SKIP = (
@@ -35,6 +35,8 @@ _FTP_SKIP = (
 
 
 def probe_ftp(host: str, port: int) -> list[Indicator]:
+    if is_safe_mode():
+        return _probe_ftp_safe(host, port)
     ftplib = optional_import("ftplib")
     if ftplib is None:
         return skip_suite(_FTP_SKIP, "ftplib missing", protocol="ftp")
@@ -582,3 +584,37 @@ def _ftp_arbitrary_auth_indicator(kind: str, user: str, password: str = "") -> I
         detail=detail,
         evidence=user if triggered else kind,
     )
+
+
+def _probe_ftp_safe(host: str, port: int) -> list[Indicator]:
+    """Safe mode: 220 banner only — no USER/PASS or STOR."""
+    ftplib = optional_import("ftplib")
+    if ftplib is None:
+        return skip_suite(_FTP_SKIP, "ftplib missing", protocol="ftp")
+    welcome = ""
+    try:
+        ftp = ftplib.FTP()
+        ftp.connect(host, port, timeout=settings.timeout_seconds)
+        welcome = ftp.getwelcome() or ""
+        ftp.quit()
+    except Exception as exc:
+        return skip_suite(_FTP_SKIP, closed_reason(str(exc)), protocol="ftp", error=str(exc))
+    skipped = [
+        skipped_indicator(i, title, cat, "safe-mode: pre-auth only", protocol="ftp")
+        for i, title, cat in _FTP_SKIP
+        if i != "ftp.banner"
+    ]
+    stale = match_ftp_stale_banner(welcome)
+    welcome_hit = bool(stale) or any(t in welcome for t in FTP_WELCOME_TELLS)
+    return [
+        Indicator(
+            id="ftp.banner",
+            title="FTP welcome is a stock/default 220 or emulator template",
+            category="static_signature",
+            triggered=welcome_hit,
+            protocol="ftp",
+            detail=welcome[:240] or "(no 220)",
+            evidence=stale or "",
+        ),
+        *skipped,
+    ]

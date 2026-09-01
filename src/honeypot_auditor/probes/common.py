@@ -6,6 +6,21 @@ import secrets
 
 from honeypot_auditor.config import PROBE_PASSWORD_TEMPLATE, PROBE_USERNAME_TEMPLATE
 from honeypot_auditor.models import Indicator, skipped_indicator
+from honeypot_auditor.settings import settings
+
+
+def is_safe_mode() -> bool:
+    return bool(settings.safe_mode)
+
+
+def safe_skip_specs(
+    specs: tuple[tuple[str, str, str], ...],
+    *,
+    protocol: str,
+    reason: str = "safe-mode: handshake-only probe",
+) -> list[Indicator]:
+    """Mark non-handshake strategies as skipped in safe mode."""
+    return skip_suite(specs, reason, protocol=protocol)
 
 
 def skip_suite(

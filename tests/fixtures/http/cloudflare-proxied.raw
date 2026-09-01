@@ -1,0 +1,10 @@
+HTTP/1.1 200 OK
+Date: Mon, 01 Sep 2025 12:00:00 GMT
+Server: cloudflare
+CF-Ray: 8abc123def456789-SJC
+Content-Type: text/html
+Via: 1.1 varnish
+X-Cache: HIT
+Connection: close
+
+<html>proxied</html>

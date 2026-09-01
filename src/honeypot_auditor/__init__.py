@@ -1,4 +1,8 @@
-"""Multi-protocol honeypot fingerprinting for authorized targets."""
+"""Package exports."""
 
-__version__ = "0.3.0"
-__all__ = ["__version__"]
+__version__ = "0.5.0"
+
+from honeypot_auditor.engine import Auditor
+from honeypot_auditor.settings import ProbeProfile
+
+__all__ = ["__version__", "Auditor", "ProbeProfile"]

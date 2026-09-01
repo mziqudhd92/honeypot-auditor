@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "honeypot-auditor"
-version = "0.3.0"
+version = "0.5.0"
 description = "Multi-protocol CLI that fingerprints whether an authorized target behaves like a low-interaction honeypot."
 readme = "README.md"
 license = "MIT"
@@ -39,6 +39,8 @@ full = [
   "redis>=5.0",
   "shodan>=1.31",
   "scapy>=2.5",
+  "PySocks>=1.7.1",
+  "pyyaml>=6.0",
 ]
 dev = [
   "pytest>=7.0",
@@ -50,6 +52,9 @@ dev = [
 [project.scripts]
 honeypot-auditor = "honeypot_auditor.cli:main"
 
+[project.entry-points."honeypot_auditor.plugins"]
+# Community plugins register via: mypkg = "mypkg:register"
+
 [project.urls]
 Homepage = "https://github.com/mziqudhd92/honeypot-auditor"
 Documentation = "https://github.com/mziqudhd92/honeypot-auditor#readme"
@@ -58,6 +63,12 @@ Issues = "https://github.com/mziqudhd92/honeypot-auditor/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+honeypot_auditor = [
+  "data/*.json",
+  "signatures/core/*.json",
+]
 
 [tool.coverage.run]
 branch = true
@@ -111,6 +122,7 @@ addopts = [
 ]
 markers = [
   "integration: live network or Docker targets (not run in default CI unit job)",
+  "replay: offline socket replay harness (no network)",
 ]
 
 [tool.ruff]
