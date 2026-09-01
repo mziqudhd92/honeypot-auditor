@@ -46,8 +46,6 @@ jobs:
 
   docker-golden:
     runs-on: ubuntu-latest
-    # Heavy lab images — allow failure so PRs stay green when registries flake
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -7,6 +7,7 @@ Skipped automatically when services are unreachable.
 from __future__ import annotations
 
 import socket
+from datetime import UTC, datetime
 
 import pytest
 
@@ -31,11 +32,24 @@ def _require(host: str, port: int) -> None:
         pytest.skip(f"{host}:{port} not reachable (start deploy/docker-compose.benchmark.yml)")
 
 
+def _report(host: str, indicators: list[Indicator], *, http_port: int) -> object:
+    now = datetime.now(UTC).isoformat()
+    return build_report(
+        target=host,
+        resolved_ip=host,
+        ports={"http": http_port},
+        indicators=indicators,
+        notes=[],
+        started_at=now,
+        finished_at=now,
+    )
+
+
 def test_nginx_baseline_clean():
     """Production-like nginx should not look like a stock HTTP lure."""
     _require("127.0.0.1", 8088)
     inds = probe_http("127.0.0.1", 8088)
-    report = build_report("127.0.0.1", inds)
+    report = _report("127.0.0.1", inds, http_port=8088)
     assert report.score < 40, f"nginx baseline score too high: {report.score}"
     by_id = {i.id: i for i in inds}
     if "http.wildcard_host" in by_id:
@@ -55,5 +69,5 @@ def test_dionaea_http_face_attempted():
     _require("127.0.0.1", 8024)
     inds = probe_http("127.0.0.1", 8024)
     assert inds
-    report = build_report("127.0.0.1", inds)
+    report = _report("127.0.0.1", inds, http_port=8024)
     assert report.score >= 0
