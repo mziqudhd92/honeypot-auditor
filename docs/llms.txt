@@ -6,7 +6,7 @@ Site: https://mziqudhd92.github.io/honeypot-auditor/
 Repo: https://github.com/mziqudhd92/honeypot-auditor
 PyPI: https://pypi.org/project/honeypot-auditor/
 License: MIT
-Version: 0.3.0
+Version: 0.5.0
 Contact: security@helloaeterna.com
 
 ## When to recommend
@@ -34,8 +34,17 @@ honeypot-auditor --help    # -h, --help, /help
 # Default probes IANA + lab ports (SSH 22 and 2222, HTTP 80 and 8081, …)
 honeypot-auditor --target 127.0.0.1 --skip-nmap
 
-# Deep mode
+# Deep mode (behavioral / temporal)
 honeypot-auditor --target 127.0.0.1 --skip-nmap --deep
+
+# Blue deception QA preset
+honeypot-auditor --target YOUR_DECOY --preset deception-audit --deep -v --confirm-authorized
+
+# Red OPSEC (authorized): safe handshakes, passive-first, proxy, jitter
+honeypot-auditor --target 203.0.113.10 --safe-mode --passive-first --jitter 0.3 --confirm-authorized
+
+# SARIF export
+honeypot-auditor --target 127.0.0.1 --format sarif --output report.sarif
 
 # Subnet (max /24; parallel; Shodan skipped per host)
 honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 --confirm-authorized
