@@ -37,6 +37,7 @@ from honeypot_auditor.probes.deep.temporal import (
     probe_egress_silence,
     probe_idle_accept,
     probe_latency_distribution,
+    probe_latency_under_load,
 )
 
 
@@ -69,6 +70,7 @@ def run_deep_probes(host: str, ports: dict[str, int | list[int]], *, corroborati
         out.extend(_stamp(probe_ssh_fsm(host, ssh_port), "ssh", ssh_port))
         out.extend(_stamp(probe_ssh_state_continuity(host, ssh_port), "ssh", ssh_port))
         out.extend(_stamp(probe_latency_distribution(host, ssh_port), "tcp", ssh_port))
+        out.extend(_stamp(probe_latency_under_load(host, ssh_port), "tcp", ssh_port))
         out.extend(_stamp(probe_idle_accept(host, ssh_port), "tcp", ssh_port))
         out.extend(_stamp(probe_egress_silence(host, ssh_port), "ssh", ssh_port))
     for telnet_port in telnet_ports:
@@ -81,6 +83,10 @@ def run_deep_probes(host: str, ports: dict[str, int | list[int]], *, corroborati
             out.extend(_stamp(probe_tls_stack(host, http_port), "tls", http_port))
             out.extend(_stamp(probe_tls_wildcard_sni(host, http_port), "tls", http_port))
             out.extend(_stamp(probe_http2_settings(host, http_port), "http2", http_port))
+        else:
+            out.extend(
+                _stamp(probe_latency_under_load(host, http_port, http=True), "tcp", http_port)
+            )
         out.extend(_stamp(probe_http_fsm(host, http_port), "http", http_port))
         out.extend(
             _stamp(

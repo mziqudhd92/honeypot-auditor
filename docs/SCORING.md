@@ -14,6 +14,18 @@ Basic category weights (from `config.WEIGHTS`):
 
 Deep mode adds (`DEEP_WEIGHTS`): behavior 18%, coherence 15%, stack_fingerprint 12%, proto_conformance 12%, temporal 10%.
 
+### Temporal indicators (`--deep`)
+
+| ID | What it measures |
+|----|------------------|
+| `deep.latency` | Serial banner RTT mean + coefficient of variation (canned handlers) |
+| `deep.latency_under_load` | Parallel connections: load CV + stretch vs serial baseline (LI traps stay flat) |
+| `deep.idle_accept` | Many idle TCP accepts with no backoff |
+| `deep.clock_drift` | HTTP `Date` skew / frozen clock (optional SMB SystemTime) |
+| `deep.egress` | Contained egress silence after SSH bait DNS |
+
+`deep.latency_under_load` is corroboration-gated and skipped in `--safe-mode`. It is a probe indicator (not a YAML signature primitive).
+
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
 **Verdict bands**: &lt;30% Likely Real · 30–59% Suspected · ≥60% Confirmed.

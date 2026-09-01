@@ -17,7 +17,7 @@ honeypot-auditor is a Python CLI that fingerprints whether a host behaves like a
 |---------|---------|
 | Basic probes | Shodan intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB |
 | Subnet scan | IPv4 CIDR up to `/24` (254 hosts); `--scan-concurrency`; combined JSON report |
-| Deep mode (`--deep`) | Shell semantics, OS coherence, HASSH/TCP stack, protocol FSM, co-tenancy, temporal/latency/egress |
+| Deep mode (`--deep`) | Shell semantics, OS coherence, HASSH/TCP stack, protocol FSM, co-tenancy, temporal (serial + concurrent-load latency)/egress |
 | CLI UX | Figlet `H0N3YP0T-AUD1T0R` header; `-h` / `--help` / `/help`; Rich-styled help text |
 | Authorization | Private/loopback OK; public IPs (or subnets with public hosts) require `--confirm-authorized` |
 | Non-goals | Not exploits, not exfil, not a prompt-injection detector, not UHBS decoy quality grading |

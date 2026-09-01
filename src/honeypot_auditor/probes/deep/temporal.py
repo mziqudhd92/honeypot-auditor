@@ -54,6 +54,130 @@ def probe_latency_distribution(host: str, port: int, samples: int = 8) -> list[I
     ]
 
 
+def _service_rtt(host: str, port: int, *, http: bool = False) -> float | None:
+    """Single-connection service RTT (banner or lightweight HTTP GET)."""
+    if http:
+        payload = (
+            b"HEAD / HTTP/1.0\r\nHost: "
+            + host.encode("ascii", "replace")
+            + b"\r\nConnection: close\r\n\r\n"
+        )
+        recv_first = False
+    else:
+        payload = b""
+        recv_first = True
+    start = time.monotonic()
+    raw, err = tcp_transact(
+        host,
+        port,
+        payload,
+        recv_first=recv_first,
+        timeout=settings.timeout_seconds,
+    )
+    elapsed = time.monotonic() - start
+    if err and not raw:
+        return None
+    return elapsed
+
+
+def probe_latency_under_load(
+    host: str,
+    port: int,
+    workers: int = 8,
+    *,
+    http: bool = False,
+) -> list[Indicator]:
+    """
+    Concurrent service RTTs — LI traps stay flat/uniform under parallel connects;
+    real services usually stretch or show higher variance under load.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    if settings.safe_mode:
+        return [
+            skipped_indicator(
+                "deep.latency_under_load",
+                "Response latency remains uniform under concurrent load",
+                "temporal",
+                "safe-mode",
+                protocol="tcp",
+            )
+        ]
+
+    n = max(4, min(workers, settings.max_concurrent, 16))
+    baseline: list[float] = []
+    for _ in range(3):
+        rtt = _service_rtt(host, port, http=http)
+        if rtt is None:
+            break
+        baseline.append(rtt)
+        time.sleep(0.02)
+
+    if len(baseline) < 2:
+        return [
+            skipped_indicator(
+                "deep.latency_under_load",
+                "Response latency remains uniform under concurrent load",
+                "temporal",
+                "insufficient baseline samples",
+                protocol="tcp",
+            )
+        ]
+
+    concurrent: list[float] = []
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        futures = [pool.submit(_service_rtt, host, port, http=http) for _ in range(n)]
+        for fut in as_completed(futures):
+            try:
+                rtt = fut.result()
+            except Exception:
+                rtt = None
+            if rtt is not None:
+                concurrent.append(rtt)
+
+    if len(concurrent) < max(4, n // 2):
+        return [
+            skipped_indicator(
+                "deep.latency_under_load",
+                "Response latency remains uniform under concurrent load",
+                "temporal",
+                f"only {len(concurrent)}/{n} concurrent RTTs succeeded",
+                protocol="tcp",
+            )
+        ]
+
+    base_mean = statistics.mean(baseline)
+    load_mean = statistics.mean(concurrent)
+    load_stdev = statistics.pstdev(concurrent) if len(concurrent) > 1 else 0.0
+    load_cv = (load_stdev / load_mean) if load_mean > 0 else 0.0
+    stretch = (load_mean / base_mean) if base_mean > 0 else 1.0
+    # Trap: still fast + flat under parallel load, and barely stretches vs serial baseline
+    uniform_under_load = load_mean < 0.08 and load_cv < 0.12
+    no_stretch = stretch < 1.2
+    triggered = uniform_under_load and no_stretch
+    detail = (
+        f"baseline_mean={base_mean*1000:.1f}ms load_mean={load_mean*1000:.1f}ms "
+        f"load_cv={load_cv:.3f} stretch={stretch:.2f}x n={len(concurrent)}"
+    )
+    return [
+        Indicator(
+            id="deep.latency_under_load",
+            title="Response latency remains uniform under concurrent load",
+            category="temporal",
+            triggered=triggered,
+            protocol="tcp",
+            detail=detail,
+            evidence=",".join(f"{t:.4f}" for t in concurrent),
+            requires_corroboration=True,
+            tell_tier="origin",
+            remediation=(
+                "Add realistic scheduling delay / connection limits so decoy RTTs "
+                "stretch and vary under concurrent clients"
+            ),
+        )
+    ]
+
+
 def probe_idle_accept(host: str, port: int, n: int = 10) -> list[Indicator]:
     """Many idle TCP handshakes with no backoff / 421 — synthetic accept loop."""
     import socket

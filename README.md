@@ -79,7 +79,7 @@ made Cowrie sweat in `'09 and still catches clones in `'26.
 ```
   [ BASIC ]  Shodan · Nmap NSE · SSH/Telnet/SMB/FTP/HTTP/Redis/SMTP/VNC/SIP
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
-             · co-tenancy buffet detect · latency · egress bait
+             · co-tenancy buffet detect · latency · latency-under-load · egress bait
              (flag: --deep · more intrusive · same authorization rules)
 ```
 
@@ -272,7 +272,7 @@ Closed faces are skipped, not scored.
 
 `-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
-`--deep` adds cross-protocol axes (shell semantics, HASSH/TCP stack, FSM fuzz, co-tenancy, latency) on top of the basic strategies above. Shodan Honeyscore and Nmap NSE (`-n`) are optional intel layers, not protocol engines.
+`--deep` adds cross-protocol axes (shell semantics, HASSH/TCP stack, FSM fuzz, co-tenancy, serial + concurrent-load latency) on top of the basic strategies above. Shodan Honeyscore and Nmap NSE (`-n`) are optional intel layers, not protocol engines.
 
 ---
 

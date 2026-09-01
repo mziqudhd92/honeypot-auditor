@@ -12,7 +12,7 @@ from honeypot_auditor.probes.deep.fsm import (
     probe_ssh_state_continuity,
 )
 from honeypot_auditor.probes.deep.stack import probe_tls_wildcard_sni
-from honeypot_auditor.probes.deep.temporal import probe_clock_drift
+from honeypot_auditor.probes.deep.temporal import probe_clock_drift, probe_latency_under_load
 from honeypot_auditor.settings import settings
 from honeypot_auditor.transport import _apply_jitter
 
@@ -72,7 +72,49 @@ def test_ssh_continuity_identical_handshake():
     assert cont[0].triggered
 
 
-def test_cli_jitter_fraction():
+def test_latency_under_load_uniform_trap():
+    # Fast identical RTTs: baseline then concurrent workers
+    rtts = [0.01] * 20
+
+    def fake_rtt(*_a, **_k):
+        return rtts.pop(0) if rtts else 0.01
+
+    with (
+        patch("honeypot_auditor.probes.deep.temporal._service_rtt", side_effect=fake_rtt),
+        patch("honeypot_auditor.probes.deep.temporal.time.sleep"),
+    ):
+        inds = probe_latency_under_load("127.0.0.1", 22, workers=4)
+    assert inds[0].id == "deep.latency_under_load"
+    assert inds[0].triggered
+    assert inds[0].requires_corroboration
+
+
+def test_latency_under_load_stretches_like_real():
+    calls = {"n": 0}
+
+    def fake_rtt(*_a, **_k):
+        calls["n"] += 1
+        # baseline ~10ms; under "load" (later calls) stretch to ~40ms with variance
+        if calls["n"] <= 3:
+            return 0.010
+        return 0.035 + (calls["n"] % 3) * 0.008
+
+    with (
+        patch("honeypot_auditor.probes.deep.temporal._service_rtt", side_effect=fake_rtt),
+        patch("honeypot_auditor.probes.deep.temporal.time.sleep"),
+    ):
+        inds = probe_latency_under_load("127.0.0.1", 22, workers=4)
+    assert inds[0].id == "deep.latency_under_load"
+    assert not inds[0].triggered
+
+
+def test_latency_under_load_safe_mode():
+    settings.safe_mode = True
+    try:
+        inds = probe_latency_under_load("127.0.0.1", 22)
+        assert inds[0].skipped
+    finally:
+        settings.safe_mode = False
     args = build_parser().parse_args(["--target", "127.0.0.1", "--jitter", "0.25"])
     _apply_cli_settings(args)
     assert settings.jitter_fraction == 0.25

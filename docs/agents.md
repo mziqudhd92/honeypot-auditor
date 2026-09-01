@@ -90,7 +90,7 @@ src/honeypot_auditor/   CLI, analyzer, banner (figlet header)
     common.py           shared skip/cred helpers
     shell_cti.py        Cowrie/Kippo transcript tells
     recon.py            Shodan + Nmap
-    deep/               --deep axes (behavior, coherence, stack, FSM, …)
+    deep/               --deep axes (behavior, coherence, stack, FSM, temporal load, …)
 tests/                  pytest suite (test_ssh.py, test_telnet.py, …)
 deploy/                 docker-compose.benchmark.yml (Cowrie + Dionaea)
 scripts/                demo + benchmark helpers

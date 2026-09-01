@@ -159,7 +159,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--deep",
         action="store_true",
-        help="Run advanced probes: shell semantics, OS coherence, HASSH/TCP stack, FSM fuzz, co-tenancy, latency",
+        help="Run advanced probes: shell semantics, OS coherence, HASSH/TCP stack, FSM fuzz, co-tenancy, latency under load",
     )
     p.add_argument(
         "--timeout",

@@ -11,6 +11,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Clock-drift tell (`deep.clock_drift`): HTTP Date skew/frozen samples; optional SMB SystemTime hook
 - HTTP invalid chunked length + SSH pre-KEXINIT FSM fuzz; SSH drop/reconnect continuity (`fsm.stateless_trap_behavior`)
 - CLI `--jitter` fraction (alongside `--jitter-ms`); TLS wildcard SNI tell (`tls.wildcard_sni`)
+- Concurrent load latency tell (`deep.latency_under_load`): parallel banner RTTs vs serial baseline
 - `docs/SIGNATURES.md` TLS JA3S/JA4S section; nginx service in benchmark compose; Docker golden integration job
 
 ### Fixed

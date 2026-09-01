@@ -326,7 +326,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
               <tr><td><code>-p</code>, <code>--port</code></td><td>Only these TCP ports (nmap-style; repeatable or <code>22,2222</code>). Omit for full preset</td></tr>
               <tr><td><code>--ports</code></td><td>Per-protocol override (<code>ssh=2222,ftp=9</code>); map unused faces to <code>=9</code> to skip</td></tr>
               <tr><td><code>-v</code>, <code>--verbose</code></td><td>Strategy breakdown, per-protocol matrix, indicator table, why-this-score, run notes</td></tr>
-              <tr><td><code>--deep</code></td><td>Shell semantics, OS coherence, HASSH/TCP stack, FSM fuzz, co-tenancy, temporal/egress</td></tr>
+              <tr><td><code>--deep</code></td><td>Shell semantics, OS coherence, HASSH/TCP stack, FSM fuzz, co-tenancy, temporal (incl. concurrent-load latency)/egress</td></tr>
               <tr><td><code>--safe-mode</code></td><td>Handshake-only; disables deep shell/path probes</td></tr>
               <tr><td><code>--profile</code></td><td><code>audit</code> (default), <code>blend</code> (browser mimesis), <code>safe</code></td></tr>
               <tr><td><code>--proxy</code></td><td>SOCKS5 egress (<code>socks5h://</code> remote DNS preferred)</td></tr>

@@ -28,6 +28,7 @@ _DEEP_PATCHES = [
     "probe_shell_entropy",
     "probe_egress_silence",
     "probe_latency_distribution",
+    "probe_latency_under_load",
     "probe_idle_accept",
     "probe_cotenancy",
     "probe_smtp_fsm",
