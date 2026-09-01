@@ -7,7 +7,7 @@ Skipped automatically when services are unreachable.
 from __future__ import annotations
 
 import socket
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -33,7 +33,7 @@ def _require(host: str, port: int) -> None:
 
 
 def _report(host: str, indicators: list[Indicator], *, http_port: int) -> object:
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     return build_report(
         target=host,
         resolved_ip=host,

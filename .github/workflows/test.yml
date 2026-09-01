@@ -20,7 +20,7 @@ jobs:
       - name: Install
         run: pip install -e ".[full,dev]"
       - name: Unit tests (no coverage)
-        run: pytest --no-cov
+        run: pytest --no-cov -m "not integration"
       - name: Ruff
         run: ruff check src tests
       - name: Build package
@@ -37,7 +37,7 @@ jobs:
       - name: Install
         run: pip install -e ".[full,dev]"
       - name: Pytest with coverage gate
-        run: pytest --cov-fail-under=60
+        run: pytest --cov-fail-under=60 -m "not integration"
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
         if: always()
