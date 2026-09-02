@@ -32,7 +32,12 @@ def test_cowrie_basic_tells_are_confirmed():
     score, _ = compute_score(inds)
     assert score == 75.0
     assert threat_level(score, inds) == "Confirmed Honeypot"
-    inds = [_ind("shodan", True), _ind("arbitrary_auth", True), _ind("state_nonpersist", True), _ind("static_signature", True)]
+    inds = [
+        _ind("shodan", True),
+        _ind("arbitrary_auth", True),
+        _ind("state_nonpersist", True),
+        _ind("static_signature", True),
+    ]
     score, hits = compute_score(inds)
     assert score == 100.0
     assert threat_level(score, inds) == "Confirmed Honeypot"
@@ -98,6 +103,10 @@ def test_multi_user_arbitrary_auth_scores_100():
     assert report.threat_level == "Confirmed Honeypot"
     assert report.category_hits["arbitrary_auth"]["contribution"] == 100.0
     assert report.category_hits["arbitrary_auth"]["dynamic"] is True
+    assert report.score_breakdown["category_total_pct"] == 30.0
+    assert report.score_breakdown["score_before_override_pct"] == 30.0
+    assert report.score_breakdown["decisive_override"] == "multi_user_arbitrary_auth"
+    assert report.score_breakdown["final_score_pct"] == 100.0
     assert report.confidence == "high"
     assert report.tactical_action == "SKIP_TARGET"
 
@@ -175,6 +184,10 @@ def test_buffet_cotenancy_confirms_deny_all_stack():
     assert any(i.id == "cotenancy.buffet" for i in report.indicators)
     assert any(i.id == "corroboration.protocol_buffet" for i in report.indicators)
     assert report.category_hits["corroboration"]["contribution"] == 25.0
+    assert report.score_breakdown["category_total_pct"] == 60.0
+    assert report.score_breakdown["bonus_total_pct"] == 25.0
+    assert report.score_breakdown["raw_score_pct"] == 85.0
+    assert report.score_breakdown["final_score_pct"] == 85.0
 
 
 def test_silent_accept_cluster_scores_cotenancy():
@@ -342,7 +355,10 @@ def test_ssh_banner_signature():
 def test_uname_signature():
     raw = "Linux decoy 3.2.0-4-amd64 #1 SMP Debian 3.2.68-1+deb7u1 x86_64 GNU/Linux"
     assert match_uname_signature(raw)
-    assert match_uname_signature("Linux host 6.1.0-18-amd64 #1 SMP Debian 6.1.76-1 x86_64 GNU/Linux") is None
+    assert (
+        match_uname_signature("Linux host 6.1.0-18-amd64 #1 SMP Debian 6.1.76-1 x86_64 GNU/Linux")
+        is None
+    )
 
 
 def test_docker_research_ports():
@@ -374,8 +390,20 @@ def test_confidence_medium_two_protocols():
             triggered=True,
             protocol="ftp",
         ),
-        Indicator(id="telnet.static", title="t", category="static_signature", triggered=False, protocol="telnet"),
-        Indicator(id="http.static", title="h", category="static_signature", triggered=False, protocol="http"),
+        Indicator(
+            id="telnet.static",
+            title="t",
+            category="static_signature",
+            triggered=False,
+            protocol="telnet",
+        ),
+        Indicator(
+            id="http.static",
+            title="h",
+            category="static_signature",
+            triggered=False,
+            protocol="http",
+        ),
     ]
     assert compute_confidence(inds) in ("medium", "low")
     report = build_report(

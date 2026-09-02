@@ -204,7 +204,10 @@ def high_signal_bonus(indicators: list[Indicator]) -> tuple[float, Indicator | N
     hits = [
         ind
         for ind in indicators
-        if ind.triggered and not ind.skipped and not ind.suppressed and ind.id in HIGH_SIGNAL_TELL_IDS
+        if ind.triggered
+        and not ind.skipped
+        and not ind.suppressed
+        and ind.id in HIGH_SIGNAL_TELL_IDS
     ]
     if not hits:
         return 0.0, None
@@ -270,7 +273,11 @@ def protocol_strategy_matrix(
                 continue
             matching = [i for i in proto_inds if i.category == strat]
             if not matching:
-                cells[strat] = {"status": "skip", "playbook": playbook, "detail": "no indicator emitted"}
+                cells[strat] = {
+                    "status": "skip",
+                    "playbook": playbook,
+                    "detail": "no indicator emitted",
+                }
                 continue
             live = [i for i in matching if not i.skipped]
             if not live:
@@ -376,9 +383,7 @@ def collect_proxy_evidence(indicators: list[Indicator]) -> list[str]:
     return list(dict.fromkeys(evidence))
 
 
-def apply_proxy_suppression(
-    indicators: list[Indicator], proxy_detected: bool
-) -> list[Indicator]:
+def apply_proxy_suppression(indicators: list[Indicator], proxy_detected: bool) -> list[Indicator]:
     """Suppress edge-tier tells when proxy detected."""
     if not proxy_detected:
         return list(indicators)
@@ -549,6 +554,61 @@ def build_deception_leaks(indicators: list[Indicator]) -> list[dict]:
     return rows
 
 
+def build_score_breakdown(
+    category_hits: dict,
+    *,
+    protocol_bonus: float,
+    high_signal_bonus_pct: float,
+    decisive_override: bool,
+) -> dict:
+    """Build an additive, machine-readable explanation of the headline score."""
+    categories: list[dict[str, str | float | bool]] = []
+    for category, row in category_hits.items():
+        if row.get("dynamic"):
+            continue
+        categories.append(
+            {
+                "category": category,
+                "weight_pct": round(float(row.get("weight", 0.0)) * 100.0, 2),
+                "attempted": bool(row.get("attempted")),
+                "triggered": bool(row.get("triggered")),
+                "contribution_pct": round(float(row.get("contribution", 0.0)), 2),
+            }
+        )
+    category_total = round(sum(float(row["contribution_pct"]) for row in categories), 2)
+    bonuses: list[dict[str, str | float]] = []
+    if protocol_bonus:
+        bonuses.append(
+            {
+                "id": "protocol_corroboration",
+                "contribution_pct": round(protocol_bonus, 2),
+            }
+        )
+    if high_signal_bonus_pct:
+        bonuses.append(
+            {
+                "id": "high_signal_fingerprint",
+                "contribution_pct": round(high_signal_bonus_pct, 2),
+            }
+        )
+    bonus_total = round(sum(float(row["contribution_pct"]) for row in bonuses), 2)
+    raw_score = round(category_total + bonus_total, 2)
+    capped_score = min(raw_score, 100.0)
+    final_score = 100.0 if decisive_override else capped_score
+    return {
+        "formula": "min(category_total + bonus_total, 100); repeated arbitrary auth overrides to 100",
+        "categories": categories,
+        "category_total_pct": category_total,
+        "bonuses": bonuses,
+        "bonus_total_pct": bonus_total,
+        "raw_score_pct": raw_score,
+        "cap_applied": raw_score > 100.0,
+        "score_before_override_pct": capped_score,
+        "decisive_override": "multi_user_arbitrary_auth" if decisive_override else None,
+        "final_score_pct": final_score,
+    }
+
+
 def build_report(
     *,
     target: str,
@@ -595,7 +655,15 @@ def build_report(
             "attempted": True,
             "dynamic": True,
         }
-    if multi_user_arbitrary_auth(indicators):
+    decisive_override = multi_user_arbitrary_auth(indicators)
+    score_breakdown = build_score_breakdown(
+        hits,
+        protocol_bonus=bonus,
+        high_signal_bonus_pct=signal_bonus,
+        decisive_override=decisive_override,
+    )
+    score = score_breakdown["final_score_pct"]
+    if decisive_override:
         score = 100.0
         # Keep secondary category contributions visible for analysts; the
         # any-password bonus caps the headline score without erasing other hits.
@@ -631,4 +699,5 @@ def build_report(
         tactical_action=tactical_action,
         tactical_rationale=tactical_rationale,
         deception_leaks=build_deception_leaks(indicators),
+        score_breakdown=score_breakdown,
     )

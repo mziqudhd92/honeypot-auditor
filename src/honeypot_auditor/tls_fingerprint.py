@@ -54,7 +54,7 @@ _BLEND_HELLOS = (
         "0020"
         "0000000000000000000000000000000000000000000000000000"
         "0010"
-        "130113021303c02bc02fc02cc030cca9cca8c013c014009c009d002f0035"
+        "130113021303c02bc02fc02cc030cca9cca8c013c014009c009d002f0035"  # pragma: allowlist secret
         "0100"
         "0066"
         "0000"
@@ -154,7 +154,10 @@ def compute_ja3s(parsed: ServerHelloParsed) -> str:
         return "n/a (TLS 1.3 — use JA4S)"
     ext_str = "-".join(str(e[0]) for e in parsed.extensions) if parsed.extensions else ""
     raw = f"{parsed.version},{parsed.cipher},{ext_str}"
-    return hashlib.md5(raw.encode()).hexdigest()  # noqa: S324
+    # JA3S is defined as an MD5-formatted identifier, not a security digest.
+    return (
+        hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
+    )  # nosemgrep: python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5
 
 
 def compute_ja4s(parsed: ServerHelloParsed) -> str:

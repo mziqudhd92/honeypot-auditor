@@ -17,7 +17,7 @@ except ModuleNotFoundError as exc:
         f"Missing dependency {exc.name!r}. Install once:\n"
         "  pip install -r requirements.txt\n"
         "Or: pip install rich paramiko requests\n"
-        "Or from this repo: pip install -e \".[full]\"",
+        'Or from this repo: pip install -e ".[full]"',
         file=sys.stderr,
     )
     raise SystemExit(1) from exc

@@ -15,7 +15,11 @@ from honeypot_auditor.probes.common import skip_suite
 
 _PROXY_SKIP = (
     ("httpproxy.signature", "HTTP proxy 407 looks like a stock lure", "static_signature"),
-    ("httpproxy.silent_accept", "HTTP proxy port TCP accepts then returns no response", "static_signature"),
+    (
+        "httpproxy.silent_accept",
+        "HTTP proxy port TCP accepts then returns no response",
+        "static_signature",
+    ),
 )
 
 

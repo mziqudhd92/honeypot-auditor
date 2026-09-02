@@ -24,7 +24,10 @@ class Capabilities:
 
 
 def _probe_raw_socket() -> bool:
-    if os.geteuid() == 0:
+    # ``geteuid`` is POSIX-only.  Windows can still permit raw sockets, so
+    # probe the capability directly when no effective-user-id API exists.
+    get_effective_uid = getattr(os, "geteuid", None)
+    if get_effective_uid is not None and get_effective_uid() == 0:
         return True
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)

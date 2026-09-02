@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 import time
+from contextlib import suppress
 
 from honeypot_auditor.config import PROBE_PASSWORD_TEMPLATE, PROBE_USERNAME_TEMPLATE
 from honeypot_auditor.models import optional_import
@@ -35,20 +36,18 @@ def try_ssh_auth(host: str, port: int, user: str, password: str):
         )
         return client, ""
     except paramiko.AuthenticationException as exc:
-        try:
+        with suppress(Exception):
             client.close()
-        except Exception:
-            pass
         return None, str(exc)
     except Exception as exc:
-        try:
+        with suppress(Exception):
             client.close()
-        except Exception:
-            pass
         return None, str(exc)
 
 
-def probe_ssh_auth_methods(host: str, port: int, username: str = "root") -> tuple[list[str], str, str]:
+def probe_ssh_auth_methods(
+    host: str, port: int, username: str = "root"
+) -> tuple[list[str], str, str]:
     """Return (methods, banner, error) via SSH USERAUTH none (no credentials tried)."""
     paramiko = optional_import("paramiko")
     if paramiko is None:
@@ -80,10 +79,8 @@ def probe_ssh_auth_methods(host: str, port: int, username: str = "root") -> tupl
         return [], "", str(exc)
     finally:
         if transport is not None:
-            try:
+            with suppress(Exception):
                 transport.close()
-            except Exception:
-                pass
 
 
 def ssh_exec(client, command: str, timeout: float | None = None) -> tuple[str, str, float]:
@@ -92,7 +89,8 @@ def ssh_exec(client, command: str, timeout: float | None = None) -> tuple[str, s
         timeout = settings.timeout_seconds
     start = time.monotonic()
     try:
-        _stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
+        # Callers supply fixed audit commands; target output never reaches this argument.
+        _stdin, stdout, stderr = client.exec_command(command, timeout=timeout)  # nosec B601
         out = stdout.read().decode("utf-8", "replace")
         err = stderr.read().decode("utf-8", "replace")
         return (out or err).strip(), "", time.monotonic() - start

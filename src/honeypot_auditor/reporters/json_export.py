@@ -7,14 +7,18 @@ from pathlib import Path
 
 from honeypot_auditor.models import AuditReport
 
+REPORT_SCHEMA_VERSION = "1.0"
+
 
 def _report_payload(report: AuditReport) -> dict:
     payload = {
+        "schema_version": REPORT_SCHEMA_VERSION,
         "target": report.target,
         "resolved_ip": report.resolved_ip,
         "score": report.score,
         "threat_level": report.threat_level,
         "category_hits": report.category_hits,
+        "score_breakdown": report.score_breakdown,
         "protocol_strategies": report.protocol_strategies,
         "ports": report.ports,
         "notes": report.notes,
@@ -93,6 +97,7 @@ def export_subnet(
         for r in reports
     ]
     payload = {
+        "schema_version": REPORT_SCHEMA_VERSION,
         "scan_type": "subnet",
         "target": target,
         "host_count": len(reports),

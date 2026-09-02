@@ -116,7 +116,10 @@ def test_ftp_login_fail_still_scores_stale_banner_and_canned_reject():
     by_id = {i.id: i for i in inds}
     assert by_id["ftp.persist"].skipped
     assert by_id["ftp.banner"].triggered
-    assert "stale FTP banner" in by_id["ftp.banner"].evidence or "stock default 220" in by_id["ftp.banner"].evidence
+    assert (
+        "stale FTP banner" in by_id["ftp.banner"].evidence
+        or "stock default 220" in by_id["ftp.banner"].evidence
+    )
     assert by_id["ftp.auth_lure"].triggered
     assert "guest" in by_id["ftp.auth_lure"].detail.lower()
     assert not by_id["ftp.arbitrary_auth"].triggered
@@ -164,5 +167,3 @@ def test_ftp_stock_test_account_pasv_mismatch_and_broken_quit():
     assert by_id["ftp.banner"].triggered
     assert by_id["ftp.bounce"].triggered
     assert not by_id["ftp.desert"].triggered
-
-

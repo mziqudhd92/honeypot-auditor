@@ -30,7 +30,9 @@ def _pkt_order() -> bytes:
 
 
 @patch.object(mysql, "tcp_roundtrips")
-@patch.object(mysql, "_mysql_ssl_drop_probe", return_value=(True, "CLIENT_SSL closed", "closed", False))
+@patch.object(
+    mysql, "_mysql_ssl_drop_probe", return_value=(True, "CLIENT_SSL closed", "closed", False)
+)
 def test_mysql_eol_greeting_and_stock_handshake(mock_ssl, mock_rt):
     mock_rt.side_effect = [
         ([_greeting("5.5.43-0ubuntu0.14.04.1"), _denied(), b""], ""),
@@ -46,9 +48,13 @@ def test_mysql_eol_greeting_and_stock_handshake(mock_ssl, mock_rt):
 
 
 @patch.object(mysql, "tcp_roundtrips")
-@patch.object(mysql, "_mysql_ssl_drop_probe", return_value=(False, "session stayed open", "open", False))
+@patch.object(
+    mysql, "_mysql_ssl_drop_probe", return_value=(False, "session stayed open", "open", False)
+)
 def test_mysql_modern_greeting_keeps_session(mock_ssl, mock_rt):
-    greeting = _greeting("8.0.36-0ubuntu0.22.04.1").replace(b"\xff\xf7\x08\x02\x00\x0f\x80", b"\xff\xf7\x00")
+    greeting = _greeting("8.0.36-0ubuntu0.22.04.1").replace(
+        b"\xff\xf7\x08\x02\x00\x0f\x80", b"\xff\xf7\x00"
+    )
     mock_rt.side_effect = [
         ([greeting, _denied(), b"\xff\x29\x04"], ""),
         ([greeting, _denied(), b""], ""),
@@ -74,7 +80,7 @@ def test_mysql_expected_seq_fsm_is_honeypot_tell():
     from honeypot_auditor.config.signatures.mysql import match_mysql_pkt_order
 
     raw = bytes.fromhex(
-        "23000002ff1304313833353a2045787065637465642073657128312920676f7420736571283029"
+        "23000002ff1304313833353a2045787065637465642073657128312920676f7420736571283029"  # pragma: allowlist secret
     )
     hit = match_mysql_pkt_order(raw)
     assert hit is not None

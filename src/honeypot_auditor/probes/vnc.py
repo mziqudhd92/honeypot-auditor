@@ -55,7 +55,16 @@ def probe_vnc(host: str, port: int) -> list[Indicator]:
     )
     after_type0 = type0_replies[2] if len(type0_replies) > 2 else b""
     type0_hit = match_vnc_invalid_security_challenge(after_type0)
-    static_hits = [h for h in (auth_only, canned_fail, type0_hit, "generic desktop name" if desktop_hit else None) if h]
+    static_hits = [
+        h
+        for h in (
+            auth_only,
+            canned_fail,
+            type0_hit,
+            "generic desktop name" if desktop_hit else None,
+        )
+        if h
+    ]
     return [
         Indicator(
             id="vnc.handshake",
@@ -64,7 +73,7 @@ def probe_vnc(host: str, port: int) -> list[Indicator]:
             triggered=bool(static_hits),
             protocol="vnc",
             detail="; ".join(static_hits) if static_hits else banner[:120],
-            evidence=(greeting + security + fail)[:400],
+            evidence=(greeting + security + fail)[:400].decode("utf-8", "replace"),
         ),
         Indicator(
             id="vnc.persist",
@@ -73,7 +82,7 @@ def probe_vnc(host: str, port: int) -> list[Indicator]:
             triggered=bool(canned_fail),
             protocol="vnc",
             detail=canned_fail or "RFB auth was not a canned Authentication failure",
-            evidence=fail[:200],
+            evidence=fail[:200].decode("utf-8", "replace"),
         ),
         Indicator(
             id="vnc.security",
@@ -82,6 +91,6 @@ def probe_vnc(host: str, port: int) -> list[Indicator]:
             triggered=bool(type0_hit),
             protocol="vnc",
             detail=type0_hit or "security type 0 did not produce a VNC-auth challenge",
-            evidence=after_type0[:80],
+            evidence=after_type0[:80].decode("utf-8", "replace"),
         ),
     ]

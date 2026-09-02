@@ -21,7 +21,11 @@ from honeypot_auditor.probes.common import random_creds, skip_suite
 
 _MYSQL_SKIP = (
     ("mysql.signature", "MySQL greeting is an EOL 5.5.x ubuntu template", "static_signature"),
-    ("mysql.handshake", "MySQL handshake uses stock capability/auth-plugin template", "static_signature"),
+    (
+        "mysql.handshake",
+        "MySQL handshake uses stock capability/auth-plugin template",
+        "static_signature",
+    ),
     ("mysql.persist", "MySQL drops the session after one access-denied", "state_nonpersist"),
     ("mysql.seq_order", "MySQL returns ER 1156 on wrong auth packet sequence", "state_nonpersist"),
     ("mysql.ssl_drop", "MySQL silently drops on CLIENT_SSL handshake request", "state_nonpersist"),
@@ -62,7 +66,12 @@ def _mysql_handshake_response(user: str, *, seq_id: int = 1, caps: int = _MYSQL_
 
 def _mysql_ssl_request(*, seq_id: int = 1) -> bytes:
     """Capability packet with CLIENT_SSL set — shallow emulators close with no ERR."""
-    payload = struct.pack("<I", _MYSQL_BASE_CAPS | _CLIENT_SSL) + struct.pack("<I", 16777216) + b"\x21" + b"\x00" * 23
+    payload = (
+        struct.pack("<I", _MYSQL_BASE_CAPS | _CLIENT_SSL)
+        + struct.pack("<I", 16777216)
+        + b"\x21"
+        + b"\x00" * 23
+    )
     return struct.pack("<I", len(payload))[:3] + bytes([seq_id & 0xFF]) + payload
 
 
@@ -107,7 +116,12 @@ def _mysql_ssl_drop_probe(host: str, port: int) -> tuple[bool, str, str, bool]:
             except TimeoutError:
                 follow = b""
             if _mysql_err_packet(follow):
-                return False, "CLIENT_SSL request returned an ERR packet (not a silent drop)", follow[:80].hex(), False
+                return (
+                    False,
+                    "CLIENT_SSL request returned an ERR packet (not a silent drop)",
+                    follow[:80].hex(),
+                    False,
+                )
             still_open = True
             try:
                 sock.sendall(b"\x00")
@@ -132,7 +146,9 @@ def _mysql_ssl_drop_probe(host: str, port: int) -> tuple[bool, str, str, bool]:
 
 def probe_mysql(host: str, port: int) -> list[Indicator]:
     user, _password = random_creds()
-    replies, err = tcp_roundtrips(host, port, [_mysql_handshake_response(user), b"\x00"], recv_first=True)
+    replies, err = tcp_roundtrips(
+        host, port, [_mysql_handshake_response(user), b"\x00"], recv_first=True
+    )
     if err and not replies:
         return skip_suite(_MYSQL_SKIP, closed_reason(err), protocol="mysql", error=err)
     greeting = replies[0] if replies else b""
@@ -167,7 +183,7 @@ def probe_mysql(host: str, port: int) -> list[Indicator]:
             triggered=bool(eol_hit),
             protocol="mysql",
             detail=eol_hit or f"version={version}",
-            evidence=greeting[:200],
+            evidence=greeting[:200].decode("utf-8", "replace"),
         ),
         Indicator(
             id="mysql.handshake",
@@ -176,7 +192,7 @@ def probe_mysql(host: str, port: int) -> list[Indicator]:
             triggered=bool(handshake_hit),
             protocol="mysql",
             detail=handshake_hit or "handshake capability/auth plugin look normal",
-            evidence=greeting[:200],
+            evidence=greeting[:200].decode("utf-8", "replace"),
         ),
         Indicator(
             id="mysql.persist",
@@ -197,7 +213,9 @@ def probe_mysql(host: str, port: int) -> list[Indicator]:
             category="state_nonpersist",
             triggered=bool(seq_hit),
             skipped=not seq_greeting,
-            skip_reason="" if seq_greeting else (closed_reason(seq_err) if seq_err else "no greeting"),
+            skip_reason=""
+            if seq_greeting
+            else (closed_reason(seq_err) if seq_err else "no greeting"),
             protocol="mysql",
             detail=seq_hit or "wrong auth sequence did not yield ER 1156",
             evidence=seq_reply[:120].hex() if seq_reply else "",

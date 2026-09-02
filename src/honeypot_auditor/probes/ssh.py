@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import secrets
 import time
+from contextlib import suppress
 
 from honeypot_auditor.config import match_ssh_banner
 from honeypot_auditor.hassh import capture_server_kexinit, hassh_algo_mismatch
@@ -29,7 +30,11 @@ _SSH_SKIP = (
     ("ssh.kex_facade", "SSH OpenSSH banner with Twisted/Cowrie KEX facade", "static_signature"),
     ("ssh.password_only", "SSH OpenSSH banner advertises password-only auth", "static_signature"),
     ("ssh.arbitrary_auth", "SSH arbitrary credential acceptance", "arbitrary_auth"),
-    ("ssh.exec_denied", "SSH exec channel missing after login (fake shell only)", "state_nonpersist"),
+    (
+        "ssh.exec_denied",
+        "SSH exec channel missing after login (fake shell only)",
+        "state_nonpersist",
+    ),
     ("ssh.uname", "SSH uname/cpuinfo / Cowrie identity", "static_signature"),
     ("ssh.whoami", "SSH whoami/prompt is the random lure account", "static_signature"),
     ("ssh.session_persist", "SSH filesystem does not persist across sessions", "state_nonpersist"),
@@ -128,12 +133,15 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
     hs_banner, hs_kex, hs_raw, hs_err = _capture_ssh_handshake(host, port)
     kex_ind = _kex_facade_indicator(hs_banner, hs_kex, hs_raw)
     auth_methods, auth_banner, auth_meth_err = probe_ssh_auth_methods(host, port)
-    password_only_ind = _password_only_indicator(auth_banner or hs_banner, auth_methods, auth_meth_err)
+    password_only_ind = _password_only_indicator(
+        auth_banner or hs_banner, auth_methods, auth_meth_err
+    )
 
     user, password = random_creds()
     user2, password2 = random_creds()
     canary = secrets.token_hex(4)
-    canary_path = f"/tmp/hpaudit_{canary}"
+    # This is a path on the explicitly authorized remote target, not a local temp file.
+    canary_path = f"/tmp/hpaudit_{canary}"  # nosec B108
     banner = hs_banner
     auth_ok = False
     auth2_ok = False
@@ -143,7 +151,8 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
     persist_out = ""
     err = hs_err if (hs_err and not hs_raw) else ""
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    # This is a host-key fingerprinting probe, not a trusted SSH client session.
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507
     connect_kwargs = {
         "hostname": host,
         "port": port,
@@ -172,7 +181,10 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
         if auth_ok:
             uname = _ssh_exec(client, "uname -a")
             cpuinfo = _ssh_exec(client, "cat /proc/cpuinfo")
-            cti_cmds = list(CTI_SHELL_COMMANDS) + [f"echo {canary} > {canary_path}", f"cat {canary_path}"]
+            cti_cmds = list(CTI_SHELL_COMMANDS) + [
+                f"echo {canary} > {canary_path}",
+                f"cat {canary_path}",
+            ]
             if _exec_looks_denied(uname) or _exec_looks_denied(cpuinfo):
                 transcript = _ssh_interactive(client, cti_cmds)
             else:
@@ -185,10 +197,8 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
     except Exception as exc:
         err = str(exc)
     finally:
-        try:
+        with suppress(Exception):
             client.close()
-        except Exception:
-            pass
 
     if err and not banner and not hs_raw:
         return skip_suite(_SSH_SKIP, closed_reason(err), protocol="ssh", error=err)
@@ -200,10 +210,8 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
             persist_out = _ssh_exec(client2, f"cat {canary_path}")
             if _exec_looks_denied(persist_out):
                 persist_out += "\n" + _ssh_interactive(client2, [f"cat {canary_path}"])
-            try:
+            with suppress(Exception):
                 client2.close()
-            except Exception:
-                pass
 
     exec_denied = auth_ok and (_exec_looks_denied(uname) or _exec_looks_denied(cpuinfo))
     identity_src = "\n".join(p for p in (uname, cpuinfo, transcript) if p)
@@ -213,7 +221,11 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
 
     auth_detail = (
         f"random {user}:**** accepted"
-        + (f"; 2nd login {user2}:**** also accepted" if auth2_ok else "; 2nd random login not accepted")
+        + (
+            f"; 2nd login {user2}:**** also accepted"
+            if auth2_ok
+            else "; 2nd random login not accepted"
+        )
         if auth_ok
         else f"random {user}:**** rejected (not an any-password handler)"
     )
@@ -315,7 +327,11 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
             detail=(
                 f"wrote {canary_path} then new login could not read it"
                 if persist_missing
-                else (f"canary {canary} still present after reconnect" if auth2_ok else "2nd session failed")
+                else (
+                    f"canary {canary} still present after reconnect"
+                    if auth2_ok
+                    else "2nd session failed"
+                )
             ),
             evidence=persist_out[:400],
         )
@@ -337,7 +353,10 @@ def _exec_looks_denied(text: str) -> bool:
 
 def _ssh_exec(client, command: str) -> str:
     try:
-        _stdin, stdout, stderr = client.exec_command(command, timeout=settings.timeout_seconds)
+        # Callers supply only fixed probe commands and hex-generated canary paths.
+        _stdin, stdout, stderr = client.exec_command(  # nosec B601
+            command, timeout=settings.timeout_seconds
+        )
         out = stdout.read().decode("utf-8", "replace")
         err = stderr.read().decode("utf-8", "replace")
         return (out or err).strip()
@@ -353,31 +372,28 @@ def _ssh_interactive(client, commands: list[str]) -> str:
         return f"(shell failed: {exc})"
     buf = bytearray()
     try:
-        chan.settimeout(1.0)
-        deadline = time.monotonic() + min(8.0, max(3.0, settings.timeout_seconds * 2.0))
-        for cmd in commands:
-            sent = False
-            while time.monotonic() < deadline:
-                if chan.recv_ready():
-                    buf.extend(chan.recv(4096))
-                    continue
-                if not sent:
-                    chan.send(cmd + "\n")
-                    sent = True
-                    time.sleep(0.15)
-                    continue
-                time.sleep(0.05)
-                if not chan.recv_ready():
-                    break
-        if chan.recv_ready():
-            buf.extend(chan.recv(8192))
-    except Exception:
-        pass
+        with suppress(Exception):
+            chan.settimeout(1.0)
+            deadline = time.monotonic() + min(8.0, max(3.0, settings.timeout_seconds * 2.0))
+            for cmd in commands:
+                sent = False
+                while time.monotonic() < deadline:
+                    if chan.recv_ready():
+                        buf.extend(chan.recv(4096))
+                        continue
+                    if not sent:
+                        chan.send(cmd + "\n")
+                        sent = True
+                        time.sleep(0.15)
+                        continue
+                    time.sleep(0.05)
+                    if not chan.recv_ready():
+                        break
+            if chan.recv_ready():
+                buf.extend(chan.recv(8192))
     finally:
-        try:
+        with suppress(Exception):
             chan.close()
-        except Exception:
-            pass
     return buf.decode("utf-8", "replace")
 
 

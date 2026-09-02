@@ -102,7 +102,7 @@ def udp_transact(
 
 def _recv(sock: socket.socket, timeout: float, max_bytes: int) -> bytes:
     sock.settimeout(timeout)
-    chunks = []
+    chunks: list[bytes] = []
     try:
         while sum(len(c) for c in chunks) < max_bytes:
             buf = sock.recv(4096)

@@ -64,7 +64,11 @@ def probe_mongodb(host: str, port: int) -> list[Indicator]:
         return skip_suite(_MONGO_SKIP, closed_reason(err), protocol="mongodb", error=err)
     if len(hello_raw) < 16:
         return skip_suite(_MONGO_SKIP, "not a MongoDB wire-protocol speaker", protocol="mongodb")
-    hello_ok = b"ismaster" in hello_raw or b"maxWireVersion" in hello_raw or b"maxBsonObjectSize" in hello_raw
+    hello_ok = (
+        b"ismaster" in hello_raw
+        or b"maxWireVersion" in hello_raw
+        or b"maxBsonObjectSize" in hello_raw
+    )
 
     op_msg_raw, op_msg_err = tcp_transact(host, port, _op_msg_hello())
     op_msg_hit = match_mongo_op_msg_reply(op_msg_raw) if op_msg_raw else None

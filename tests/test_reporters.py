@@ -47,7 +47,9 @@ def test_json_export_roundtrip(tmp_path: Path):
     report = _sample_report()
     dest = export(report, tmp_path / "out.json")
     data = json.loads(dest.read_text())
+    assert data["schema_version"] == "1.0"
     assert data["score"] == report.score
+    assert data["score_breakdown"]["final_score_pct"] == report.score
     assert data["indicators"][0]["id"] == "ssh.test"
     assert len(data["triggered"]) == 1
     assert data["protocol_strategies"][0]["protocol"] == "ssh"
@@ -78,7 +80,6 @@ def test_json_export_coerces_bytes_evidence(tmp_path: Path):
     assert data["indicators"][0]["evidence"] == "250-PIPELINING\r\n250 HELP"
 
 
-
 def test_console_render_compact_by_default():
     buf = StringIO()
     render(_sample_report(), console=Console(file=buf, width=120, force_terminal=True))
@@ -102,6 +103,7 @@ def test_console_render_verbose_includes_strategy_tables():
     out = buf.getvalue()
     assert "Strategy" in out
     assert "Protocol strategies" in out
+    assert "Score formula" in out
 
 
 def test_console_render_verbose_includes_indicators():
@@ -137,6 +139,8 @@ def test_json_export_nmap_exclude_and_subnet(tmp_path: Path):
         finished_at="2026-01-01T00:00:01Z",
     )
     data = json.loads(dest.read_text(encoding="utf-8"))
+    assert data["schema_version"] == "1.0"
+    assert data["hosts"][0]["schema_version"] == "1.0"
     assert data["scan_type"] == "subnet"
     assert data["host_count"] == 1
     assert data["hosts"][0]["deception_leaks"][0]["id"] == "ssh.test"

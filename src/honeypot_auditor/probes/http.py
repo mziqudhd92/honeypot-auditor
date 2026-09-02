@@ -50,12 +50,13 @@ _HTTP_SKIP = (
 _ADMIN_LOGIN_PATHS = ("/phpmyadmin/", "/phpMyAdmin/", "/pma/", "/admin/", "/login")
 
 
-def _dynamic_header_detail(server_val: str, missing_dynamic: bool, header_map: dict[str, str]) -> str:
+def _dynamic_header_detail(
+    server_val: str, missing_dynamic: bool, header_map: dict[str, str]
+) -> str:
     date_note = "missing Date" if missing_dynamic else "Date present"
-    return (
-        f"server={server_val or '?'}; {date_note}; headers: "
-        + ", ".join(sorted(header_map))
-    )[:240]
+    return (f"server={server_val or '?'}; {date_note}; headers: " + ", ".join(sorted(header_map)))[
+        :240
+    ]
 
 
 def _looks_like_admin_login_skin(status: int, body: bytes) -> bool:
@@ -175,7 +176,8 @@ def probe_http(host: str, port: int) -> list[Indicator]:
     if requests is not None:
         base = f"{_scheme(port)}://{host}:{port}"
         try:
-            resp = requests.get(
+            # Certificate validity is evidence, so untrusted target certificates must remain observable.
+            resp = requests.get(  # nosec B501  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
                 f"{base}/",
                 timeout=settings.timeout_seconds,
                 allow_redirects=False,
@@ -189,7 +191,9 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             header_map = {**header_map, **get_headers}
             missing_dynamic = "date" not in get_headers
             server_val = get_headers.get("server", server_val)
-            server_hit = server_hit or any(tell in server_val.lower() for tell in HTTP_SERVER_TELLS if server_val)
+            server_hit = server_hit or any(
+                tell in server_val.lower() for tell in HTTP_SERVER_TELLS if server_val
+            )
             body = resp.content[:2048]
             loc = get_headers.get("location", "")
             if resp.status_code in (301, 302, 303, 307) and "index.html" in loc.lower():
@@ -211,7 +215,8 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             return skip_suite(_HTTP_SKIP, "HTTPS handshake failed", protocol="http")
         if not login_skin:
             try:
-                form = requests.get(
+                # Certificate validity is evidence, so untrusted target certificates must remain observable.
+                form = requests.get(  # nosec B501  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
                     f"{base}/index.html",
                     timeout=settings.timeout_seconds,
                     allow_redirects=False,
@@ -222,10 +227,11 @@ def probe_http(host: str, port: int) -> list[Indicator]:
                 low_form = form.content[:2048].lower()
                 if b'name="username"' in low_form and b'name="password"' in low_form:
                     login_skin = True
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.debug("HTTP login-form probe failed: %s", exc)
         try:
-            put = requests.put(
+            # Certificate validity is evidence, so untrusted target certificates must remain observable.
+            put = requests.put(  # nosec B501  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
                 f"{base}/index.html",
                 timeout=settings.timeout_seconds,
                 headers={"User-Agent": effective_user_agent(), "Content-Length": "0"},
@@ -236,8 +242,8 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             put_first = f"HTTP/1.1 {put.status_code}"
             put_text = put.content[:400].decode("latin-1", "replace")
             method_stub = put.status_code == 405 and len(put.content.strip()) == 0
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.debug("HTTP PUT conformance probe failed: %s", exc)
 
     if not login_skin and not tls:
         get_req = (
@@ -250,7 +256,10 @@ def probe_http(host: str, port: int) -> list[Indicator]:
         get_text = get_raw.decode("latin-1", "replace")
         get_first = get_text.split("\r\n", 1)[0] if get_text else ""
         loc = _parse_headers(get_text).get("location", "")
-        if any(code in get_first for code in (" 301 ", " 302 ", " 303 ", " 307 ")) and "index.html" in loc.lower():
+        if (
+            any(code in get_first for code in (" 301 ", " 302 ", " 303 ", " 307 "))
+            and "index.html" in loc.lower()
+        ):
             login_skin = True
         proxy_hit = proxy_hit or match_http_proxy_lure(get_text)
 
@@ -299,9 +308,7 @@ def probe_http(host: str, port: int) -> list[Indicator]:
         wildcard_detail = wh_first or "(no response)"
 
     corroborating_http = static_http_face or login_skin or method_stub or static_200
-    header_order_trigger = (
-        header_order_hit and corroborating_http and not proxy_result.detected
-    )
+    header_order_trigger = header_order_hit and corroborating_http and not proxy_result.detected
 
     indicators = [
         Indicator(
@@ -337,7 +344,9 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             category="static_signature",
             triggered=login_skin,
             protocol="http",
-            detail="GET / looks like a canned login skin" if login_skin else "GET / is not a stock login skin",
+            detail="GET / looks like a canned login skin"
+            if login_skin
+            else "GET / is not a stock login skin",
         ),
         Indicator(
             id="http.proxy_lure",
@@ -456,7 +465,8 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
     else:
         base = f"{_scheme(port)}://{host}:{port}"
         try:
-            resp = requests.get(
+            # Certificate validity is evidence, so untrusted target certificates must remain observable.
+            resp = requests.get(  # nosec B501  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
                 f"{base}/",
                 timeout=settings.timeout_seconds,
                 allow_redirects=False,
@@ -494,4 +504,3 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
         ),
         *skipped,
     ]
-

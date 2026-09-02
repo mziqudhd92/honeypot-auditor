@@ -122,7 +122,8 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
             skipped=bool(auth_err) and not auth_reply,
             skip_reason=closed_reason(auth_err) if auth_err and not auth_reply else "",
             protocol="redis",
-            detail=auth_hit or (auth_reply.strip()[:160] or "AUTH not accepted with random credentials"),
+            detail=auth_hit
+            or (auth_reply.strip()[:160] or "AUTH not accepted with random credentials"),
             evidence=password,
         ),
         Indicator(
@@ -151,7 +152,9 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
             category="static_signature",
             triggered=bool(sig_hits),
             protocol="redis",
-            detail="; ".join(sig_hits) if sig_hits else "COMMAND catalog, INFO clock, and ECHO look real",
+            detail="; ".join(sig_hits)
+            if sig_hits
+            else "COMMAND catalog, INFO clock, and ECHO look real",
             evidence=f"COMMAND {command_reply[:120]!r}\nINFO {info1[:200]!r}",
         ),
     ]

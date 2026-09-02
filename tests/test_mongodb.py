@@ -8,10 +8,7 @@ from unittest.mock import patch
 import honeypot_auditor.probes.mongodb as mongodb
 
 _HELLO = (
-    b"\x00" * 16
-    + b"ismaster\x00"
-    + b"maxWireVersion\x00"
-    + b"version\x00\x06\x00\x00\x004.4.6\x00"
+    b"\x00" * 16 + b"ismaster\x00" + b"maxWireVersion\x00" + b"version\x00\x06\x00\x00\x004.4.6\x00"
 )
 _PING_DENIED = b"\x00" * 16 + b"Authentication required"
 _PING_OK = b"\x00" * 16 + b"ok"

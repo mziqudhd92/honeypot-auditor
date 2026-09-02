@@ -29,18 +29,6 @@ def _stub_cli_probes(**overrides):
     return patch.dict("honeypot_auditor.cli.PROBE_BY_PROTOCOL", stubs, clear=True)
 
 
-
-def _clean_indicator(**kwargs) -> Indicator:
-    defaults = {
-        "id": "test.ind",
-        "title": "test",
-        "category": "static_signature",
-        "triggered": False,
-    }
-    defaults.update(kwargs)
-    return Indicator(**defaults)
-
-
 def test_parser_version():
     with pytest.raises(SystemExit) as exc:
         main(["--version"])
@@ -56,6 +44,10 @@ def test_help_flags(capsys):
         assert "H-AUDITOR" in out or "honeypot-auditor" in out
         assert "--port" in out
         assert "--verbose" in out
+
+
+def test_help_text_is_windows_console_safe():
+    build_parser().format_help().encode("cp1252")
 
 
 def test_public_ip_refused_without_confirm():
@@ -137,9 +129,7 @@ def test_run_audit_local_smoke(
 ):
     ssh = MagicMock(return_value=[_clean_indicator(id="ssh.banner", triggered=True)])
     out = tmp_path / "audit.json"
-    args = build_parser().parse_args(
-        ["--target", "127.0.0.1", "--output", str(out), "--deep"]
-    )
+    args = build_parser().parse_args(["--target", "127.0.0.1", "--output", str(out), "--deep"])
     with _stub_cli_probes(ssh=ssh):
         code = asyncio.run(run_audit(args))
     assert code == 0
@@ -255,7 +245,9 @@ def test_run_audit_probe_error_indicator(
 @patch("honeypot_auditor.cli.run_deep_probes", return_value=[])
 @patch("honeypot_auditor.cli.nmap_scan", return_value=[])
 @patch("honeypot_auditor.cli.shodan_lookup", return_value=[])
-def test_run_audit_with_nmap_opt_in(mock_shodan, mock_nmap, mock_deep, mock_render, mock_export, tmp_path):
+def test_run_audit_with_nmap_opt_in(
+    mock_shodan, mock_nmap, mock_deep, mock_render, mock_export, tmp_path
+):
     args = build_parser().parse_args(
         ["--target", "127.0.0.1", "-n", "--output", str(tmp_path / "audit.json")]
     )
@@ -268,9 +260,7 @@ def test_run_audit_with_nmap_opt_in(mock_shodan, mock_nmap, mock_deep, mock_rend
 def test_deception_audit_preset_normalizes_before_port_map():
     from honeypot_auditor.cli import _normalize_preset_alias
 
-    args = build_parser().parse_args(
-        ["--target", "127.0.0.1", "--preset", "deception-audit"]
-    )
+    args = build_parser().parse_args(["--target", "127.0.0.1", "--preset", "deception-audit"])
     assert args.preset == "deception-audit"
     _normalize_preset_alias(args)
     assert args.preset == "both"
@@ -282,7 +272,9 @@ def test_deception_audit_preset_normalizes_before_port_map():
 @patch("honeypot_auditor.cli.run_deep_probes", return_value=[])
 @patch("honeypot_auditor.cli.nmap_scan", return_value=[])
 @patch("honeypot_auditor.cli.shodan_lookup", return_value=[])
-def test_run_audit_deception_audit_preset(mock_shodan, mock_nmap, mock_deep, mock_render, mock_export, tmp_path):
+def test_run_audit_deception_audit_preset(
+    mock_shodan, mock_nmap, mock_deep, mock_render, mock_export, tmp_path
+):
     args = build_parser().parse_args(
         [
             "--target",

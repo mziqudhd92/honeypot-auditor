@@ -21,8 +21,6 @@ CPUINFO_TELLS = (
 )
 
 COWRIE_HOSTNAMES = ("svr04", "nas3")
-COWRIE_MOTD_TELLS = (
-    "The programs included with the Debian GNU/Linux system are free software",
-)
+COWRIE_MOTD_TELLS = ("The programs included with the Debian GNU/Linux system are free software",)
 
 UNAME_HOST_RE = re.compile(r"^Linux\s+\S+\s+")

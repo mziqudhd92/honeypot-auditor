@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 
 
 async def open_connection(
@@ -37,9 +38,7 @@ async def tcp_transact_async(
             return data, ""
         finally:
             writer.close()
-            try:
+            with suppress(Exception):
                 await writer.wait_closed()
-            except Exception:
-                pass
     except (OSError, asyncio.TimeoutError) as exc:
         return b"", str(exc)

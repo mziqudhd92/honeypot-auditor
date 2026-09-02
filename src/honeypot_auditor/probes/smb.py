@@ -198,7 +198,9 @@ def _smb_session_failure_indicator(host: str, port: int, exc: Exception | str) -
                 detail="SMB framing anomaly (not a silent accept)",
             ),
         ]
-    raw, _ = tcp_transact(host, port, b"", recv_first=True, timeout=min(2.0, settings.timeout_seconds))
+    raw, _ = tcp_transact(
+        host, port, b"", recv_first=True, timeout=min(2.0, settings.timeout_seconds)
+    )
     smb_listener = bool(raw) and (raw[:1] == b"\x00" or b"SMB" in raw[:64])
     if not smb_listener:
         return skip_suite(

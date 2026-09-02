@@ -61,7 +61,7 @@ def configure_requests_proxy() -> dict[str, str]:
         return {}
     url = normalize_proxy_url(
         settings.proxy_url,
-        "0.0.0.0",
+        "127.0.0.1",
         allow_local_dns=settings.proxy_allow_local_dns,
     )
     return {"http": url, "https": url}

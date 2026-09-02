@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from contextlib import suppress
 
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.sshutil import random_creds, ssh_exec, try_ssh_auth
@@ -32,7 +33,10 @@ def probe_os_coherence(host: str, port: int) -> list[Indicator]:
             ("uname", "uname -a"),
             ("proc_version", "cat /proc/version 2>/dev/null"),
             ("os_release", "cat /etc/os-release 2>/dev/null | head -5"),
-            ("cpuinfo", "grep -E 'model name|hypervisor|vendor_id' /proc/cpuinfo 2>/dev/null | head -6"),
+            (
+                "cpuinfo",
+                "grep -E 'model name|hypervisor|vendor_id' /proc/cpuinfo 2>/dev/null | head -6",
+            ),
             ("self_exe", "readlink /proc/self/exe 2>/dev/null"),
             ("dmi", "cat /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor 2>/dev/null"),
             ("netdev", "cat /proc/net/dev 2>/dev/null | head -8"),
@@ -42,10 +46,8 @@ def probe_os_coherence(host: str, port: int) -> list[Indicator]:
             if not exec_err and out:
                 artifacts[key] = out
     finally:
-        try:
+        with suppress(Exception):
             client.close()
-        except Exception:
-            pass
 
     mismatches: list[str] = []
     uname = artifacts.get("uname", "")
@@ -64,7 +66,11 @@ def probe_os_coherence(host: str, port: int) -> list[Indicator]:
         if "ubuntu" in uname.lower() and "ubuntu" not in os_release.lower() and os_release:
             mismatches.append("uname mentions Ubuntu but /etc/os-release does not")
 
-    if "hypervisor" in cpuinfo.lower() and "qemu" not in uname.lower() and "vmware" not in uname.lower():
+    if (
+        "hypervisor" in cpuinfo.lower()
+        and "qemu" not in uname.lower()
+        and "vmware" not in uname.lower()
+    ):
         # Real VMs often disclose; scrubbed cpuinfo on bare-metal claim is suspicious.
         if "model name" in cpuinfo.lower():
             mismatches.append("hypervisor flag in /proc/cpuinfo with non-VM uname")

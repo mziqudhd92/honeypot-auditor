@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from honeypot_auditor.probes.recon import nmap_scan, shodan_lookup
+from honeypot_auditor.probes.recon import _http_get, nmap_scan, shodan_lookup
 
 
 def test_shodan_skipped_without_api_key():
@@ -20,8 +20,35 @@ def test_shodan_skipped_on_private_ip():
     assert "RFC1918" in inds[0].skip_reason or "loopback" in inds[0].skip_reason.lower()
 
 
+def test_passive_intel_http_rejects_non_https_and_unapproved_hosts():
+    with patch("honeypot_auditor.probes.recon.urlopen") as mock_open:
+        for url in (
+            "http://api.shodan.io/labs/honeyscore/8.8.8.8",
+            "https://api.shodan.io.evil.invalid/labs/honeyscore/8.8.8.8",
+            "file:///etc/passwd",
+        ):
+            body, err = _http_get(url, {"key": "synthetic"})
+            assert body == ""
+            assert "allowlist" in err
+        mock_open.assert_not_called()
+
+
+def test_passive_intel_http_allows_only_shodan_https_endpoint():
+    response = MagicMock()
+    response.status = 200
+    response.read.return_value = b"0.25"
+    response.__enter__.return_value = response
+    with patch("honeypot_auditor.probes.recon.urlopen", return_value=response) as mock_open:
+        body, err = _http_get("https://api.shodan.io/labs/honeyscore/8.8.8.8", {"key": "synthetic"})
+    assert (body, err) == ("0.25", "")
+    assert mock_open.call_count == 1
+
+
 @patch("honeypot_auditor.probes.recon._honeyscore", return_value=(0.85, ""))
-@patch("honeypot_auditor.probes.recon._host_lookup", return_value=({"tags": ["honeypot"], "data": []}, ""))
+@patch(
+    "honeypot_auditor.probes.recon._host_lookup",
+    return_value=({"tags": ["honeypot"], "data": []}, ""),
+)
 def test_shodan_honeyscore_and_tag_hit(mock_lookup, mock_score):
     inds = shodan_lookup("8.8.8.8", "fake-key")
     by_id = {i.id: i for i in inds}

@@ -21,7 +21,8 @@ SHODAN_HOST_URL = "https://api.shodan.io/shodan/host/{ip}"
 SHODAN_SCORE_THRESHOLD = 0.6
 
 PROBE_USERNAME_TEMPLATE = "user_a{n}"
-PROBE_PASSWORD_TEMPLATE = "pass_z{n}"
+# Synthetic, per-run probe input; never an operator or service credential.
+PROBE_PASSWORD_TEMPLATE = "pass_z{n}"  # nosec B105  # pragma: allowlist secret
 FTP_PROBE_PREFIX = "hpaudit_"
 FTP_PROBE_BODY = b"hpaudit-state-probe\n"
 REDIS_PROBE_KEY_PREFIX = "hpaudit_"

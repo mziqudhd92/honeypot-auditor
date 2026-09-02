@@ -154,7 +154,10 @@ def test_http_framework_404_session_triggered(mock_tcp):
 
 @patch.object(http, "tcp_transact")
 def test_http_admin_path_login_skin_after_404(mock_tcp):
-    mock_tcp.return_value = (b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n", "")
+    mock_tcp.return_value = (
+        b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+        "",
+    )
     requests_mod = MagicMock()
     root = MagicMock()
     root.status_code = 404

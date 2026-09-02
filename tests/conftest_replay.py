@@ -57,11 +57,16 @@ def replay_socket(monkeypatch):
 
     def _install(name: str):
         spec = _load(name)
-        response = bytes.fromhex(spec["response_hex"])
+        session_specs = iter(spec.get("sessions", [spec]))
 
         def fake_connect(addr, timeout=None):
             _ = (addr, timeout)
-            return ReplaySocket(response, recv_first=spec.get("recv_first", False))
+            session = next(session_specs)
+            if "response_text" in session:
+                response = session["response_text"].encode("latin-1")
+            else:
+                response = bytes.fromhex(session["response_hex"])
+            return ReplaySocket(response, recv_first=session.get("recv_first", False))
 
         monkeypatch.setattr(socket, "create_connection", fake_connect)
 

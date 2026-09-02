@@ -1,0 +1,11 @@
+{
+  "connect": "127.0.0.1:110",
+  "sessions": [
+    { "response_text": "+OK mail ready\r\n+OK bye\r\n" },
+    { "response_text": "+OK mail ready\r\n-ERR authenticate first\r\n" },
+    { "response_text": "+OK mail ready\r\n-ERR authenticate first\r\n" },
+    { "response_text": "+OK mail ready\r\n-ERR unknown command\r\n" },
+    { "response_text": "+OK mail ready\r\n+OK user accepted\r\n-ERR invalid login\r\n" },
+    { "response_text": "+OK mail ready\r\n-ERR no such user\r\n" }
+  ]
+}

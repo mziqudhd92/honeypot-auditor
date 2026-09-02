@@ -60,8 +60,14 @@ def _handshake_ok(banner="SSH-2.0-OpenSSH_9.2p1 Debian"):
     return banner, None, banner.encode() + b"\r\n", ""
 
 
-@patch.object(ssh, "probe_ssh_auth_methods", return_value=(["publickey", "password"], "SSH-2.0-OpenSSH_5.1p1 Debian-5", ""))
-@patch.object(ssh, "_capture_ssh_handshake", return_value=_handshake_ok("SSH-2.0-OpenSSH_5.1p1 Debian-5"))
+@patch.object(
+    ssh,
+    "probe_ssh_auth_methods",
+    return_value=(["publickey", "password"], "SSH-2.0-OpenSSH_5.1p1 Debian-5", ""),
+)
+@patch.object(
+    ssh, "_capture_ssh_handshake", return_value=_handshake_ok("SSH-2.0-OpenSSH_5.1p1 Debian-5")
+)
 @patch.object(ssh, "try_ssh_auth", return_value=(None, "auth failed"))
 @patch.object(ssh, "_ssh_exec", side_effect=_ssh_exec_dispatch)
 @patch.object(ssh, "optional_import")
@@ -103,7 +109,9 @@ def test_ssh_connection_error(mock_import, mock_hs, mock_methods):
     assert all(i.skipped for i in inds)
 
 
-@patch.object(ssh, "probe_ssh_auth_methods", return_value=(["password"], "SSH-2.0-OpenSSH_8.9p1", ""))
+@patch.object(
+    ssh, "probe_ssh_auth_methods", return_value=(["password"], "SSH-2.0-OpenSSH_8.9p1", "")
+)
 @patch.object(ssh, "_capture_ssh_handshake", return_value=_handshake_ok("SSH-2.0-OpenSSH_8.9p1"))
 @patch.object(ssh, "try_ssh_auth", return_value=(None, "auth failed"))
 @patch.object(ssh, "_ssh_exec", side_effect=_ssh_exec_dispatch)
@@ -121,17 +129,26 @@ def test_ssh_password_only_auth_tell(mock_import, mock_exec, mock_auth2, mock_hs
     inds = ssh.probe_ssh("127.0.0.1", 22)
     by_id = {i.id: i for i in inds}
     assert by_id["ssh.password_only"].triggered
-    assert "password-only" in by_id["ssh.password_only"].detail.lower() or "only password" in by_id["ssh.password_only"].detail.lower()
+    assert (
+        "password-only" in by_id["ssh.password_only"].detail.lower()
+        or "only password" in by_id["ssh.password_only"].detail.lower()
+    )
 
 
-@patch.object(ssh, "probe_ssh_auth_methods", return_value=(["publickey", "password"], "SSH-2.0-OpenSSH_9.2p1", ""))
+@patch.object(
+    ssh,
+    "probe_ssh_auth_methods",
+    return_value=(["publickey", "password"], "SSH-2.0-OpenSSH_9.2p1", ""),
+)
 @patch.object(ssh, "_capture_ssh_handshake", return_value=_handshake_ok())
 @patch.object(ssh, "random_creds", side_effect=[("user_a15", "pw1"), ("user_a99", "pw2")])
 @patch.object(ssh, "try_ssh_auth", return_value=(None, "auth failed"))
 @patch.object(ssh, "_ssh_interactive", return_value=COWRIE_SHELL)
 @patch.object(ssh, "_ssh_exec", return_value="(exec failed: Channel closed.)")
 @patch.object(ssh, "optional_import")
-def test_ssh_exec_denied_and_cowrie_hostname(mock_import, mock_exec, mock_shell, mock_auth2, mock_creds, mock_hs, mock_methods):
+def test_ssh_exec_denied_and_cowrie_hostname(
+    mock_import, mock_exec, mock_shell, mock_auth2, mock_creds, mock_hs, mock_methods
+):
     paramiko = MagicMock()
     mock_import.return_value = paramiko
     client = MagicMock()
@@ -154,7 +171,11 @@ def test_ssh_exec_denied_and_cowrie_hostname(mock_import, mock_exec, mock_shell,
     assert by_id["ssh.session_persist"].skipped
 
 
-@patch.object(ssh, "probe_ssh_auth_methods", return_value=(["publickey", "password"], "SSH-2.0-OpenSSH_9.2p1", ""))
+@patch.object(
+    ssh,
+    "probe_ssh_auth_methods",
+    return_value=(["publickey", "password"], "SSH-2.0-OpenSSH_9.2p1", ""),
+)
 @patch.object(ssh, "_capture_ssh_handshake", return_value=_handshake_ok())
 @patch.object(ssh, "try_ssh_auth")
 @patch.object(ssh, "_ssh_exec", side_effect=_ssh_exec_dispatch)

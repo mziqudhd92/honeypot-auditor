@@ -29,12 +29,13 @@ from honeypot_auditor.config import (
     probe_port_map,
 )
 from honeypot_auditor.models import AuditReport, Indicator
+from honeypot_auditor.plugins.intel import run_intel_provider, validate_intel_provider_name
 from honeypot_auditor.probes import PROBE_BY_PROTOCOL
 from honeypot_auditor.probes.deep import run_deep_probes
 from honeypot_auditor.probes.recon import nmap_scan, shodan_lookup
 from honeypot_auditor.reporters.console import render, render_subnet_summary
 from honeypot_auditor.reporters.json_export import export, export_nmap_exclude, export_subnet
-from honeypot_auditor.reporters.sarif import export_sarif
+from honeypot_auditor.reporters.sarif import export_sarif, export_sarif_many
 from honeypot_auditor.settings import ProbeProfile, settings
 from honeypot_auditor.signatures.evaluate import evaluate_signatures
 from honeypot_auditor.transport import _apply_jitter, get_transport_manager
@@ -90,6 +91,25 @@ def _stamp_port(indicators: list[Indicator], proto: str, port: int) -> list[Indi
     return indicators
 
 
+def _constant_indicators(indicators: list[Indicator]) -> Callable[[], list[Indicator]]:
+    def result() -> list[Indicator]:
+        return indicators
+
+    return result
+
+
+def _port_probe_job(
+    probe: Callable[[str, int], list[Indicator]],
+    host: str,
+    port: int,
+    protocol: str,
+) -> Callable[[], list[Indicator]]:
+    def run() -> list[Indicator]:
+        return _stamp_port(probe(host, port), protocol, port)
+
+    return run
+
+
 def _port_note(ports: dict[str, list[int]]) -> str:
     bits = []
     for proto in PROTOCOL_STRATEGIES:
@@ -122,7 +142,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.environ.get("SHODAN_API_KEY", ""),
         help="Shodan API key (or set SHODAN_API_KEY)",
     )
-    p.add_argument("--output", default="", help="JSON report path (default: honeypot-audit-<ip>.json)")
+    p.add_argument(
+        "--intel-provider",
+        action="append",
+        default=[],
+        type=validate_intel_provider_name,
+        metavar="NAME",
+        help="Run a named passive-intel plugin (explicit opt-in; repeatable)",
+    )
+    p.add_argument(
+        "--intel-key",
+        action="append",
+        default=[],
+        metavar="NAME=KEY",
+        help="Provider API key; prefer HONEYPOT_AUDITOR_INTEL_<NAME>_KEY",
+    )
+    p.add_argument("--output", default="", help="Report path (default: honeypot-audit-<ip>.json)")
     p.add_argument(
         "--preset",
         default=DEFAULT_PORT_PRESET,
@@ -136,7 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="PORT",
         dest="extra_ports",
-        help="Only these TCP ports (nmap-style; repeatable or 22,2222). 22→ssh, 80→http; unknown numbers probed as SSH. Omit to use --preset",
+        help="Only these TCP ports (nmap-style; repeatable or 22,2222). 22->ssh, 80->http; unknown numbers probed as SSH. Omit to use --preset",
     )
     p.add_argument(
         "--ports",
@@ -315,7 +350,9 @@ def _format_job_error(exc: BaseException, *, timeout: float) -> str:
     return f"{name}: {msg}" if msg else name
 
 
-async def _run_named(name: str, fn: Callable[[], list[Indicator]], progress, task_id) -> list[Indicator]:
+async def _run_named(
+    name: str, fn: Callable[[], list[Indicator]], progress, task_id
+) -> list[Indicator]:
     _apply_jitter()
     mgr = get_transport_manager()
     timeout = _job_timeout_seconds(name)
@@ -362,11 +399,12 @@ def _build_notes(
     if ports:
         notes.append(f"ports {_port_note(ports)}")
     if public_target and args.confirm_authorized:
-        notes.append(
-            "Public target: operator asserted authorization via --confirm-authorized."
-        )
+        notes.append("Public target: operator asserted authorization via --confirm-authorized.")
     if not args.with_nmap:
         notes.append("Nmap omitted by default; pass --with-nmap / -n for -sV/NSE tells.")
+    providers = list(dict.fromkeys(getattr(args, "intel_provider", []) or []))
+    if providers:
+        notes.append(f"Opt-in passive intelligence providers: {', '.join(providers)}")
     if args.deep:
         notes.append("Deep mode: co-tenancy requires corroboration from another emulator tell.")
     if subnet:
@@ -381,12 +419,12 @@ def _resolve_dual_stack(target: str) -> tuple[list[str], list[str]]:
     ipv6: list[str] = []
     try:
         for info in socket.getaddrinfo(target, None, socket.AF_INET):
-            ipv4.append(info[4][0])
+            ipv4.append(str(info[4][0]))
     except OSError:
         pass
     try:
         for info in socket.getaddrinfo(target, None, socket.AF_INET6):
-            ipv6.append(info[4][0])
+            ipv6.append(str(info[4][0]))
     except OSError:
         pass
     return list(dict.fromkeys(ipv4)), list(dict.fromkeys(ipv6))
@@ -409,6 +447,23 @@ def _passive_score_high(indicators: list[Indicator]) -> bool:
     return open_protocols >= 8
 
 
+def _parse_intel_keys(values: list[str]) -> dict[str, str]:
+    keys: dict[str, str] = {}
+    for value in values:
+        name, separator, key = value.partition("=")
+        if not separator or not key:
+            raise ValueError("--intel-key expects NAME=KEY")
+        keys[validate_intel_provider_name(name)] = key
+    return keys
+
+
+def _intel_key(args: argparse.Namespace, provider: str, keys: dict[str, str]) -> str:
+    if provider in keys:
+        return keys[provider]
+    env_name = "HONEYPOT_AUDITOR_INTEL_" + re.sub(r"[^A-Z0-9]", "_", provider.upper()) + "_KEY"
+    return os.environ.get(env_name, "")
+
+
 def _probe_jobs(
     ip: str,
     ports: dict[str, list[int]],
@@ -417,25 +472,34 @@ def _probe_jobs(
     include_shodan: bool,
 ) -> list[tuple[str, Callable[[], list[Indicator]]]]:
     jobs: list[tuple[str, Callable[[], list[Indicator]]]] = []
-    shodan_inds: list[Indicator] | None = None
+    passive_inds: list[Indicator] = []
     if include_shodan:
-        shodan_inds = shodan_lookup(ip, args.shodan_key or None)
-        jobs.append(("shodan", lambda s=shodan_inds: s))
+        intel_keys = _parse_intel_keys(getattr(args, "intel_key", []) or [])
+        providers = list(dict.fromkeys(getattr(args, "intel_provider", []) or []))
+        shodan_key = args.shodan_key or _intel_key(args, "shodan", intel_keys)
+        shodan_inds = shodan_lookup(ip, shodan_key or None)
+        passive_inds.extend(shodan_inds)
+        jobs.append(("shodan", _constant_indicators(shodan_inds)))
+        for provider in providers:
+            if provider == "shodan":
+                continue
+            provider_inds = run_intel_provider(
+                provider,
+                ip,
+                _intel_key(args, provider, intel_keys) or None,
+            )
+            passive_inds.extend(provider_inds)
+            jobs.append((f"intel:{provider}", _constant_indicators(provider_inds)))
     if settings.osint_only:
         return jobs
-    if settings.passive_first and include_shodan and shodan_inds is not None:
-        if _passive_score_high(shodan_inds):
+    if settings.passive_first and include_shodan:
+        if _passive_score_high(passive_inds):
             return jobs
     if args.with_nmap and not settings.osint_only:
         jobs.append(("nmap", lambda: nmap_scan(ip, ports)))
     for proto, fn in PROBE_BY_PROTOCOL.items():
         for port in ports.get(proto, []):
-            jobs.append(
-                (
-                    f"{proto}:{port}",
-                    lambda f=fn, p=port, pr=proto: _stamp_port(f(ip, p), pr, p),
-                )
-            )
+            jobs.append((f"{proto}:{port}", _port_probe_job(fn, ip, port, proto)))
     if args.deep and not getattr(args, "safe_mode", False):
         jobs.append(("deep", lambda: run_deep_probes(ip, ports)))
     return jobs
@@ -467,7 +531,9 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     _normalize_preset_alias(args)
     settings.deep = bool(args.deep) and not safe
     settings.safe_mode = safe
-    settings.profile = ProbeProfile.SAFE if safe else ProbeProfile(getattr(args, "profile", "audit"))
+    settings.profile = (
+        ProbeProfile.SAFE if safe else ProbeProfile(getattr(args, "profile", "audit"))
+    )
     settings.proxy_url = getattr(args, "proxy", "") or ""
     settings.proxy_allow_local_dns = bool(getattr(args, "proxy_allow_local_dns", False))
     settings.passive_first = bool(getattr(args, "passive_first", False))
@@ -477,6 +543,7 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.seed = getattr(args, "seed", None)
     settings.signature_pack = getattr(args, "signature_pack", "core")
     settings.output_format = getattr(args, "format", "json")
+    _parse_intel_keys(getattr(args, "intel_key", []) or [])
     # Deep suite runs many probes; keep a floor so --timeout 3 does not kill it at 5s.
     settings.deep_timeout_seconds = max(90.0, float(args.timeout) * 4.0)
     jitter = float(getattr(args, "jitter", 0.0) or 0.0)
@@ -493,7 +560,7 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
 def _write_report(report: AuditReport, args: argparse.Namespace, ip: str, console) -> Path:
     out = args.output or f"honeypot-audit-{ip.replace(':', '_')}.json"
     if args.format == "sarif":
-        sarif_path = out if out.endswith(".sarif") else out.replace(".json", ".sarif")
+        sarif_path = str(Path(out).with_suffix(".sarif"))
         dest = export_sarif(report, sarif_path)
     else:
         dest = export(report, out)
@@ -521,16 +588,25 @@ async def _audit_dual_stack(
     reports: dict[str, AuditReport] = {}
     if v4:
         reports["ipv4"] = await _audit_host(
-            v4, args, ports, include_shodan=True,
-            capabilities=capabilities, capability_warnings=capability_warnings,
+            v4,
+            args,
+            ports,
+            include_shodan=True,
+            capabilities=capabilities,
+            capability_warnings=capability_warnings,
         )
     if v6:
         reports["ipv6"] = await _audit_host(
-            v6, args, ports, include_shodan=False,
-            capabilities=capabilities, capability_warnings=capability_warnings,
+            v6,
+            args,
+            ports,
+            include_shodan=False,
+            capabilities=capabilities,
+            capability_warnings=capability_warnings,
         )
     primary = reports.get("ipv4") or reports.get("ipv6")
-    assert primary is not None
+    if primary is None:
+        raise RuntimeError("dual-stack audit produced no address-family report")
     dual: dict = {}
     for key, rep in reports.items():
         dual[key] = {
@@ -582,10 +658,13 @@ async def _audit_host(
     capabilities: dict | None = None,
     capability_warnings: list | None = None,
     target: str | None = None,
+    jobs: list[tuple[str, Callable[[], list[Indicator]]]] | None = None,
 ) -> AuditReport:
     started = datetime.now(timezone.utc).isoformat()
-    notes = _build_notes(args, subnet=False, public_target=not is_private_or_loopback(ip), ports=ports)
-    jobs = _probe_jobs(ip, ports, args, include_shodan=include_shodan)
+    notes = _build_notes(
+        args, subnet=False, public_target=not is_private_or_loopback(ip), ports=ports
+    )
+    jobs = jobs if jobs is not None else _probe_jobs(ip, ports, args, include_shodan=include_shodan)
 
     indicators: list[Indicator] = []
     if progress is not None and task_id is not None:
@@ -742,6 +821,7 @@ async def run_audit(args: argparse.Namespace) -> int:
                 capabilities=cap_dict,
                 capability_warnings=cap_warnings,
                 target=args.target,
+                jobs=jobs,
             )
         render(report, console=console, verbose=args.verbose)
         _write_report(report, args, ip, console)
@@ -755,16 +835,19 @@ async def run_audit(args: argparse.Namespace) -> int:
         for note in notes:
             console.print(f"[dim]{note}[/dim]")
     out = _subnet_output_path(args.target, args.output)
-    dest = export_subnet(
-        target=args.target,
-        reports=reports,
-        path=out,
-        notes=notes,
-        started_at=started,
-        finished_at=finished,
-    )
+    if args.format == "sarif":
+        dest = export_sarif_many(reports, Path(out).with_suffix(".sarif"))
+    else:
+        dest = export_subnet(
+            target=args.target,
+            reports=reports,
+            path=out,
+            notes=notes,
+            started_at=started,
+            finished_at=finished,
+        )
     if args.verbose:
-        console.print(f"[dim]JSON written to {dest}[/dim]")
+        console.print(f"[dim]{args.format.upper()} written to {dest}[/dim]")
     return 0
 
 

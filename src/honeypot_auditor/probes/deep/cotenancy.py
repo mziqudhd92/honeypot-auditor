@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+from collections.abc import Mapping
 
 from honeypot_auditor.config import EXTENDED_PROBE_PORTS, as_port_list
 from honeypot_auditor.models import Indicator
@@ -15,6 +16,7 @@ _BUFFET_PROTOCOLS = (
     "telnet",
     "ftp",
     "http",
+    "pop3",
     "smb",
     "redis",
     "smtp",
@@ -52,13 +54,14 @@ def _has_service_banner(host: str, port: int, proto: str) -> bool:
     if proto == "ftp":
         raw, _ = tcp_transact(host, port, b"", recv_first=True, timeout=1.5)
         return raw.startswith(b"220")
+    if proto == "pop3":
+        raw, _ = tcp_transact(host, port, b"", recv_first=True, timeout=1.5)
+        return raw.startswith(b"+OK")
     if proto == "telnet":
         raw, _ = tcp_transact(host, port, b"", recv_first=True, timeout=1.5)
         return bool(raw)
     if proto == "redis":
-        raw, _ = tcp_transact(
-            host, port, b"*1\r\n$4\r\nPING\r\n", recv_first=False, timeout=1.5
-        )
+        raw, _ = tcp_transact(host, port, b"*1\r\n$4\r\nPING\r\n", recv_first=False, timeout=1.5)
         return b"+PONG" in raw or b"-NOAUTH" in raw or b"-ERR" in raw
     if proto == "smtp":
         raw, _ = tcp_transact(host, port, b"", recv_first=True, timeout=1.5)
@@ -97,7 +100,9 @@ def _has_service_banner(host: str, port: int, proto: str) -> bool:
     return _port_open(host, port)
 
 
-def probe_cotenancy(host: str, ports: dict[str, int | list[int]], corroboration: bool = False) -> list[Indicator]:
+def probe_cotenancy(
+    host: str, ports: Mapping[str, int | list[int]], corroboration: bool = False
+) -> list[Indicator]:
     """
     Flag implausible multi-service honeypot buffets.
 

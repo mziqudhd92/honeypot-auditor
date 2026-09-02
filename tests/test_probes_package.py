@@ -16,14 +16,15 @@ def test_probe_registry_covers_all_basic_protocols():
         "smtp",
         "vnc",
         "sip",
-            "mysql",
-            "postgres",
-            "git",
-            "rdp",
-            "httpproxy",
-            "mssql",
-            "mongodb",
-        }
+        "mysql",
+        "pop3",
+        "postgres",
+        "git",
+        "rdp",
+        "httpproxy",
+        "mssql",
+        "mongodb",
+    }
     assert PROBE_BY_PROTOCOL["ssh"] is probe_ssh
 
 

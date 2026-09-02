@@ -12,6 +12,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "telnet": 23,
     "smtp": 25,
     "http": 80,
+    "pop3": 110,
     "smb": 445,
     "sip": 5060,
     "vnc": 5900,
@@ -31,6 +32,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "telnet": 2323,
     "smtp": 2525,
     "http": 8081,
+    "pop3": 1110,
     "smb": 1445,
     "sip": 5060,
     "vnc": 5000,
@@ -126,7 +128,9 @@ def protocol_for_port(port: int) -> str:
     return WELL_KNOWN_PORT_PROTOCOLS.get(int(port), "ssh")
 
 
-def as_port_list(value: int | list[int] | tuple[int, ...] | None, default: int | list[int] | None = None) -> list[int]:
+def as_port_list(
+    value: int | list[int] | tuple[int, ...] | None, default: int | list[int] | None = None
+) -> list[int]:
     if value is None:
         value = default
     if value is None:

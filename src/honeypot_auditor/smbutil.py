@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 import threading
+from contextlib import suppress
 from typing import Any
 
 _NTLM_HOOK_LOCK = threading.Lock()
@@ -55,8 +56,8 @@ def capture_ntlm_challenge(host: str, port: int, *, timeout: int) -> dict[str, A
                 conn.login("Guest", "hpaudit-invalid")
             except _AbortAuth:
                 pass
-            except Exception:
-                pass
+            except Exception as exc:
+                meta["login_error"] = str(exc)
             try:
                 meta["native_os"] = str(conn.getServerOS() or "")
             except Exception:
@@ -67,10 +68,8 @@ def capture_ntlm_challenge(host: str, port: int, *, timeout: int) -> dict[str, A
         finally:
             ntlm.getNTLMSSPType3 = real_type3
             if conn is not None:
-                try:
+                with suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
 
 
 def collect_ntlm_challenges(host: str, port: int, *, timeout: int, count: int = 2) -> list[bytes]:
@@ -92,14 +91,18 @@ def probe_bogus_pipe(host: str, port: int, *, timeout: int) -> tuple[int | None,
     conn = None
     try:
         conn = SMBConnection(host, host, sess_port=port, timeout=timeout)
+        login_error = ""
         for user, password in (("", ""), ("Guest", "")):
             try:
                 conn.login(user, password)
                 break
-            except Exception:
-                continue
+            except Exception as exc:
+                login_error = str(exc)
         else:
-            return None, "no SMB session for pipe probe", False
+            detail = "no SMB session for pipe probe"
+            if login_error:
+                detail += f" ({login_error})"
+            return None, detail, False
 
         ipc = f"\\\\{host}\\IPC$"
         tid = conn.connectTree(ipc)
@@ -118,22 +121,16 @@ def probe_bogus_pipe(host: str, port: int, *, timeout: int) -> tuple[int | None,
             code = exc.get_error_code()
             return code, f"NTSTATUS 0x{code:08X}", False
         finally:
-            try:
+            with suppress(Exception):
                 conn.disconnectTree(tid)
-            except Exception:
-                pass
     except Exception as exc:
         return None, str(exc), False
     finally:
         if conn is not None:
-            try:
+            with suppress(Exception):
                 conn.logoff()
-            except Exception:
-                pass
-            try:
+            with suppress(Exception):
                 conn.close()
-            except Exception:
-                pass
 
 
 def smb_connection_summary(host: str, port: int, *, timeout: int) -> dict[str, Any]:
@@ -145,23 +142,24 @@ def smb_connection_summary(host: str, port: int, *, timeout: int) -> dict[str, A
     out: dict[str, Any] = {"dialect": "", "native_os": "", "shares": []}
     try:
         conn = SMBConnection(host, host, sess_port=port, timeout=timeout)
+        login_error = ""
         for user, password in (("", ""), ("Guest", "")):
             try:
                 conn.login(user, password)
                 break
-            except Exception:
-                continue
+            except Exception as exc:
+                login_error = str(exc)
         else:
-            out["login_error"] = "session not established"
+            out["login_error"] = login_error or "session not established"
             return out
         try:
             out["dialect"] = str(conn.getDialect() or "")
-        except Exception:
-            pass
+        except Exception as exc:
+            out["dialect_error"] = str(exc)
         try:
             out["native_os"] = str(conn.getServerOS() or "")
-        except Exception:
-            pass
+        except Exception as exc:
+            out["native_os_error"] = str(exc)
         try:
             shares = []
             for share in conn.listShares() or []:
@@ -171,22 +169,18 @@ def smb_connection_summary(host: str, port: int, *, timeout: int) -> dict[str, A
                 if name:
                     shares.append(str(name).rstrip("\x00"))
             out["shares"] = shares
-        except Exception:
-            pass
+        except Exception as exc:
+            out["shares_error"] = str(exc)
         return out
     except Exception as exc:
         out["login_error"] = str(exc)
         return out
     finally:
         if conn is not None:
-            try:
+            with suppress(Exception):
                 conn.logoff()
-            except Exception:
-                pass
-            try:
+            with suppress(Exception):
                 conn.close()
-            except Exception:
-                pass
 
 
 def smb_negotiate_facts(host: str, port: int, *, timeout: int) -> dict[str, Any]:
@@ -210,7 +204,5 @@ def smb_negotiate_facts(host: str, port: int, *, timeout: int) -> dict[str, Any]
         return {"error": str(exc)}
     finally:
         if conn is not None:
-            try:
+            with suppress(Exception):
                 conn.close()
-            except Exception:
-                pass

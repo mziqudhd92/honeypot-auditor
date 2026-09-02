@@ -26,7 +26,7 @@ HIGH_SIGNAL_BONUS_PCT = 15.0
 BASIC_STRATEGIES: tuple[str, ...] = ("arbitrary_auth", "state_nonpersist", "static_signature")
 
 STRATEGY_LABELS: dict[str, str] = {
-    "shodan": "Shodan intel",
+    "shodan": "Passive intel (Shodan / plugins)",
     "arbitrary_auth": "Arbitrary auth",
     "state_nonpersist": "State non-persistence",
     "static_signature": "Static signature",
@@ -64,6 +64,11 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "arbitrary_auth": "",
         "state_nonpersist": "",
         "static_signature": "empty PUT 405 · GET / → index.html login skin · 407 Via localhost",
+    },
+    "pop3": {
+        "arbitrary_auth": "two random USER/PASS pairs",
+        "state_nonpersist": "STAT/NOOP before authentication",
+        "static_signature": "+OK greeting framing · unknown-command rejection",
     },
     "smb": {
         "arbitrary_auth": "",
@@ -135,7 +140,6 @@ EXTENDED_PROBE_PORTS: dict[str, int] = {
     "snmp": 161,
     "dns": 15353,
     "ipp": 631,
-    "pop": 1110,
 }
 
 COTENANCY_CORROBORATION_CATEGORIES = frozenset(

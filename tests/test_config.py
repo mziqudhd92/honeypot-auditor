@@ -36,6 +36,7 @@ def test_probe_port_map_both_includes_iana_and_lab():
     ports = probe_port_map("both")
     assert ports["ssh"] == [22, 2222]
     assert ports["http"] == [80, 8081, 443]
+    assert ports["pop3"] == [110, 1110]
     assert ports["ftp"] == [21, 2121]
     assert ports["telnet"] == [23, 2323]
     assert ports["smtp"] == [25, 2525]
@@ -63,9 +64,10 @@ def test_probe_port_map_dash_p_is_exclusive():
 def test_probe_port_map_dash_p_maps_protocols():
     from honeypot_auditor.config import probe_port_map
 
-    ports = probe_port_map("iana", extra_ports=[2222, 8080, 2200])
+    ports = probe_port_map("iana", extra_ports=[2222, 8080, 110, 2200])
     assert ports["ssh"] == [2222, 2200]
     assert ports["httpproxy"] == [8080]
+    assert ports["pop3"] == [110]
     assert "ftp" not in ports
 
 
@@ -234,7 +236,9 @@ def test_match_smtp_placeholder_identity():
 
     assert match_smtp_placeholder_identity("220 localhost ESMTP")
     assert match_smtp_placeholder_identity("250 ip-127-0-0-1.internal")
-    assert match_smtp_placeholder_identity("220 ip-172-31-91-21.ec2.internal NO UCE NO RELAY PROBES ESMTP")
+    assert match_smtp_placeholder_identity(
+        "220 ip-172-31-91-21.ec2.internal NO UCE NO RELAY PROBES ESMTP"
+    )
     assert match_smtp_placeholder_identity("220 mail.example.com ESMTP Postfix") is None
     assert match_smtp_lost_envelope(250, 503, "Must have sender before recipient")
     assert match_smtp_lost_envelope(250, 550, "relay denied") is None
@@ -277,7 +281,9 @@ def test_match_nmap_service_tell_unknown_and_lures():
     from honeypot_auditor.config import match_nmap_service_tell
 
     assert match_nmap_service_tell({"name": "tcpwrapped"}) is None
-    assert match_nmap_service_tell({"name": "ssh", "product": "OpenSSH", "version": "8.9p1"}) is None
+    assert (
+        match_nmap_service_tell({"name": "ssh", "product": "OpenSSH", "version": "8.9p1"}) is None
+    )
     assert match_nmap_service_tell({"name": "telnet", "product": "", "version": ""})
     smtp_fp = match_nmap_service_tell(
         {"name": "smtp", "product": "", "servicefp": "SF-Port2525-TCP:V=7.99"}
@@ -377,7 +383,9 @@ def test_match_extra_protocol_class_tells():
     assert match_vnc_vncauth_only(b"\x01\x02")
     assert match_vnc_auth_fail(b"\x00\x00\x00\x01\x00\x00\x00\x16Authentication failure")
     assert match_vnc_auth_fail(b"\x00\x00\x00\x00") is None
-    assert match_redis_auth_wall("-ERR invalid password\r\n", "-NOAUTH Authentication required.\r\n")
+    assert match_redis_auth_wall(
+        "-ERR invalid password\r\n", "-NOAUTH Authentication required.\r\n"
+    )
     assert match_redis_auth_wall("-WRONGPASS invalid password\r\n", "*1\r\n$3\r\nget\r\n") is None
     from honeypot_auditor.config import (
         claimed_os_from_banner,
@@ -399,5 +407,3 @@ def test_match_extra_protocol_class_tells():
     assert match_smtp_extension_monotone(
         [("VRFY", 250, "ok"), ("EXPN", 250, "ok"), ("ETRN", 250, "ok"), ("STARTTLS", 250, "ok")]
     )
-
-

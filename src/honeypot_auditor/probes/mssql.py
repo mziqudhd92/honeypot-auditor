@@ -27,11 +27,7 @@ _MSSQL_SKIP = (
 )
 
 # Minimal TLS ClientHello record — shallow TDS lures only check the leading 0x16 byte.
-_TLS_CLIENT_HELLO = bytes.fromhex(
-    "16030100200100001c0303"
-    + "00" * 32
-    + "0000000200130100"
-)
+_TLS_CLIENT_HELLO = bytes.fromhex("16030100200100001c0303" + "00" * 32 + "0000000200130100")
 
 
 def _tds_packet(pkt_type: int, payload: bytes, *, status: int = 1) -> bytes:
@@ -57,8 +53,7 @@ def _tds_client_prelogin() -> bytes:
         b"\x02\x00\x1c\x00\x01"
         b"\x03\x00\x1d\x00\x04"
         b"\x04\x00\x21\x00\x01"
-        b"\xff"
-        + data
+        b"\xff" + data
     )
     return _tds_packet(0x12, options)
 

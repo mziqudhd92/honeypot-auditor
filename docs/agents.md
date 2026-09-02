@@ -36,8 +36,8 @@ honeypot-auditor --version
 Editable from clone:
 
 ```bash
-pip install -e ".[full,dev]"
-make test-cov && make lint
+pip install -e ".[full,dev,security]"
+make test-cov && make lint && make security
 ```
 
 ## Canonical CLI patterns
@@ -47,18 +47,22 @@ make test-cov && make lint
 honeypot-auditor --help
 
 # Local lab
-honeypot-auditor --target 127.0.0.1 --skip-nmap
+honeypot-auditor --target 127.0.0.1
 
 # Deep
-honeypot-auditor --target 127.0.0.1 --skip-nmap --deep --timeout 5
+honeypot-auditor --target 127.0.0.1 --deep --timeout 5
 
 # Subnet sweep (max /24; Shodan skipped per-host; parallel default 8)
 honeypot-auditor --target 192.168.1.0/24 \
-  --skip-nmap --scan-concurrency 16 --confirm-authorized \
+  --scan-concurrency 16 --confirm-authorized \
   --output /tmp/subnet-audit.json
 
 # SSH on 22 only (does not scan the rest of the preset)
 honeypot-auditor --target HOST -p 22 --confirm-authorized
+
+# Passive provider; installed providers remain inert until named
+HONEYPOT_AUDITOR_INTEL_EXAMPLE_KEY=... \
+  honeypot-auditor --target HOST --intel-provider example --osint-only --confirm-authorized
 
 # Dionaea-style multi-service (no SSH)
 honeypot-auditor --target HOST \
@@ -74,7 +78,8 @@ honeypot-auditor --target HOST \
 | 30–59% | Suspected Honeypot |
 | ≥ 60% | Confirmed Honeypot |
 
-Single-host JSON: `target`, `resolved_ip`, `score`, `threat_level`, `indicators`.
+Single-host JSON: `schema_version`, `target`, `resolved_ip`, `score`, `score_breakdown`,
+`threat_level`, and `indicators`. Indicator records include explicit status and provenance.
 
 Subnet JSON: `scan_type: subnet`, `summary[]` (per-IP scores), `hosts[]` (full per-host reports).
 

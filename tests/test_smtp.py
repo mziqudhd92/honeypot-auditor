@@ -111,5 +111,3 @@ def test_smtp_extension_monotone(mock_import):
     by_id = {i.id: i for i in inds}
     assert by_id["smtp.extensions"].triggered
     assert "250" in by_id["smtp.extensions"].detail
-
-

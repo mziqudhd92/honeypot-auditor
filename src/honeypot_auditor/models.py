@@ -49,13 +49,32 @@ class Indicator:
         self.tell_tier = _as_text(self.tell_tier) or "origin"
 
     def as_dict(self) -> dict:
+        status = (
+            "skipped"
+            if self.skipped
+            else "suppressed"
+            if self.suppressed
+            else "triggered"
+            if self.triggered
+            else "clear"
+        )
+        if self.protocol.startswith("intel:"):
+            provenance = {"kind": "passive-intel-plugin", "provider": self.protocol[6:]}
+        elif self.protocol == "shodan":
+            provenance = {"kind": "passive-intel", "provider": "shodan"}
+        elif self.protocol == "nmap":
+            provenance = {"kind": "external-binary", "provider": "nmap"}
+        else:
+            provenance = {"kind": "built-in", "provider": "honeypot-auditor"}
         return {
             "id": self.id,
             "title": self.title,
             "category": self.category,
             "triggered": self.triggered,
+            "status": status,
             "detail": self.detail,
             "protocol": self.protocol,
+            "provenance": provenance,
             "evidence": self.evidence,
             "skipped": self.skipped,
             "skip_reason": self.skip_reason,
@@ -113,6 +132,7 @@ class AuditReport:
     tactical_rationale: str = ""
     deception_leaks: list[dict] = field(default_factory=list)
     dual_stack: dict = field(default_factory=dict)
+    score_breakdown: dict = field(default_factory=dict)
 
     def triggered(self) -> list[Indicator]:
         return [i for i in self.indicators if i.triggered and not i.skipped and not i.suppressed]

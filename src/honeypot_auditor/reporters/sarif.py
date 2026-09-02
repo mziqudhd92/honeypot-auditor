@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 from honeypot_auditor import __version__
 from honeypot_auditor.models import AuditReport, Indicator
@@ -21,7 +23,12 @@ def _indicator_level(ind: Indicator) -> str:
     return "note"
 
 
-def _indicator_result(ind: Indicator) -> dict:
+def _fingerprint(target: str, rule_id: str) -> str:
+    return hashlib.sha256(f"{target}\0{rule_id}".encode()).hexdigest()
+
+
+def _indicator_result(ind: Indicator, artifact_uri: str, target: str) -> dict:
+    serialized = ind.as_dict()
     return {
         "ruleId": ind.id,
         "level": _indicator_level(ind),
@@ -29,22 +36,27 @@ def _indicator_result(ind: Indicator) -> dict:
         "locations": [
             {
                 "physicalLocation": {
-                    "artifactLocation": {"uri": f"probe://{ind.protocol or 'unknown'}"},
+                    "artifactLocation": {"uri": artifact_uri},
                 }
             }
         ],
+        "partialFingerprints": {"primaryLocationLineHash": _fingerprint(target, ind.id)},
         "properties": {
             "category": ind.category,
             "triggered": ind.triggered,
             "suppressed": ind.suppressed,
             "remediation": ind.remediation,
             "evidence": ind.evidence[:500],
+            "protocol": ind.protocol,
+            "provenance": serialized["provenance"],
         },
     }
 
 
 def build_sarif(report: AuditReport) -> dict:
-    triggered = [i for i in report.indicators if i.triggered and not i.skipped]
+    triggered = report.triggered()
+    target = report.resolved_ip or report.target
+    artifact_uri = f"targets/{quote(target, safe='')}.txt"
     rules = []
     seen: set[str] = set()
     for ind in triggered:
@@ -59,7 +71,7 @@ def build_sarif(report: AuditReport) -> dict:
                 "fullDescription": {"text": ind.remediation or ind.title},
             }
         )
-    results = [_indicator_result(i) for i in triggered]
+    results = [_indicator_result(i, artifact_uri, target) for i in triggered]
     if not results:
         summary_id = "honeypot-auditor.summary"
         rules.append(
@@ -82,15 +94,10 @@ def build_sarif(report: AuditReport) -> dict:
                         f"(confidence={report.confidence}, tactical={report.tactical_action})"
                     )
                 },
-                "locations": [
-                    {
-                        "physicalLocation": {
-                            "artifactLocation": {
-                                "uri": f"target://{report.resolved_ip or report.target}"
-                            }
-                        }
-                    }
-                ],
+                "locations": [{"physicalLocation": {"artifactLocation": {"uri": artifact_uri}}}],
+                "partialFingerprints": {
+                    "primaryLocationLineHash": _fingerprint(target, summary_id)
+                },
                 "properties": {
                     "category": "info",
                     "triggered": False,
@@ -115,7 +122,10 @@ def build_sarif(report: AuditReport) -> dict:
                 },
                 "results": results,
                 "properties": {
+                    "report_schema_version": "1.0",
                     "honeyscore": report.score,
+                    "score_breakdown": report.score_breakdown,
+                    "threat_level": report.threat_level,
                     "confidence": report.confidence,
                     "tactical_action": report.tactical_action,
                     "target": report.target,
@@ -130,4 +140,20 @@ def export_sarif(report: AuditReport, path: str | Path) -> Path:
     dest = Path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(build_sarif(report), indent=2) + "\n", encoding="utf-8")
+    return dest
+
+
+def build_sarif_many(reports: list[AuditReport]) -> dict:
+    """Return one SARIF run per audited host."""
+    return {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": _SARIF_VERSION,
+        "runs": [build_sarif(report)["runs"][0] for report in reports],
+    }
+
+
+def export_sarif_many(reports: list[AuditReport], path: str | Path) -> Path:
+    dest = Path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(build_sarif_many(reports), indent=2) + "\n", encoding="utf-8")
     return dest

@@ -30,10 +30,7 @@ def load_plugins() -> ProbeRegistry:
         return dict(_registry)
 
     loaded = dict(_registry)
-    try:
-        eps = entry_points(group="honeypot_auditor.plugins")
-    except TypeError:
-        eps = entry_points().get("honeypot_auditor.plugins", [])
+    eps = entry_points(group="honeypot_auditor.plugins")
     for ep in eps:
         try:
             register = ep.load()

@@ -15,7 +15,7 @@ honeypot-auditor is a Python CLI that fingerprints whether a host behaves like a
 
 | Concept | Meaning |
 |---------|---------|
-| Basic probes | Shodan intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB |
+| Basic probes | Passive intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/POP3/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB |
 | Subnet scan | IPv4 CIDR up to `/24` (254 hosts); `--scan-concurrency`; combined JSON report |
 | Deep mode (`--deep`) | Shell semantics, OS coherence, HASSH/TCP stack, protocol FSM, co-tenancy, temporal (serial + concurrent-load latency)/egress |
 | CLI UX | Figlet `H0N3YP0T-AUD1T0R` header; `-h` / `--help` / `/help`; Rich-styled help text |
@@ -47,13 +47,13 @@ pip install -e ".[full,dev]"
 honeypot-auditor --help
 
 # Default (IANA + lab ports: ssh 22+2222, http 80+8081, …)
-honeypot-auditor --target 127.0.0.1 --skip-nmap
+honeypot-auditor --target 127.0.0.1
 
 # Deep audit
-honeypot-auditor --target 127.0.0.1 --skip-nmap --deep
+honeypot-auditor --target 127.0.0.1 --deep
 
 # Subnet sweep (max /24; Shodan skipped; default 8 parallel hosts)
-honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 --confirm-authorized \
+honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16 --confirm-authorized \
   --output subnet-report.json
 
 # SSH 22 only
@@ -82,7 +82,7 @@ Close unused preset ports by mapping them to a closed port (e.g. `=9`) so they a
 
 ## Scoring (claim-honest)
 
-Basic categories: Shodan 25%, arbitrary auth 30%, state non-persistence 25%, static signature 20%, co-tenancy 15%. Different categories stack. Multi-protocol corroboration: +5% per protocol with a basic-strategy hit from the 2nd protocol up (max +35%). Co-tenancy (≥5 protocol lures) needs corroboration. Default console prints the score panel only; pass `-v` for strategy breakdown and per-protocol HIT/clean/skip/— matrix. JSON always includes `protocol_strategies`. When nmap is enabled, every open preset port is version-scanned; `tcpwrapped` is ignored.
+Basic categories: passive intel 25%, arbitrary auth 30%, state non-persistence 25%, static signature 20%, co-tenancy 15%. Different categories stack. Multi-protocol corroboration: +5% per protocol with a basic-strategy hit from the 2nd protocol up (max +35%). Co-tenancy (≥5 protocol lures) needs corroboration. Default console prints the score panel only; pass `-v` for strategy breakdown and per-protocol HIT/clean/skip/— matrix. Versioned JSON includes `score_breakdown`, `protocol_strategies`, and indicator status/provenance. When nmap is enabled, every open preset port is version-scanned; `tcpwrapped` is ignored.
 Deep adds behavior 18%, coherence 15%, stack 12%, proto FSM 12%, temporal 10% (does not invent catch rates).
 
 Verdict bands:
@@ -103,6 +103,7 @@ Default (`--preset both`) probes IANA **and** docker/lab ports. Closed ports are
 | FTP | 21 | 2121 | 21 + 2121 |
 | Telnet | 23 | 2323 | 23 + 2323 |
 | SMTP | 25 | 2525 | 25 + 2525 |
+| POP3 | 110 | 1110 | 110 + 1110 |
 | SMB | 445 | 1445 | 445 + 1445 |
 | SIP | 5060 | 5060 | 5060 |
 | VNC | 5900 | 5000 | 5900 + 5000 |
@@ -124,10 +125,12 @@ Default (`--preset both`) probes IANA **and** docker/lab ports. Closed ports are
 - `-p`, `--port 22` — only these TCP ports (nmap-style; repeatable or `22,2222`)
 - `--ports ssh=2222,http=8081` — map unused protocols to `=9` to skip
 - `--shodan-key` / `SHODAN_API_KEY` (skipped automatically on subnet scans)
+- `--intel-provider NAME` — explicitly select a passive-intel plugin (repeatable)
+- `--intel-key NAME=KEY` — provider key; prefer `HONEYPOT_AUDITOR_INTEL_<NAME>_KEY`
 - `--output report.json` — subnet default: `honeypot-audit-subnet-<cidr>.json`
 - `--confirm-authorized` (required if any scanned IP is public)
 - `-v`, `--verbose` — strategy breakdown, per-protocol matrix, indicator table, why-this-score, run notes (default is score panel only)
-- `--skip-nmap`
+- `-n`, `--with-nmap` — opt in to Nmap version/NSE checks
 - `--deep`
 - `--timeout SECS` (default 3)
 
@@ -135,6 +138,7 @@ Default (`--preset both`) probes IANA **and** docker/lab ports. Closed ports are
 
 ```json
 {
+  "schema_version": "1.0",
   "scan_type": "subnet",
   "target": "192.168.1.0/24",
   "host_count": 254,

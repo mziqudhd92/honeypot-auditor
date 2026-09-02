@@ -28,21 +28,46 @@ from honeypot_auditor.probes.shell_cti import (
 
 _TELNET_SKIP = (
     ("telnet.banner", "Telnet pre-auth banner matches a known lure template", "static_signature"),
-    ("telnet.iac_negotiate", "Telnet IAC accepts unknown options or resets on AUTH/NAWS", "static_signature"),
+    (
+        "telnet.iac_negotiate",
+        "Telnet IAC accepts unknown options or resets on AUTH/NAWS",
+        "static_signature",
+    ),
     ("telnet.arbitrary_auth", "Telnet arbitrary credential acceptance", "arbitrary_auth"),
     ("telnet.auth_lure", "Telnet canned auth reject (fake login FSM)", "state_nonpersist"),
     ("telnet.uname", "Telnet uname/cpuinfo / Cowrie identity", "static_signature"),
     ("telnet.whoami", "Telnet whoami/prompt is the random lure account", "static_signature"),
-    ("telnet.session_persist", "Telnet filesystem does not persist across sessions", "state_nonpersist"),
+    (
+        "telnet.session_persist",
+        "Telnet filesystem does not persist across sessions",
+        "state_nonpersist",
+    ),
 )
 
 # IAC WILL 99, IAC DO AUTH (37), IAC SB AUTH, IAC SB NAWS 80x24.
 _IAC_PROBE = bytes(
     [
-        255, 251, 99,
-        255, 253, 37,
-        255, 250, 37, 0, 255, 240,
-        255, 250, 31, 0, 80, 0, 24, 255, 240,
+        255,
+        251,
+        99,
+        255,
+        253,
+        37,
+        255,
+        250,
+        37,
+        0,
+        255,
+        240,
+        255,
+        250,
+        31,
+        0,
+        80,
+        0,
+        24,
+        255,
+        240,
     ]
 )
 
@@ -53,14 +78,21 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
     user, password = random_creds()
     user2, password2 = random_creds()
     canary = secrets.token_hex(4)
-    canary_path = f"/tmp/hpaudit_{canary}"
+    # This is a path on the explicitly authorized remote target, not a local temp file.
+    canary_path = f"/tmp/hpaudit_{canary}"  # nosec B108
     banner_raw, banner_err = tcp_transact(host, port, _IAC_PROBE, recv_first=True)
     banner_text = _telnet_text(banner_raw)
     if banner_err and not banner_raw:
-        return skip_suite(_TELNET_SKIP, closed_reason(banner_err), protocol="telnet", error=banner_err)
+        return skip_suite(
+            _TELNET_SKIP, closed_reason(banner_err), protocol="telnet", error=banner_err
+        )
 
     auth_ok, session_out, auth_err = _telnet_login_and_probe(
-        host, port, user, password, extra_cmds=(f"echo {canary} > {canary_path}", f"cat {canary_path}")
+        host,
+        port,
+        user,
+        password,
+        extra_cmds=(f"echo {canary} > {canary_path}", f"cat {canary_path}"),
     )
     if auth_err and not banner_raw and not auth_ok:
         return skip_suite(_TELNET_SKIP, closed_reason(auth_err), protocol="telnet", error=auth_err)
@@ -83,7 +115,11 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
     whoami_hit = bool(auth_ok and whoami_matches_lure(session_out, user))
     auth_detail = (
         f"random {user}:**** accepted"
-        + (f"; 2nd login {user2}:**** also accepted" if auth2_ok else "; 2nd random login not accepted")
+        + (
+            f"; 2nd login {user2}:**** also accepted"
+            if auth2_ok
+            else "; 2nd random login not accepted"
+        )
         if auth_ok
         else f"random {user}:**** not accepted"
     )
@@ -105,7 +141,7 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
             triggered=bool(iac_hit),
             protocol="telnet",
             detail=iac_hit or "unknown option 99 declined (WONT/DONT) or ignored",
-            evidence=banner_raw[:200],
+            evidence=banner_raw[:200].decode("utf-8", "replace"),
         ),
         Indicator(
             id="telnet.arbitrary_auth",
@@ -184,7 +220,11 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
             detail=(
                 f"wrote {canary_path} then new login could not read it"
                 if persist_missing
-                else (f"canary {canary} still present after reconnect" if auth2_ok else "2nd session failed")
+                else (
+                    f"canary {canary} still present after reconnect"
+                    if auth2_ok
+                    else "2nd session failed"
+                )
             ),
             evidence=session2[:400],
         )
@@ -246,9 +286,17 @@ def _telnet_login_and_probe(
 
 def _looks_like_shell(text: str) -> bool:
     low = (text or "").lower()
-    if any(x in low for x in ("login incorrect", "authentication failed", "access denied", "wrong password")):
+    if any(
+        x in low
+        for x in ("login incorrect", "authentication failed", "access denied", "wrong password")
+    ):
         return False
-    if match_uname_signature(text) or match_cowrie_identity(text) or "processor\t:" in low or "processor :" in low:
+    if (
+        match_uname_signature(text)
+        or match_cowrie_identity(text)
+        or "processor\t:" in low
+        or "processor :" in low
+    ):
         return True
     if re.search(r"user_a\d+@", text or ""):
         return True
@@ -277,11 +325,7 @@ def _probe_telnet_safe(host: str, port: int) -> list[Indicator]:
                 match_telnet_banner(banner_text) or match_telnet_cowrie_preamble(banner_raw)
             ),
             protocol="telnet",
-            detail=(
-                match_telnet_cowrie_preamble(banner_raw)
-                or banner_text[:240]
-                or "(no banner)"
-            ),
+            detail=(match_telnet_cowrie_preamble(banner_raw) or banner_text[:240] or "(no banner)"),
         ),
         Indicator(
             id="telnet.iac_negotiate",

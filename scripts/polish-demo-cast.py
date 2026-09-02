@@ -144,8 +144,7 @@ def main() -> int:
     raw_dur = float(events[-1][0]) if events else 0.0
     new_dur = float(polished[-1][0]) if polished else 0.0
     print(
-        f"polished {args.input.name}: {raw_dur:.1f}s → {new_dur:.1f}s "
-        f"({len(polished)} events)",
+        f"polished {args.input.name}: {raw_dur:.1f}s → {new_dur:.1f}s ({len(polished)} events)",
         file=sys.stderr,
     )
     return 0

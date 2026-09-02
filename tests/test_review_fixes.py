@@ -100,12 +100,7 @@ def test_evaluate_signatures_fires_from_http_evidence():
 
 
 def test_passive_score_high_buffet_and_open_ports():
-    host_info = {
-        "data": [
-            {"product": "Cowrie", "port": p}
-            for p in range(1, 9)
-        ]
-    }
+    host_info = {"data": [{"product": "Cowrie", "port": p} for p in range(1, 9)]}
     port_inds = _shodan_port_indicators(host_info)
     assert _passive_score_high(port_inds)
 
@@ -182,7 +177,9 @@ def test_dual_stack_mismatch_rebuilds_score():
     async def fake_audit(ip, _args, _ports, **kwargs):
         if ":" not in ip:
             indicators = [
-                Indicator(id="arbitrary_auth.t", title="a", category="arbitrary_auth", triggered=True),
+                Indicator(
+                    id="arbitrary_auth.t", title="a", category="arbitrary_auth", triggered=True
+                ),
                 Indicator(id="state.t", title="s", category="state_nonpersist", triggered=True),
                 Indicator(id="static.t", title="s", category="static_signature", triggered=True),
             ]
@@ -199,7 +196,9 @@ def test_dual_stack_mismatch_rebuilds_score():
             deep=False,
         )
 
-    with patch("honeypot_auditor.cli._resolve_dual_stack", return_value=(["203.0.113.1"], ["2001:db8::1"])):
+    with patch(
+        "honeypot_auditor.cli._resolve_dual_stack", return_value=(["203.0.113.1"], ["2001:db8::1"])
+    ):
         with patch("honeypot_auditor.cli._audit_host", side_effect=fake_audit):
             report = asyncio.run(_audit_dual_stack("example.com", args, ports))
     assert any(i.id == "info.ip_version_mismatch" for i in report.triggered())

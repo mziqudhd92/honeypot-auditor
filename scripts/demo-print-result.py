@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Plain-English summary for demo recordings."""
+
 from __future__ import annotations
 
 import json

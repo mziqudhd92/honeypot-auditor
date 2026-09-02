@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import socket
+from contextlib import suppress
 
 from honeypot_auditor.config import claimed_os_from_banner, match_tls_stock_cert
 from honeypot_auditor.hassh import capture_server_kexinit, find_kexinit_payload, hassh_algo_mismatch
@@ -120,7 +121,7 @@ def probe_tcp_stack(host: str, port: int, claimed_os: str = "linux") -> list[Ind
     raw_ok = getattr(caps, "raw_sockets", False) if caps else False
 
     if raw_ok:
-        try:
+        with suppress(Exception):
             scapy = __import__("scapy.all", fromlist=["IP", "TCP", "sr1"])
             IP = scapy.IP
             TCP = scapy.TCP
@@ -131,10 +132,6 @@ def probe_tcp_stack(host: str, port: int, claimed_os: str = "linux") -> list[Ind
                 ttl_hint = str(getattr(resp, "ttl", ""))
                 window_hint = str(getattr(getattr(resp, "payload", None), "window", ""))
                 synack_opts = _parse_synack_options(resp)
-        except ImportError:
-            pass
-        except Exception:
-            pass
 
     indicators: list[Indicator] = []
     triggered = False
@@ -260,10 +257,8 @@ def probe_tls_stack(host: str, port: int) -> list[Indicator]:
                 )
             ]
     elif not raw or not (ja3s or ja4s):
-        try:
+        with suppress(Exception):
             cert_text, cipher1, cipher2, version = _stdlib_cert_peek(host, port)
-        except Exception:
-            pass
 
     cn_hit = match_tls_stock_cert(cert_text)
     stable = cipher1 == cipher2 if cipher1 and cipher2 else True
@@ -358,10 +353,8 @@ def probe_tls_wildcard_sni(host: str, port: int) -> list[Indicator]:
         err = str(exc)
     finally:
         if tls is not None:
-            try:
+            with suppress(Exception):
                 tls.close()
-            except Exception:
-                pass
 
     if not handshake_ok:
         return [

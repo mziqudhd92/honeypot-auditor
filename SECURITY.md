@@ -39,7 +39,10 @@ It is for authorized defensive research, lab validation, and purple-team work on
 - JSON reports and console output may contain **target banners, command output,
   and probe usernames** (never passwords). Treat `--output` files as sensitive.
 - Shodan API keys are read from `--shodan-key` or `SHODAN_API_KEY` and sent only
-  to Shodan's API for the resolved target IP.
+  to an allowlisted HTTPS Shodan API host for the resolved target IP.
+- Other passive-intel providers run only after an explicit `--intel-provider NAME`.
+  Prefer `HONEYPOT_AUDITOR_INTEL_<NAME>_KEY` over `--intel-key NAME=KEY` so keys
+  do not enter shell history. Provider errors are redacted before logging or export.
 
 ### Deep mode (`--deep`)
 
@@ -63,14 +66,32 @@ It is for authorized defensive research, lab validation, and purple-team work on
 
 ### Passive-first / OSINT (`--passive-first`, `--osint-only`)
 
-- `--osint-only` runs Shodan intel only — no TCP probes.
-- `--passive-first` skips active probes when passive Shodan score is high.
+- `--osint-only` runs passive intel only — no TCP probes.
+- `--passive-first` skips active probes when the passive score is high.
 - Does not replace `--confirm-authorized` for public targets.
+
+### Passive-intel plugin boundary
+
+- Installed providers are inert until selected by exact, validated name.
+- Only the selected entry point is imported, and it runs once for the resolved host.
+- Providers may emit only the passive-intel or informational category; they cannot
+  escalate findings into arbitrary-authentication or active-probe categories.
+- Provider packages execute third-party Python code. Install only reviewed packages
+  from a trusted source and grant each key the minimum provider-side permissions.
+
+### POP3 probe safety
+
+- POP3 checks greeting framing, pre-authentication command state, unknown-command
+  handling, and two independent synthetic login pairs.
+- After a synthetic login is accepted, it sends `QUIT`. It never sends `LIST`, `RETR`,
+  `TOP`, `DELE`, or other commands that read or modify a maildrop.
 
 ### External binaries
 
 - Optional **Nmap** integration executes the host `nmap` binary. Use a trusted
   installation on CI runners and operator workstations.
+- On Windows, raw-socket probes can require Npcap and an elevated terminal. Missing
+  capabilities are reported and the affected probes are skipped rather than guessed.
 
 ### TLS lure profiles
 
@@ -90,4 +111,5 @@ It is for authorized defensive research, lab validation, and purple-team work on
 
 - No exploit payloads or SMTP DATA exfiltration.
 - Shodan lookups skipped on private addresses.
+- Passive-intel plugins are off unless named explicitly.
 - Probe artifacts (FTP uploads, Redis keys) are deleted when possible.

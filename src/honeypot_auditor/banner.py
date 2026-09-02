@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
+
 from rich.console import Console
 from rich.text import Text
 
 from honeypot_auditor import __version__
 
 HEADER_TEXT = "H-AUDITOR"
-TAGLINE = (
-    "authorized targets only · banner/state probes · no exploits · no SMTP DATA"
-)
+TAGLINE = "authorized targets only · banner/state probes · no exploits · no SMTP DATA"
 # Compact fonts first — keep the banner to a few lines in normal terminals.
 FIGLET_FONTS = ("small", "standard", "slant", "digital")
 
@@ -27,13 +27,11 @@ def render_header_text() -> str:
         return _PLAIN_HEADER
 
     for font in FIGLET_FONTS:
-        try:
+        with suppress(Exception):
             art = Figlet(font=font, width=120).renderText(HEADER_TEXT).rstrip("\n")
             # Reject layouts that wrap into a tall block (old H0N3YP0T-AUD1T0R problem).
             if art.count("\n") <= 6:
                 return art
-        except Exception:
-            continue
     return HEADER_TEXT
 
 

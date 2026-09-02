@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import secrets
+from contextlib import suppress
 
 from honeypot_auditor.config import (
     FTP_LURE_ACCOUNTS,
@@ -43,9 +44,11 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
 
     welcome = ""
     user_resp = ""
-    pass_resp = ""
+    # This is a protocol response buffer, not a credential.
+    pass_resp = ""  # nosec B105
     login_user = ""
-    login_pass = ""
+    # This holds only the auditor's synthetic probe credential.
+    login_pass = ""  # nosec B105
     auth_kind = ""
     auth_user = ""
     pasv_private = False
@@ -61,12 +64,13 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
     upload_err = ""
 
     try:
-        ftp = ftplib.FTP()
+        # FTP is intentionally the protocol under audit; only synthetic credentials are used.
+        ftp = ftplib.FTP()  # nosec B321
         ftp.connect(host, port, timeout=settings.timeout_seconds)
         welcome = ftp.getwelcome() or ""
         desert_hit, desert_evidence = _ftp_desert_probe(ftp)
-        ftp, welcome, login_ok, auth_kind, login_user, login_pass, user_resp, pass_resp = _ftp_walk_auth(
-            ftplib, host, port, ftp, welcome
+        ftp, welcome, login_ok, auth_kind, login_user, login_pass, user_resp, pass_resp = (
+            _ftp_walk_auth(ftplib, host, port, ftp, welcome)
         )
         auth_user = login_user
         if not login_ok:
@@ -103,15 +107,11 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
         except Exception as exc:
             cmd_tells.append(f"PASV error: {exc}")
 
-        try:
+        with suppress(Exception):
             ftp.sendcmd("FEAT")
-        except Exception:
-            pass
 
-        try:
+        with suppress(Exception):
             syst_line = ftp.sendcmd("SYST")
-        except Exception:
-            pass
 
         try:
             bounce_resp = str(ftp.sendcmd("PORT 8,8,8,8,0,53") or "")
@@ -123,10 +123,8 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
             bounce_attempted = True
             cmd_tells.append(f"PORT {closed_reason(str(exc))}")
 
-        try:
+        with suppress(Exception):
             ftp.sendcmd("REST 0")
-        except Exception:
-            pass
 
         for cmd in ("NLST", "MLSD"):
             try:
@@ -141,10 +139,8 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
         except Exception:
             cmd_tells.append("TYPE A rejected")
 
-        try:
+        with suppress(Exception):
             ftp.sendcmd("TYPE I")
-        except Exception:
-            pass
 
         _ftp_cwd_probe_dir(ftp)
         for _ in range(2):
@@ -207,14 +203,13 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
     persisted_any = False
     verify_notes: list[str] = []
     try:
-        ftp2 = ftplib.FTP()
+        # FTP is intentionally the protocol under audit; only synthetic credentials are used.
+        ftp2 = ftplib.FTP()  # nosec B321
         ftp2.connect(host, port, timeout=settings.timeout_seconds)
         _ftp_login(ftp2, login_user, login_pass)
         ftp2.timeout = settings.timeout_seconds
-        try:
+        with suppress(Exception):
             ftp2.sendcmd("TYPE I")
-        except Exception:
-            pass
         _ftp_cwd_probe_dir(ftp2)
         for name in upload_names:
             try:
@@ -238,15 +233,10 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
                 verify_notes.append("LIST shows uploaded name")
         except Exception as exc:
             verify_notes.append(f"LIST failed ({exc})")
-        try:
-            for name in upload_names:
-                if persisted_any:
-                    try:
-                        ftp2.delete(name)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+        for name in upload_names:
+            if persisted_any:
+                with suppress(Exception):
+                    ftp2.delete(name)
         ftp2.quit()
     except Exception as exc:
         if pasv_private or not upload_ok:
@@ -293,7 +283,11 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
         )
 
     fake_upload_surface = pasv_private or (not upload_ok and bool(upload_names))
-    non_persist = fake_upload_surface or (upload_ok and not persisted_any) or (bool(upload_names) and not persisted_any)
+    non_persist = (
+        fake_upload_surface
+        or (upload_ok and not persisted_any)
+        or (bool(upload_names) and not persisted_any)
+    )
     persist_detail = "; ".join(
         x
         for x in [
@@ -333,7 +327,8 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
 
 
 def _ftp_open(ftplib, host: str, port: int):
-    ftp = ftplib.FTP()
+    # FTP is intentionally the protocol under audit; only synthetic credentials are used.
+    ftp = ftplib.FTP()  # nosec B321
     ftp.connect(host, port, timeout=settings.timeout_seconds)
     ftp.timeout = settings.timeout_seconds
     return ftp, ftp.getwelcome() or ""
@@ -343,10 +338,8 @@ def _ftp_close(ftp) -> None:
     try:
         ftp.quit()
     except Exception:
-        try:
+        with suppress(Exception):
             ftp.close()
-        except Exception:
-            pass
 
 
 def _ftp_walk_auth(ftplib, host: str, port: int, ftp, welcome: str):
@@ -358,7 +351,8 @@ def _ftp_walk_auth(ftplib, host: str, port: int, ftp, welcome: str):
         *(("lure", u, p) for u, p in FTP_LURE_ACCOUNTS),
     ]
     user_blob = ""
-    pass_blob = ""
+    # This is a protocol response transcript, not a credential.
+    pass_blob = ""  # nosec B105
     for kind, user, password in attempts:
         if ftp is None:
             ftp, w = _ftp_open(ftplib, host, port)
@@ -376,12 +370,15 @@ def _ftp_walk_auth(ftplib, host: str, port: int, ftp, welcome: str):
 
 def _ftp_session_dead(user_resp: str, pass_resp: str) -> bool:
     blob = f"{user_resp} {pass_resp}".lower()
-    return any(t in blob for t in ("timed out", "reset", "not connected", "eof", "421", "broken pipe"))
+    return any(
+        t in blob for t in ("timed out", "reset", "not connected", "eof", "421", "broken pipe")
+    )
 
 
 def _ftp_try_login(ftp, user: str, password: str) -> tuple[str, str, bool]:
     user_resp = ""
-    pass_resp = ""
+    # This is a protocol response buffer, not a credential.
+    pass_resp = ""  # nosec B105
     try:
         user_resp = str(ftp.sendcmd(f"USER {user}"))
     except Exception as exc:
@@ -394,7 +391,12 @@ def _ftp_try_login(ftp, user: str, password: str) -> tuple[str, str, bool]:
         return user_resp, str(exc), False
 
 
-def _ftp_login(ftp, username: str = "", password: str = "") -> None:
+def _ftp_login(
+    ftp,
+    username: str = "",
+    # The default is an optional synthetic probe input, never a shipped credential.
+    password: str = "",  # nosec B107
+) -> None:
     if username:
         ftp.login(username, password)
         return
@@ -406,11 +408,9 @@ def _ftp_login(ftp, username: str = "", password: str = "") -> None:
 
 def _ftp_cwd_probe_dir(ftp) -> None:
     for path in ("incoming", "/incoming", "/"):
-        try:
+        with suppress(Exception):
             ftp.cwd(path)
             return
-        except Exception:
-            continue
 
 
 def _ftp_banner_hit(
@@ -520,7 +520,9 @@ def _ftp_banner_indicator(
         detail_parts.append(str(syst_line).strip()[:80])
     if cmd_tells:
         detail_parts.append("; ".join(cmd_tells[:3]))
-    detail = " | ".join(p for p in detail_parts if p) or (closed_reason(str(exc)) if exc else "(no welcome)")
+    detail = " | ".join(p for p in detail_parts if p) or (
+        closed_reason(str(exc)) if exc else "(no welcome)"
+    )
     if welcome or hit:
         return Indicator(
             id="ftp.banner",
@@ -541,7 +543,9 @@ def _ftp_banner_indicator(
     )
 
 
-def _ftp_auth_lure_indicator(user_resp: str, pass_resp: str, *, exc: Exception | None = None) -> Indicator:
+def _ftp_auth_lure_indicator(
+    user_resp: str, pass_resp: str, *, exc: Exception | None = None
+) -> Indicator:
     hit = match_ftp_auth_lure(user_resp, pass_resp)
     transcript = f"{user_resp}\n{pass_resp}".strip()
     if not transcript and not hit:
@@ -564,7 +568,12 @@ def _ftp_auth_lure_indicator(user_resp: str, pass_resp: str, *, exc: Exception |
     )
 
 
-def _ftp_arbitrary_auth_indicator(kind: str, user: str, password: str = "") -> Indicator:
+def _ftp_arbitrary_auth_indicator(
+    kind: str,
+    user: str,
+    # The default is an optional synthetic probe input, never a shipped credential.
+    password: str = "",  # nosec B107
+) -> Indicator:
     triggered = kind in {"random", "lure"}
     if kind == "lure":
         pw = "empty password" if not password else "****"
@@ -593,7 +602,8 @@ def _probe_ftp_safe(host: str, port: int) -> list[Indicator]:
         return skip_suite(_FTP_SKIP, "ftplib missing", protocol="ftp")
     welcome = ""
     try:
-        ftp = ftplib.FTP()
+        # FTP is intentionally the protocol under audit; only synthetic credentials are used.
+        ftp = ftplib.FTP()  # nosec B321
         ftp.connect(host, port, timeout=settings.timeout_seconds)
         welcome = ftp.getwelcome() or ""
         ftp.quit()

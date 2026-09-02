@@ -36,7 +36,7 @@ def parse_kexinit_payload(payload: bytes) -> SSHKexInit | None:
     if len(payload) < 17 or payload[0] != 20:
         return None
     reader = payload[17:]
-    lists = []
+    lists: list[str] = []
     while len(lists) < 8 and reader:
         if len(reader) < 4:
             return None
@@ -131,10 +131,18 @@ def hassh_algo_mismatch(banner: str, kex: SSHKexInit) -> tuple[bool, str]:
         p in kex.kex for p in _OPENSSH_KEX_PREFIXES[:2]
     )
     if twistedish and banner.startswith("SSH-2.0-OpenSSH"):
-        return True, f"banner claims OpenSSH_{version} but KEX order looks Twisted/Cowrie ({first_kex})"
-    if first_kex and not any(first_kex.startswith(p.split("-")[0]) or p in first_kex for p in _OPENSSH_KEX_PREFIXES):
+        return (
+            True,
+            f"banner claims OpenSSH_{version} but KEX order looks Twisted/Cowrie ({first_kex})",
+        )
+    if first_kex and not any(
+        first_kex.startswith(p.split("-")[0]) or p in first_kex for p in _OPENSSH_KEX_PREFIXES
+    ):
         if "group1-sha1" in first_kex or "group14-sha1" in first_kex:
-            return True, f"legacy-first KEX {first_kex} inconsistent with modern OpenSSH_{version} banner"
+            return (
+                True,
+                f"legacy-first KEX {first_kex} inconsistent with modern OpenSSH_{version} banner",
+            )
 
     facade_bits = _cowrie_facade_bits(version, kex)
     if len(facade_bits) >= 2:
@@ -158,7 +166,12 @@ def _cowrie_facade_bits(version: str, kex: SSHKexInit) -> list[str]:
     enc = kex.enc_s2c or ""
     mac = kex.mac_s2c or ""
     kex_algs = kex.kex or ""
-    if host_keys and host_keys[0] == "ssh-rsa" and "rsa-sha2-256" not in host_keys and "rsa-sha2-512" not in host_keys:
+    if (
+        host_keys
+        and host_keys[0] == "ssh-rsa"
+        and "rsa-sha2-256" not in host_keys
+        and "rsa-sha2-512" not in host_keys
+    ):
         bits.append("host_key prefers ssh-rsa without rsa-sha2-*")
     has_aead = "chacha20-poly1305" in enc or "aes128-gcm" in enc or "aes256-gcm" in enc
     has_legacy_enc = "3des-cbc" in enc or "aes128-cbc" in enc or "aes256-cbc" in enc
@@ -166,6 +179,9 @@ def _cowrie_facade_bits(version: str, kex: SSHKexInit) -> list[str]:
         bits.append("enc lacks AEAD (chacha20/gcm) but still offers CBC/3DES")
     if "etm@openssh.com" not in mac and "hmac-sha1" in mac:
         bits.append("MAC lacks *-etm@openssh.com")
-    if "diffie-hellman-group14-sha1" in kex_algs and "diffie-hellman-group-exchange-sha256" not in kex_algs:
+    if (
+        "diffie-hellman-group14-sha1" in kex_algs
+        and "diffie-hellman-group-exchange-sha256" not in kex_algs
+    ):
         bits.append("KEX includes group14-sha1 without group-exchange-sha256")
     return bits

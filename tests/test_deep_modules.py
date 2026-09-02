@@ -31,7 +31,9 @@ def test_shell_semantics_instant_sleep(mock_auth, mock_exec):
     assert inds[0].triggered
 
 
-@patch("honeypot_auditor.probes.deep.behavior.try_ssh_auth", return_value=(None, "Connection refused"))
+@patch(
+    "honeypot_auditor.probes.deep.behavior.try_ssh_auth", return_value=(None, "Connection refused")
+)
 def test_shell_semantics_skipped_on_auth_fail(mock_auth):
     inds = probe_shell_semantics("127.0.0.1", 22)
     assert inds[0].skipped
@@ -67,8 +69,7 @@ def test_os_coherence_kernel_mismatch(mock_auth, mock_exec):
 @patch("honeypot_auditor.probes.deep.fsm.tcp_transact")
 def test_http_fsm_duplicate_static_200(mock_tcp):
     body = (
-        b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
-        b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+        b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
     )
     mock_tcp.return_value = (body, "")
     inds = probe_http_fsm("127.0.0.1", 8080)
@@ -140,7 +141,9 @@ def test_smtp_fsm_open_relay_tell(mock_import):
 @patch("honeypot_auditor.probes.deep.temporal.tcp_transact")
 def test_latency_uniform_fast_responses(mock_tcp, mock_mono, mock_sleep):
     mock_tcp.return_value = (b"banner\r\n", "")
-    tick = iter([0.0, 0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.010, 0.011, 0.012])
+    tick = iter(
+        [0.0, 0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.010, 0.011, 0.012]
+    )
     mock_mono.side_effect = lambda: next(tick)
 
     inds = probe_latency_distribution("127.0.0.1", 22, samples=6)
@@ -186,7 +189,9 @@ def test_hassh_mismatch(mock_tcp, mock_capture, mock_mismatch):
     assert inds[0].triggered
 
 
-@patch("honeypot_auditor.probes.deep.stack.socket.create_connection", side_effect=OSError("refused"))
+@patch(
+    "honeypot_auditor.probes.deep.stack.socket.create_connection", side_effect=OSError("refused")
+)
 def test_tcp_stack_skipped(mock_connect):
     inds = probe_tcp_stack("127.0.0.1", 22)
     assert inds[0].skipped
@@ -206,7 +211,9 @@ def test_tcp_stack_scapy_missing(mock_connect):
     assert any(i.id == "deep.tcp_synack_options" and i.skipped for i in inds)
 
 
-@patch("honeypot_auditor.probes.deep.stack.socket.create_connection", side_effect=OSError("refused"))
+@patch(
+    "honeypot_auditor.probes.deep.stack.socket.create_connection", side_effect=OSError("refused")
+)
 def test_tls_skipped(mock_connect):
     inds = probe_tls_ja4s("127.0.0.1", 443)
     assert inds[0].skipped

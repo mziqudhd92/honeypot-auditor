@@ -53,7 +53,7 @@
         "url": "https://mziqudhd92.github.io/honeypot-auditor/",
         "downloadUrl": "https://pypi.org/project/honeypot-auditor/",
         "codeRepository": "https://github.com/mziqudhd92/honeypot-auditor",
-        "description": "Multi-protocol honeypot fingerprinter CLI. Non-destructive probes across SSH, Telnet, FTP, HTTP, SMB, Redis, SMTP, VNC, SIP plus optional Shodan Honeyscore and deep behavioral checks. Authorized targets only.",
+        "description": "Multi-protocol honeypot fingerprinter CLI. Non-destructive probes across SSH, Telnet, FTP, POP3, HTTP, SMB, Redis, SMTP, VNC, SIP and more, plus explicitly selected passive intelligence and deep behavioral checks. Authorized targets only.",
         "offers": {
           "@type": "Offer",
           "price": "0",
@@ -110,7 +110,7 @@
             "name": "Which protocols does honeypot-auditor support?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Sixteen protocol engines: SSH, Telnet, FTP, SMTP, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, and MongoDB. Each uses 1–3 basic detection strategies in the current release (33 strategy slots total). By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, and so on). -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
+              "text": "Seventeen protocol engines: SSH, Telnet, FTP, SMTP, POP3, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, and MongoDB. Each uses 1–3 basic detection strategies in the current release (36 strategy slots total). By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, and so on). -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
             }
           },
           {
@@ -141,12 +141,12 @@
           {
             "@type": "HowToStep",
             "name": "Audit lab target",
-            "text": "honeypot-auditor --target 127.0.0.1 --skip-nmap --deep"
+            "text": "honeypot-auditor --target 127.0.0.1 --deep"
           },
           {
             "@type": "HowToStep",
             "name": "Subnet sweep (authorized, max /24)",
-            "text": "honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 --confirm-authorized"
+            "text": "honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16 --confirm-authorized"
           },
           {
             "@type": "HowToStep",
@@ -223,7 +223,7 @@
           <strong>non-destructive</strong> probes across the usual decoy faces.
           Outputs a weighted <strong>Honeyscore (0–100%)</strong>, Rich console table, and JSON report.
         </p>
-        <pre class="code">[ BASIC ]  Shodan · Nmap NSE · 16 protocol engines · 4 detection strategies each
+        <pre class="code">[ BASIC ]  passive intel · Nmap NSE · 17 protocol engines · up to 3 strategies each
 [ DEEP  ]  +6 cross-protocol behavioral axes (shell · OS · stack · FSM · co-tenancy · temporal)
            (flag: --deep · more intrusive · same authorization rules)</pre>
         <p class="quote">“elite? nah. just consistent timeouts and an honest --confirm-authorized.”</p>
@@ -271,20 +271,20 @@ honeypot-auditor --version</pre>
 honeypot-auditor --help
 
 # local lab · default = IANA + docker/lab ports (22 and 2222, …)
-honeypot-auditor --target 127.0.0.1 --skip-nmap
+honeypot-auditor --target 127.0.0.1
 
 # go deep · six extra detection axes · still no exploits
-honeypot-auditor --target 127.0.0.1 --skip-nmap --deep
+honeypot-auditor --target 127.0.0.1 --deep
 
 # subnet sweep · IPv4 CIDR up to /24 · parallel (Shodan skipped per host)
-honeypot-auditor --target 192.168.1.0/24 --skip-nmap --scan-concurrency 16 \
+honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16 \
   --confirm-authorized --output subnet-audit.json
 
 # internet-facing · need explicit ack
 honeypot-auditor --target 203.0.113.10 --confirm-authorized --output report.json
 
 # extra SSH port (in addition to 22 and 2222)
-honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pre>
+honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
       </section>
 
       <section class="panel" id="cli-flags">
@@ -320,8 +320,8 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
               <tr><td><code>--safe-mode</code></td><td>Handshake-only; disables deep shell/path probes</td></tr>
               <tr><td><code>--profile</code></td><td><code>audit</code> (default), <code>blend</code> (browser mimesis), <code>safe</code></td></tr>
               <tr><td><code>--proxy</code></td><td>SOCKS5 egress (<code>socks5h://</code> remote DNS preferred)</td></tr>
-              <tr><td><code>--passive-first</code></td><td>Shodan before active; skip active when passive score high</td></tr>
-              <tr><td><code>--osint-only</code></td><td>Shodan only — no TCP probes</td></tr>
+              <tr><td><code>--passive-first</code></td><td>Passive intelligence before active probes; skip active when its score is high</td></tr>
+              <tr><td><code>--osint-only</code></td><td>Passive intelligence only — no TCP probes</td></tr>
               <tr><td><code>--dual-stack</code></td><td>Resolve A+AAAA and compare IPv4 vs IPv6 results</td></tr>
               <tr><td><code>--jitter</code></td><td>Fraction of timeout as max random delay (e.g. <code>0.3</code>)</td></tr>
               <tr><td><code>--jitter-ms</code></td><td>Random delay range before probes (e.g. <code>50-500</code>)</td></tr>
@@ -332,9 +332,11 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
               <tr><td><code>check-sig</code></td><td>Validate declarative signature pack offline</td></tr>
               <tr><td><code>-n</code>, <code>--with-nmap</code></td><td>Run Nmap <code>-sV</code> / NSE phase (slow; off by default)</td></tr>
               <tr><td><code>--shodan-key</code></td><td>Shodan API key (or set <code>SHODAN_API_KEY</code>); skipped per-host on subnet scans</td></tr>
+              <tr><td><code>--intel-provider</code></td><td>Explicitly select a named passive-intel plugin; repeatable</td></tr>
+              <tr><td><code>--intel-key</code></td><td>Provider key as <code>NAME=KEY</code>; prefer the provider environment variable</td></tr>
               <tr><td><code>--scan-concurrency</code></td><td>Parallel hosts for CIDR scans (default 8)</td></tr>
               <tr><td><code>--timeout</code></td><td>Socket timeout in seconds (default 3)</td></tr>
-              <tr><td><code>--output</code></td><td>JSON path (default <code>honeypot-audit-&lt;ip&gt;.json</code>; subnet → combined summary + hosts)</td></tr>
+              <tr><td><code>--output</code></td><td>Versioned JSON or SARIF path (subnet JSON → combined summary + hosts)</td></tr>
             </tbody>
           </table>
         </div>
@@ -355,6 +357,11 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
           first adds <strong>+5%</strong>, capped at <strong>+35%</strong>.
           Example: telnet static tell + ftp state tell → 20 + 25 + 5 = <strong>50% Suspected</strong>.
         </p>
+        <p>
+          Versioned JSON reports include a machine-readable <code>score_breakdown</code> with category
+          contributions, bonuses, cap handling, decisive overrides, and the final score. Indicators
+          distinguish clear, triggered, skipped, and suppressed states and record their provenance.
+        </p>
         <p><strong>Basic mode</strong> category weights:</p>
         <div class="table-wrap">
           <table>
@@ -362,7 +369,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
               <tr><th>Category</th><th>Weight</th></tr>
             </thead>
             <tbody>
-              <tr><td>Shodan intel</td><td>25%</td></tr>
+              <tr><td>Passive intel</td><td>25%</td></tr>
               <tr><td>Arbitrary auth</td><td>30%</td></tr>
               <tr><td>State non-persistence</td><td>25%</td></tr>
               <tr><td>Static signature</td><td>20%</td></tr>
@@ -376,7 +383,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
         <p>
           The <a href="#protocols">protocol table</a> shows how many of the <strong>three probe
           strategies</strong> (arbitrary auth · state non-persistence · static signature) are active
-          per face — up to 3. Shodan and co-tenancy are host-level, not counted in that column.
+          per face — up to 3. Passive intel and co-tenancy are host-level, not counted in that column.
         </p>
         <p>
           <strong>Co-tenancy</strong> (15%) fires when ≥5 protocol lures hit and another tell already
@@ -412,11 +419,11 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
       <section class="panel" id="protocols">
         <h2>-=[ SUPPORTED PROTOCOLS / PORTS ]=-</h2>
         <p>
-          <strong>16</strong> protocol engines in the current version. Each uses up to <strong>3</strong>
+          <strong>17</strong> protocol engines in the current version. Each uses up to <strong>3</strong>
           probe strategies (arbitrary auth · state non-persistence · static signature). The
           <strong>Strategies</strong> column is how many of those three are active for that protocol
-          in this release — not Shodan, co-tenancy, or individual indicator checks
-          (<strong>33</strong> active strategy slots across all protocols).
+          in this release — not passive intel, co-tenancy, or individual indicator checks
+          (<strong>36</strong> active strategy slots across all protocols).
         </p>
         <p>
           Default preset (<code>--preset both</code>) probes IANA well-known ports <strong>and</strong>
@@ -438,6 +445,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
               <tr><td>Telnet</td><td>23 · 2323</td><td>3</td></tr>
               <tr><td>FTP</td><td>21 · 2121</td><td>3</td></tr>
               <tr><td>SMTP</td><td>25 · 2525</td><td>3</td></tr>
+              <tr><td>POP3</td><td>110 · 1110</td><td>3</td></tr>
               <tr><td>Redis</td><td>6379 · 6379</td><td>3</td></tr>
               <tr><td>SMB</td><td>445 · 1445</td><td>2</td></tr>
               <tr><td>VNC</td><td>5900 · 5000</td><td>2</td></tr>
@@ -460,7 +468,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep --skip-nmap</pr
         </p>
         <p>
           <code>--deep</code> adds cross-protocol behavioral axes on top of the basic strategies above.
-          Shodan Honeyscore and Nmap NSE (<code>-n</code> / <code>--with-nmap</code>) are optional intel
+          Passive-intel providers and Nmap NSE (<code>-n</code> / <code>--with-nmap</code>) are optional
           layers, not protocol engines.
         </p>
           </div>

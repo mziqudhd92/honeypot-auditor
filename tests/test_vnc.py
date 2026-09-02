@@ -18,7 +18,10 @@ def test_vnc_canned_auth_fail(mock_rt):
     inds = vnc.probe_vnc("127.0.0.1", 5000)
     by_id = {i.id: i for i in inds}
     assert by_id["vnc.handshake"].triggered
-    assert "VNC-auth" in by_id["vnc.handshake"].detail or "Authentication failure" in by_id["vnc.handshake"].detail
+    assert (
+        "VNC-auth" in by_id["vnc.handshake"].detail
+        or "Authentication failure" in by_id["vnc.handshake"].detail
+    )
     assert by_id["vnc.persist"].triggered
     assert by_id["vnc.security"].triggered
     assert mock_rt.call_count == 2

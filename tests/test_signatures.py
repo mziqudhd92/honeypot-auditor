@@ -50,7 +50,9 @@ def test_validate_rejects_banned_keys():
 def test_match_regex_primitive():
     from pathlib import Path
 
-    path = Path(__file__).resolve().parents[1] / "src/honeypot_auditor/signatures/core/ftp_desert.json"
+    path = (
+        Path(__file__).resolve().parents[1] / "src/honeypot_auditor/signatures/core/ftp_desert.json"
+    )
     pack = load_signature_file(path)
     rule = pack.rules[0]
     assert match_rule(rule, body=b"500 Unknown command")

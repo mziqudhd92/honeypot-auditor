@@ -43,7 +43,7 @@ declarative packs via `ja3s_equals`.
 ```json
 {
   "id": "tls.example_lure",
-  "match": { "ja3s_equals": "aabbccddeeff00112233445566778899" },
+  "match": { "ja3s_equals": "00000000000000000000000000000000" },
   "category": "stack_fingerprint",
   "tell_tier": "edge"
 }

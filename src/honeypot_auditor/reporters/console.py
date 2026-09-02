@@ -44,7 +44,11 @@ def render(report: AuditReport, console: Console | None = None, *, verbose: bool
     for key, row in report.category_hits.items():
         hit = row.get("triggered")
         attempted = row.get("attempted")
-        mark = "[red]yes[/red]" if hit else ("[dim]skip[/dim]" if not attempted else "[green]no[/green]")
+        mark = (
+            "[red]yes[/red]"
+            if hit
+            else ("[dim]skip[/dim]" if not attempted else "[green]no[/green]")
+        )
         weights.add_row(
             STRATEGY_LABELS.get(key, key),
             "bonus" if row.get("dynamic") else f"{row.get('weight', 0) * 100:.0f}%",
@@ -52,6 +56,19 @@ def render(report: AuditReport, console: Console | None = None, *, verbose: bool
             f"{row.get('contribution', 0):.0f}%",
         )
     console.print(weights)
+
+    breakdown = report.score_breakdown
+    if breakdown:
+        formula = (
+            f"categories {breakdown.get('category_total_pct', 0):.0f}% + "
+            f"bonuses {breakdown.get('bonus_total_pct', 0):.0f}% = "
+            f"raw {breakdown.get('raw_score_pct', 0):.0f}%"
+        )
+        if breakdown.get("cap_applied"):
+            formula += " → capped at 100%"
+        if breakdown.get("decisive_override"):
+            formula += " → repeated arbitrary auth override to 100%"
+        console.print(f"[bold]Score formula[/bold]  {formula}")
 
     if report.protocol_strategies:
         proto = Table(title="Protocol strategies", show_lines=False)
@@ -82,7 +99,9 @@ def render(report: AuditReport, console: Console | None = None, *, verbose: bool
         for ind in triggered:
             console.print(f"  • [{ind.protocol}] {ind.title} — {ind.detail}")
     else:
-        console.print("[dim]No honeypot indicators fired. Closed ports are skipped, not scored.[/dim]")
+        console.print(
+            "[dim]No honeypot indicators fired. Closed ports are skipped, not scored.[/dim]"
+        )
 
     for note in report.notes:
         console.print(f"[dim]{note}[/dim]")

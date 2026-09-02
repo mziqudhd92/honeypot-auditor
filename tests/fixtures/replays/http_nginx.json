@@ -1,6 +1,6 @@
 {
   "connect": "127.0.0.1:80",
   "recv_first": false,
-  "request_hex": "474554202f20485454502f312e310d0a486f73743a203132372e302e302e310d0a0d0a",
-  "response_hex": "485454502f312e3120323030204f4b0d0a5365727665723a206e67696e780d0a446174653a204d6f6e2c203031204a616e20323032342030303030303020474d540d0a436f6e74656e742d547970653a20746578742f68746d6c0d0a436f6e74656e742d4c656e6774683a20320d0a0d0a6f6b"
+  "request_text": "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
+  "response_text": "HTTP/1.1 200 OK\r\nServer: nginx\r\nDate: Mon, 01 Jan 2024 00:00:00 GMT\r\nContent-Type: text/html\r\nContent-Length: 2\r\n\r\nok"
 }

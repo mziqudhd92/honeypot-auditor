@@ -35,6 +35,8 @@ class Auditor:
     confirm_authorized: bool = False
     output: str = ""
     output_nmap_exclude: str = ""
+    intel_providers: list[str] = field(default_factory=list)
+    intel_keys: dict[str, str] = field(default_factory=dict, repr=False)
 
     def _apply_settings(self) -> None:
         settings.timeout_seconds = float(self.timeout)
@@ -54,6 +56,8 @@ class Auditor:
             deep=settings.deep,
             with_nmap=False,
             shodan_key="",
+            intel_provider=list(self.intel_providers),
+            intel_key=[f"{name}={key}" for name, key in self.intel_keys.items()],
             confirm_authorized=self.confirm_authorized,
             output=self.output,
             scan_concurrency=8,

@@ -11,9 +11,7 @@ from honeypot_auditor.models import Indicator
 from honeypot_auditor.netutil import closed_reason, tcp_transact
 from honeypot_auditor.probes.common import skip_suite
 
-_GIT_SKIP = (
-    ("git.signature", "Git daemon always ERR no such repository", "static_signature"),
-)
+_GIT_SKIP = (("git.signature", "Git daemon always ERR no such repository", "static_signature"),)
 
 
 def _git_pkt(payload: bytes) -> bytes:

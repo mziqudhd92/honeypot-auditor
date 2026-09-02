@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from honeypot_auditor.config import as_port_list
 from honeypot_auditor.models import Indicator
 from honeypot_auditor.probes.deep.behavior import (
@@ -49,7 +51,9 @@ def _stamp(indicators: list[Indicator], proto: str, port: int) -> list[Indicator
     return indicators
 
 
-def run_deep_probes(host: str, ports: dict[str, int | list[int]], *, corroboration: bool = False) -> list[Indicator]:
+def run_deep_probes(
+    host: str, ports: Mapping[str, int | list[int]], *, corroboration: bool = False
+) -> list[Indicator]:
     ssh_ports = as_port_list(ports.get("ssh"))
     telnet_ports = as_port_list(ports.get("telnet"))
     http_ports = as_port_list(ports.get("http"))

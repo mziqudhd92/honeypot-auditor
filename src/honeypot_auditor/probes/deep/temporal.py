@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import statistics
 import time
+from contextlib import suppress
 from email.utils import parsedate_to_datetime
 
 from honeypot_auditor.models import Indicator, skipped_indicator
@@ -40,7 +41,7 @@ def probe_latency_distribution(host: str, port: int, samples: int = 8) -> list[I
     stdev = statistics.pstdev(timings) if len(timings) > 1 else 0.0
     cv = (stdev / mean) if mean > 0 else 0.0
     triggered = mean < 0.05 and cv < 0.08
-    detail = f"mean={mean*1000:.1f}ms stdev={stdev*1000:.1f}ms cv={cv:.3f} n={len(timings)}"
+    detail = f"mean={mean * 1000:.1f}ms stdev={stdev * 1000:.1f}ms cv={cv:.3f} n={len(timings)}"
     return [
         Indicator(
             id="deep.latency",
@@ -156,7 +157,7 @@ def probe_latency_under_load(
     no_stretch = stretch < 1.2
     triggered = uniform_under_load and no_stretch
     detail = (
-        f"baseline_mean={base_mean*1000:.1f}ms load_mean={load_mean*1000:.1f}ms "
+        f"baseline_mean={base_mean * 1000:.1f}ms load_mean={load_mean * 1000:.1f}ms "
         f"load_cv={load_cv:.3f} stretch={stretch:.2f}x n={len(concurrent)}"
     )
     return [
@@ -189,7 +190,9 @@ def probe_idle_accept(host: str, port: int, n: int = 10) -> list[Indicator]:
         for _ in range(n):
             start = time.monotonic()
             try:
-                sock = socket.create_connection((host, port), timeout=min(1.5, settings.timeout_seconds))
+                sock = socket.create_connection(
+                    (host, port), timeout=min(1.5, settings.timeout_seconds)
+                )
                 socks.append(sock)
                 accepted += 1
                 elapsed.append(time.monotonic() - start)
@@ -206,15 +209,13 @@ def probe_idle_accept(host: str, port: int, n: int = 10) -> list[Indicator]:
                 skipped=accepted < 4,
                 skip_reason="" if accepted >= 4 else f"only {accepted} idle connects succeeded",
                 protocol="tcp",
-                detail=f"accepted {accepted}/{n} idle connects mean={mean*1000:.1f}ms",
+                detail=f"accepted {accepted}/{n} idle connects mean={mean * 1000:.1f}ms",
             )
         ]
     finally:
         for sock in socks:
-            try:
+            with suppress(Exception):
                 sock.close()
-            except Exception:
-                pass
 
 
 def _parse_http_date(value: str) -> float | None:
@@ -241,7 +242,8 @@ def _sample_http_dates(host: str, port: int, samples: int = 3) -> list[str]:
     if requests is not None:
         for _ in range(samples):
             try:
-                resp = requests.get(
+                # Certificate validity is evidence, so untrusted target certificates must remain observable.
+                resp = requests.get(  # nosec B501  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
                     f"{scheme}://{host}:{port}/",
                     timeout=settings.timeout_seconds,
                     allow_redirects=False,
@@ -354,15 +356,13 @@ def probe_egress_silence(host: str, ssh_port: int) -> list[Indicator]:
                 error=err,
             )
         ]
-    token = "hpaudit-egress.invalid"
-    cmd = f"getent hosts {token} 2>/dev/null || nslookup {token} 2>&1 | head -3"
+    lookup_name = "hpaudit-egress.invalid"
+    cmd = f"getent hosts {lookup_name} 2>/dev/null || nslookup {lookup_name} 2>&1 | head -3"
     try:
         out, exec_err, _ = ssh_exec(client, cmd, timeout=max(4.0, settings.timeout_seconds))
     finally:
-        try:
+        with suppress(Exception):
             client.close()
-        except Exception:
-            pass
 
     if exec_err:
         return [

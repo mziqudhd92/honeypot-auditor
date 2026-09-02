@@ -54,9 +54,13 @@ def get_transport_manager() -> ProbeTransportManager:
 def _apply_jitter() -> None:
     if settings.jitter_ms_range:
         lo, hi = settings.jitter_ms_range
-        delay = random.uniform(lo / 1000.0, hi / 1000.0)
+        # Jitter is traffic shaping, not a security token or cryptographic value.
+        delay = random.uniform(lo / 1000.0, hi / 1000.0)  # nosec B311
     elif settings.jitter_fraction > 0:
-        delay = random.uniform(0, settings.jitter_fraction * settings.timeout_seconds)
+        # Jitter is traffic shaping, not a security token or cryptographic value.
+        delay = random.uniform(  # nosec B311
+            0, settings.jitter_fraction * settings.timeout_seconds
+        )
     else:
         return
     time.sleep(delay)

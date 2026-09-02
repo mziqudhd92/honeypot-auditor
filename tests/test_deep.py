@@ -8,7 +8,9 @@ from honeypot_auditor.models import Indicator
 
 
 def _ind(category: str, triggered: bool, **kwargs) -> Indicator:
-    return Indicator(id=f"{category}.t", title=category, category=category, triggered=triggered, **kwargs)
+    return Indicator(
+        id=f"{category}.t", title=category, category=category, triggered=triggered, **kwargs
+    )
 
 
 def test_deep_weights_add_behavior():

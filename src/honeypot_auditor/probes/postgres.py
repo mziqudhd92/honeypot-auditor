@@ -15,7 +15,11 @@ from honeypot_auditor.netutil import closed_reason, tcp_roundtrips
 from honeypot_auditor.probes.common import random_creds, skip_suite
 
 _POSTGRES_SKIP = (
-    ("postgres.cleartext", "Postgres offers only cleartext password after SSL reject", "static_signature"),
+    (
+        "postgres.cleartext",
+        "Postgres offers only cleartext password after SSL reject",
+        "static_signature",
+    ),
     ("postgres.auth_blob", "Postgres FATAL auth fail freezes auth.c:326", "state_nonpersist"),
 )
 
@@ -68,7 +72,9 @@ def probe_postgres(host: str, port: int) -> list[Indicator]:
             category="static_signature",
             triggered=bool(clear_hit),
             skipped=not ssl_reply and not auth_reply,
-            skip_reason="" if ssl_reply or auth_reply else (closed_reason(err) if err else "no reply"),
+            skip_reason=""
+            if ssl_reply or auth_reply
+            else (closed_reason(err) if err else "no reply"),
             protocol="postgres",
             detail=clear_hit or f"ssl={ssl_reply[:20]!r} auth={auth_reply[:40]!r}",
             evidence=(ssl_reply + auth_reply)[:200].hex(),

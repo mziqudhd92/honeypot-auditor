@@ -1,0 +1,2 @@
+# Historical synthetic JWT used by tests/test_redact.py; it is not a live credential.
+08b7f045e58142e74d5858138c74a1c1f255de6e:tests/test_redact.py:generic-api-key:17

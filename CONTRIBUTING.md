@@ -7,10 +7,15 @@ Thanks for helping improve Honeypot Auditor.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[full,dev]"
+pip install -e ".[full,dev,security]"
 make test          # fast unit tests (no coverage)
 make test-cov      # branch coverage + HTML report
+make lint          # Ruff checks and format verification
+make security      # Semgrep, Bandit, dependencies, and secret history
 ```
+
+On Windows PowerShell, activate with `.\.venv\Scripts\Activate.ps1` and run the commands
+shown in the Makefile directly if `make` is unavailable. CI includes a native Windows job.
 
 ## Coverage
 
@@ -31,9 +36,14 @@ When changing probe or scoring logic, add or update tests and keep `make test-co
 
 1. Fork and create a feature branch.
 2. Add or update tests for behavior changes.
-3. Run `make test-cov` and `make lint`.
+3. Run `make test-cov`, `make lint` (Ruff plus mypy), and `make security`.
 4. Keep probes **non-destructive** — banner/state checks only.
 5. Do not add exploit payloads or third-party honeypot product names in shipped strings (use neutral “low-interaction emulator” language).
+
+Security-tool suppressions must be line-scoped, identify the exact rule, and have an adjacent
+reason explaining why the construct is necessary. Never add a repository-wide rule exclusion to
+make a pull request pass. Synthetic secret fixtures must use an inline allowlist marker or an exact
+historical fingerprint; real credentials must never enter the repository.
 
 ## Commit messages
 

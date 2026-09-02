@@ -32,14 +32,7 @@ def test_match_lure_profile_empty_when_no_match():
 
 def test_read_server_hello_minimal():
     # Synthetic TLS record: ServerHello with TLS 1.2
-    body = (
-        b"\x02\x00\x00\x2e"
-        b"\x03\x03"
-        + b"\x00" * 32
-        + b"\x00"
-        + b"\xc0\x2f"
-        + b"\x00"
-    )
+    body = b"\x02\x00\x00\x2e\x03\x03" + b"\x00" * 32 + b"\x00" + b"\xc0\x2f" + b"\x00"
     record = b"\x16\x03\x03" + len(body).to_bytes(2, "big") + body
     parsed = read_server_hello(record)
     assert parsed is not None

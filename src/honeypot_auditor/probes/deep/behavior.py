@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 import time
+from contextlib import suppress
 
 from honeypot_auditor.config import PROBE_PASSWORD_TEMPLATE, PROBE_USERNAME_TEMPLATE
 from honeypot_auditor.models import Indicator, skipped_indicator
@@ -50,7 +51,9 @@ def probe_shell_semantics(host: str, port: int) -> list[Indicator]:
             if name == "random" and out.strip().isdigit():
                 random_values.append(out.strip())
         # sleep timing check
-        _, sleep_err, sleep_elapsed = ssh_exec(client, "sleep 1", timeout=max(3.0, settings.timeout_seconds))
+        _, sleep_err, sleep_elapsed = ssh_exec(
+            client, "sleep 1", timeout=max(3.0, settings.timeout_seconds)
+        )
         evidence_parts.append(f"sleep: t={sleep_elapsed:.3f}s err={sleep_err!r}")
         if sleep_err:
             failures.append(f"sleep: exec failed ({sleep_err})")
@@ -66,10 +69,8 @@ def probe_shell_semantics(host: str, port: int) -> list[Indicator]:
         if len(random_values) >= 2 and random_values[0] == random_values[1]:
             failures.append("random: identical values across calls")
     finally:
-        try:
+        with suppress(Exception):
             client.close()
-        except Exception:
-            pass
 
     triggered = bool(failures) and (
         any("exec failed" in f or "channel" in f for f in failures) or len(failures) >= 2
@@ -98,10 +99,8 @@ def probe_auth_curve(host: str, port: int, attempts: int = 5) -> list[Indicator]
         client, err = try_ssh_auth(host, port, user, password)
         if client is not None:
             successes.append(i + 1)
-            try:
+            with suppress(Exception):
                 client.close()
-            except Exception:
-                pass
         time.sleep(0.05)
 
     first_success = successes[0] if successes else 0
@@ -137,7 +136,9 @@ def probe_telnet_shell_semantics(host: str, port: int) -> list[Indicator]:
         + b"echo done\r\n"
     )
     start = time.monotonic()
-    data, err = tcp_transact(host, port, payload, recv_first=True, timeout=max(5.0, settings.timeout_seconds))
+    data, err = tcp_transact(
+        host, port, payload, recv_first=True, timeout=max(5.0, settings.timeout_seconds)
+    )
     elapsed = time.monotonic() - start
     if err and not data:
         return [
@@ -236,10 +237,8 @@ def probe_shell_entropy(host: str, port: int) -> list[Indicator]:
         if len(random_vals) >= 2 and len(set(random_vals)) == 1:
             failures.append(f"static $RANDOM values: {random_vals}")
     finally:
-        try:
+        with suppress(Exception):
             client.close()
-        except Exception:
-            pass
     return [
         Indicator(
             id="deep.shell_entropy",
@@ -280,11 +279,12 @@ def probe_mtime_uniformity(host: str, port: int) -> list[Indicator]:
                 error=err,
             )
         ]
-    out, exec_err, _ = ssh_exec(client, "ls -l --time-style=+%s /etc/passwd /var/log /usr/bin 2>/dev/null | awk '{print $6}'")
-    try:
+    out, exec_err, _ = ssh_exec(
+        client,
+        "ls -l --time-style=+%s /etc/passwd /var/log /usr/bin 2>/dev/null | awk '{print $6}'",
+    )
+    with suppress(Exception):
         client.close()
-    except Exception:
-        pass
     if exec_err or not out.strip():
         return [
             skipped_indicator(
@@ -359,10 +359,8 @@ def probe_llm_hallucination(host: str, port: int) -> list[Indicator]:
             if out.strip() and "error" not in text and exec_err == "":
                 failures.append(f"plausible fake success for {cmd!r}")
     finally:
-        try:
+        with suppress(Exception):
             client.close()
-        except Exception:
-            pass
     return [
         Indicator(
             id="deep.llm_hallucination",

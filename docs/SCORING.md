@@ -6,7 +6,7 @@ Basic category weights (from `config.WEIGHTS`):
 
 | Category | Weight |
 |----------|--------|
-| Shodan intel | 25% |
+| Passive intel (Shodan or selected providers) | 25% |
 | Arbitrary auth | 30% |
 | State non-persistence | 25% |
 | Static signature | 20% |
@@ -27,6 +27,30 @@ Deep mode adds (`DEEP_WEIGHTS`): behavior 18%, coherence 15%, stack_fingerprint 
 `deep.latency_under_load` is corroboration-gated and skipped in `--safe-mode`. It is a probe indicator (not a YAML signature primitive).
 
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
+
+The calculation is additive and capped:
+
+```text
+min(category contributions + bonuses, 100)
+```
+
+Repeated arbitrary authentication for two independent synthetic users is a decisive override to 100%.
+Suppressed, skipped, and non-triggered indicators contribute zero. Passive-intel plugins are constrained to
+the existing passive category and cannot create higher-weight categories.
+
+## Score explanation in reports
+
+Every JSON host report has `schema_version: "1.0"` and a `score_breakdown` object containing:
+
+- each active category's weight, attempted state, triggered state, and contribution;
+- each applied bonus and its contribution;
+- totals before and after the 100% cap;
+- whether the decisive repeated-auth override applied; and
+- the final score.
+
+Each serialized indicator also has a four-state `status` (`clear`, `triggered`, `skipped`, or
+`suppressed`), its `skip_reason`, and structured `provenance`. This prevents an unavailable probe from
+being mistaken for a clean result. Verbose console output prints the same formula and contribution data.
 
 **Verdict bands**: &lt;30% Likely Real · 30–59% Suspected · ≥60% Confirmed.
 

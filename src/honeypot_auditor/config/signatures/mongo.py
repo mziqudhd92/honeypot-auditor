@@ -6,7 +6,9 @@ import struct
 def match_mongo_stock_hello(raw: bytes) -> str | None:
     """hello/isMaster looks like mongod but connectionId is hardcoded to 1."""
     data = raw or b""
-    looks_like_hello = b"ismaster" in data or b"maxWireVersion" in data or b"maxBsonObjectSize" in data
+    looks_like_hello = (
+        b"ismaster" in data or b"maxWireVersion" in data or b"maxBsonObjectSize" in data
+    )
     if looks_like_hello and b"\x10connectionId\x00\x01\x00\x00\x00" in data:
         return "hello connectionId frozen at 1"
     if b"4.4.6" in data:

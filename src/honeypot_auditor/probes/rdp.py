@@ -28,7 +28,12 @@ def probe_rdp(host: str, port: int) -> list[Indicator]:
     first = replies[0] if replies else b""
     second = replies[1] if len(replies) > 1 else b""
     if not first:
-        return skip_suite(_RDP_SKIP, closed_reason(err) if err else "not an RDP speaker", protocol="rdp", error=err)
+        return skip_suite(
+            _RDP_SKIP,
+            closed_reason(err) if err else "not an RDP speaker",
+            protocol="rdp",
+            error=err,
+        )
     nla_hit = match_rdp_canned_nla(first)
     fail_hit = match_rdp_neg_fail(second)
     return [
@@ -47,7 +52,8 @@ def probe_rdp(host: str, port: int) -> list[Indicator]:
             category="state_nonpersist",
             triggered=bool(fail_hit),
             protocol="rdp",
-            detail=fail_hit or (f"{len(second)} byte follow-up" if second else "no second RDP reply"),
+            detail=fail_hit
+            or (f"{len(second)} byte follow-up" if second else "no second RDP reply"),
             evidence=(second[:80].hex() if second else ""),
         ),
     ]

@@ -21,6 +21,22 @@ def test_indicator_as_dict_includes_new_fields():
     assert d["tell_tier"] == "edge"
     assert d["requires_corroboration"] is False
     assert d["suppressed"] is False
+    assert d["status"] == "triggered"
+    assert d["provenance"] == {"kind": "built-in", "provider": "honeypot-auditor"}
+
+
+def test_indicator_status_and_plugin_provenance():
+    ind = Indicator(
+        id="intel.example.lookup",
+        title="lookup",
+        category="info",
+        skipped=True,
+        skip_reason="not configured",
+        protocol="intel:example",
+    )
+    data = ind.as_dict()
+    assert data["status"] == "skipped"
+    assert data["provenance"] == {"kind": "passive-intel-plugin", "provider": "example"}
 
 
 def test_audit_report_extended_fields():
@@ -36,10 +52,12 @@ def test_audit_report_extended_fields():
         proxy_context="edge_proxy_present",
         capability_warnings=["raw_sockets_disabled"],
         capabilities={"raw_sockets": False},
+        score_breakdown={"final_score_pct": 50.0},
     )
     assert report.confidence == "medium"
     assert report.proxy_detected
     assert report.capabilities["raw_sockets"] is False
+    assert report.score_breakdown["final_score_pct"] == 50.0
 
 
 def test_triggered_excludes_suppressed():

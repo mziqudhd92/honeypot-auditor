@@ -1,7 +1,5 @@
 NMAP_SCRIPTS = "banner,ssh2-enum-algos,ssh-auth-methods,ssh-publickey-acceptance"
-NMAP_NSE_SCRIPT_NAMES = frozenset(
-    s.strip().lower() for s in NMAP_SCRIPTS.split(",") if s.strip()
-)
+NMAP_NSE_SCRIPT_NAMES = frozenset(s.strip().lower() for s in NMAP_SCRIPTS.split(",") if s.strip())
 
 NMAP_PORT_PRIORITY = (
     "telnet",

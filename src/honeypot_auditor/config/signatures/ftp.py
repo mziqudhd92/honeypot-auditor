@@ -36,7 +36,11 @@ def match_ftp_stale_banner(welcome: str) -> str | None:
     return f"stale FTP banner {m.group(1)}" if m else None
 
 
-def match_ftp_auth_lure(user_resp: str = "", pass_resp: str = "") -> str | None:
+def match_ftp_auth_lure(
+    # These defaults initialize response text; neither value is a credential.
+    user_resp: str = "",
+    pass_resp: str = "",  # nosec B107
+) -> str | None:
     blob = f"{user_resp}\n{pass_resp}"
     low = blob.lower()
     if ("guest login ok" in low or "anonymous login ok" in low) and (

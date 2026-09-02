@@ -7,6 +7,7 @@ Each service lives in its own module so reviewers can read one playbook at a tim
     probes/smtp.py      probes/vnc.py        probes/sip.py
     probes/mysql.py     probes/git.py        probes/rdp.py
     probes/httpproxy.py probes/mssql.py     probes/mongodb.py
+    probes/pop3.py
 
 Every protocol uses the same three strategies: arbitrary auth, state non-persistence,
 static signature (see ``PROTOCOL_STRATEGIES`` in config).
@@ -27,6 +28,7 @@ from honeypot_auditor.probes.httpproxy import probe_httpproxy
 from honeypot_auditor.probes.mongodb import probe_mongodb
 from honeypot_auditor.probes.mssql import probe_mssql
 from honeypot_auditor.probes.mysql import probe_mysql
+from honeypot_auditor.probes.pop3 import probe_pop3
 from honeypot_auditor.probes.postgres import probe_postgres
 from honeypot_auditor.probes.rdp import probe_rdp
 from honeypot_auditor.probes.redis import probe_redis
@@ -50,6 +52,7 @@ PROBE_BY_PROTOCOL: dict[str, ProbeFn] = {
     "vnc": probe_vnc,
     "sip": probe_sip,
     "mysql": probe_mysql,
+    "pop3": probe_pop3,
     "postgres": probe_postgres,
     "git": probe_git,
     "rdp": probe_rdp,
@@ -78,6 +81,7 @@ __all__ = [
     "probe_mongodb",
     "probe_mssql",
     "probe_mysql",
+    "probe_pop3",
     "probe_postgres",
     "probe_rdp",
     "probe_redis",

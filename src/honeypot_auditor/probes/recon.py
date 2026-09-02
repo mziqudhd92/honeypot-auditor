@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import shutil
 import socket
-from urllib.parse import urlencode
+from collections.abc import Mapping
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from honeypot_auditor.config import (
@@ -85,10 +86,30 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
     if is_private_or_loopback(ip):
         reason = "Shodan does not index loopback/RFC1918 addresses"
         return [
-            skipped_indicator("shodan.honeyscore", "Shodan Honeyscore > 0.6", "shodan", reason, protocol="shodan"),
-            skipped_indicator("shodan.tags", "Shodan host tag contains honeypot", "shodan", reason, protocol="shodan"),
-            skipped_indicator("shodan.open_ports", "Shodan reports many open services", "shodan", reason, protocol="shodan"),
-            skipped_indicator("shodan.buffet", "Shodan port buffet with identical product strings", "shodan", reason, protocol="shodan"),
+            skipped_indicator(
+                "shodan.honeyscore", "Shodan Honeyscore > 0.6", "shodan", reason, protocol="shodan"
+            ),
+            skipped_indicator(
+                "shodan.tags",
+                "Shodan host tag contains honeypot",
+                "shodan",
+                reason,
+                protocol="shodan",
+            ),
+            skipped_indicator(
+                "shodan.open_ports",
+                "Shodan reports many open services",
+                "shodan",
+                reason,
+                protocol="shodan",
+            ),
+            skipped_indicator(
+                "shodan.buffet",
+                "Shodan port buffet with identical product strings",
+                "shodan",
+                reason,
+                protocol="shodan",
+            ),
         ]
 
     score, score_err = _honeyscore(ip, api_key)
@@ -168,7 +189,9 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
     return out
 
 
-def nmap_scan(ip: str, ports: dict[str, int | list[int]], enabled: bool = True) -> list[Indicator]:
+def nmap_scan(
+    ip: str, ports: Mapping[str, int | list[int]], enabled: bool = True
+) -> list[Indicator]:
     if not enabled:
         return [
             skipped_indicator(
@@ -276,8 +299,10 @@ def nmap_scan(ip: str, ports: dict[str, int | list[int]], enabled: bool = True) 
                     if script_hit:
                         triggers.append(f"{sname}@{_port}: {script_hit}")
 
-    detail = "; ".join(triggers) if triggers else (
-        "-sV ran; no unknown fingerprint or lure flags. " + "; ".join(banners[:6])
+    detail = (
+        "; ".join(triggers)
+        if triggers
+        else ("-sV ran; no unknown fingerprint or lure flags. " + "; ".join(banners[:6]))
     )
     return [
         Indicator(
@@ -293,10 +318,14 @@ def nmap_scan(ip: str, ports: dict[str, int | list[int]], enabled: bool = True) 
 
 
 def _http_get(url: str, params: dict) -> tuple[str, str]:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or parsed.hostname != "api.shodan.io":
+        return "", "refusing passive-intel URL outside the HTTPS Shodan API allowlist"
     full = url + "?" + urlencode(params)
     req = Request(full, headers={"User-Agent": USER_AGENT})
     try:
-        with urlopen(req, timeout=settings.timeout_seconds) as resp:
+        # URL scheme and host are allowlisted immediately above; file/custom schemes cannot reach this sink.
+        with urlopen(req, timeout=settings.timeout_seconds) as resp:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             body = resp.read().decode("utf-8", "replace")
             if resp.status >= 400:
                 return "", f"HTTP {resp.status}: {body[:200]}"
@@ -350,7 +379,7 @@ def _shodan_port_indicators(host_info: dict) -> list[Indicator]:
         if product:
             products[product] = products.get(product, 0) + 1
     max_same = max(products.values()) if products else 0
-    top_product = max(products, key=products.get) if products else ""
+    top_product = max(products, key=lambda product: products[product]) if products else ""
     buffet_hit = open_count >= 8 and max_same >= 8
     return [
         Indicator(

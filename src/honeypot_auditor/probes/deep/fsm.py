@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from contextlib import suppress
 
 from honeypot_auditor.config import USER_AGENT
 from honeypot_auditor.models import Indicator, optional_import, skipped_indicator
@@ -30,7 +31,9 @@ def probe_http_fsm(host: str, port: int) -> list[Indicator]:
         b"GET / HTTP/1.1\r\nHost: " + host.encode() + b"\r\nConnection: keep-alive\r\n\r\n"
         b"FOOBAR / HTTP/1.1\r\nHost: " + host.encode() + b"\r\nConnection: close\r\n\r\n"
     )
-    raw, err = tcp_transact(host, port, piped, recv_first=False, timeout=max(4.0, settings.timeout_seconds))
+    raw, err = tcp_transact(
+        host, port, piped, recv_first=False, timeout=max(4.0, settings.timeout_seconds)
+    )
     text = raw.decode("latin-1", "replace")
     evidence.append(f"pipeline: {text[:300]!r}")
     statuses = re.findall(r"HTTP/\d\.\d (\d{3})", text)
@@ -61,8 +64,9 @@ def probe_http_fsm(host: str, port: int) -> list[Indicator]:
 
         for _ in range(2):
             try:
+                # Plain HTTP is the protocol under test; no credentials or sensitive data are sent.
                 resp = requests.get(
-                    f"http://{host}:{port}/",
+                    f"http://{host}:{port}/",  # nosemgrep: python.lang.security.audit.insecure-transport.requests.request-with-http.request-with-http
                     timeout=settings.timeout_seconds,
                     headers={"User-Agent": USER_AGENT},
                 )
@@ -115,20 +119,17 @@ def probe_ftp_fsm(host: str, port: int) -> list[Indicator]:
     failures: list[str] = []
     evidence = ""
     try:
-        ftp = ftplib.FTP()
+        # FTP is intentionally the protocol under audit; no production credential is used.
+        ftp = ftplib.FTP()  # nosec B321
         ftp.connect(host, port, timeout=settings.timeout_seconds)
         ftp.login()
         feat = ""
-        try:
+        with suppress(Exception):
             feat = ftp.sendcmd("FEAT")
-        except Exception:
-            pass
-        try:
+        with suppress(Exception):
             rest = ftp.sendcmd("REST 0")
             if str(rest).startswith("200"):
                 failures.append("REST 0 returned 200 instead of 350")
-        except Exception:
-            pass
         pasv_addr = ""
         pasv_data_fail = False
         try:
@@ -215,7 +216,7 @@ def probe_smtp_fsm(host: str, port: int) -> list[Indicator]:
         except smtplib.SMTPException as exc:
             if "250" in str(exc):
                 failures.append("RSET+RCPT accepted external recipient without MAIL FROM")
-        try:
+        with suppress(Exception):
             smtp.mail("probe@auditor.invalid")
             smtp.rcpt("sink@auditor.invalid")
             data_code, _ = smtp.docmd("DATA")
@@ -223,8 +224,6 @@ def probe_smtp_fsm(host: str, port: int) -> list[Indicator]:
                 rset_code, _ = smtp.docmd("RSET")
                 if int(rset_code) == 354:
                     failures.append("RSET during DATA did not abort (still 354)")
-        except Exception:
-            pass
         smtp.quit()
     except Exception as exc:
         return [
@@ -256,10 +255,27 @@ def probe_telnet_fsm(host: str, port: int) -> list[Indicator]:
     evidence: list[str] = []
     iac = bytes(
         [
-            255, 251, 99,
-            255, 253, 37,
-            255, 250, 37, 0, 255, 240,
-            255, 250, 31, 0, 80, 0, 24, 255, 240,
+            255,
+            251,
+            99,
+            255,
+            253,
+            37,
+            255,
+            250,
+            37,
+            0,
+            255,
+            240,
+            255,
+            250,
+            31,
+            0,
+            80,
+            0,
+            24,
+            255,
+            240,
         ]
     )
     raw, err = tcp_transact(host, port, iac, recv_first=True)
@@ -312,7 +328,9 @@ def probe_state_continuity(host: str, port: int) -> list[Indicator]:
         f"GET / HTTP/1.1\r\nHost: {host}\r\nConnection: keep-alive\r\n"
         f"User-Agent: honeypot-auditor\r\n\r\n"
     ).encode()
-    raw1, err1 = tcp_transact(host, port, req1, recv_first=False, timeout=max(4.0, settings.timeout_seconds))
+    raw1, err1 = tcp_transact(
+        host, port, req1, recv_first=False, timeout=max(4.0, settings.timeout_seconds)
+    )
     if err1 and not raw1:
         return [
             skipped_indicator(
@@ -338,7 +356,9 @@ def probe_state_continuity(host: str, port: int) -> list[Indicator]:
             f"GET / HTTP/1.1\r\nHost: {host}\r\nCookie: {set_cookie}\r\n"
             f"Connection: close\r\nUser-Agent: honeypot-auditor\r\n\r\n"
         ).encode()
-    raw2, err2 = tcp_transact(host, port, req2, recv_first=False, timeout=max(4.0, settings.timeout_seconds))
+    raw2, err2 = tcp_transact(
+        host, port, req2, recv_first=False, timeout=max(4.0, settings.timeout_seconds)
+    )
     triggered = False
     detail = "session continuity plausible"
     if set_cookie and raw2 and b"200" in raw2[:20]:
@@ -417,7 +437,9 @@ def probe_ssh_fsm(host: str, port: int) -> list[Indicator]:
             category="proto_conformance",
             triggered=bool(failures),
             protocol="ssh",
-            detail="; ".join(failures) if failures else "SSH rejects out-of-order preface plausibly",
+            detail="; ".join(failures)
+            if failures
+            else "SSH rejects out-of-order preface plausibly",
             evidence=f"http_preface={raw1[:120]!r}; bin_preface={raw2[:120]!r}",
             requires_corroboration=True,
         )
@@ -472,24 +494,24 @@ def probe_ssh_state_continuity(host: str, port: int) -> list[Indicator]:
     if err2 and not raw2:
         return [
             Indicator(
-            id="fsm.stateless_trap_behavior",
-            title="SSH session continuity failure after abrupt drop",
-            category="proto_conformance",
-            triggered=False,
-            protocol="ssh",
-            detail="reconnect failed after drop",
-            evidence=f"t1={elapsed1:.4f} err2={err2}",
-            requires_corroboration=True,
-            tell_tier="origin",
-        )
-      ]
+                id="fsm.stateless_trap_behavior",
+                title="SSH session continuity failure after abrupt drop",
+                category="proto_conformance",
+                triggered=False,
+                protocol="ssh",
+                detail="reconnect failed after drop",
+                evidence=f"t1={elapsed1:.4f} err2={err2}",
+                requires_corroboration=True,
+                tell_tier="origin",
+            )
+        ]
     identical = raw1 == raw2 and len(raw1) > 32
     robotic = elapsed1 < 0.02 and elapsed2 < 0.02 and identical
     triggered = robotic or (identical and abs(elapsed1 - elapsed2) < 0.005)
     detail = (
-        f"identical canned handshake on reconnect (t1={elapsed1*1000:.1f}ms t2={elapsed2*1000:.1f}ms)"
+        f"identical canned handshake on reconnect (t1={elapsed1 * 1000:.1f}ms t2={elapsed2 * 1000:.1f}ms)"
         if triggered
-        else f"reconnect timing plausible (t1={elapsed1*1000:.1f}ms t2={elapsed2*1000:.1f}ms)"
+        else f"reconnect timing plausible (t1={elapsed1 * 1000:.1f}ms t2={elapsed2 * 1000:.1f}ms)"
     )
     return [
         Indicator(

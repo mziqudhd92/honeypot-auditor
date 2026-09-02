@@ -6,6 +6,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Non-destructive POP3 engine on ports 110/1110: greeting framing, pre-auth state,
+  unknown-command conformance, and repeated synthetic authentication
+- Explicitly selected passive-intel providers through `honeypot_auditor.intel` entry points,
+  with namespaced indicators, scoped keys, validation, and error redaction
+- Machine-readable `score_breakdown`, JSON `schema_version`, indicator status/provenance,
+  and stable SARIF fingerprints
+- Security CI for Semgrep, Bandit, dependency auditing, and current/history secret scans;
+  native Windows CI coverage
+- Maintained mypy gate with a clean source-tree baseline
+- Immutable commit pins for every third-party GitHub Actions dependency
+- Offline POP3 replay fixture and passive-intel URL allowlist tests
+
+### Fixed
+
+- Windows startup failure when `os.geteuid` is unavailable
+- Passive Shodan/provider work executing twice during progress-enabled host audits
+- Silent broad exception handling across optional probes and connection cleanup
+- Passive REST fallback now rejects non-HTTPS URLs and hosts outside the Shodan API allowlist
+
+### Changed
+
+- Passive-intel category labeling now covers Shodan and selected providers while retaining the
+  stable `shodan` category key for report compatibility
+- JSON and SARIF outputs distinguish triggered, clear, skipped, and suppressed results
+
 ## [0.6.0] - 2026-09-02
 
 ### Added

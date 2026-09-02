@@ -30,7 +30,11 @@ def test_telnet_auth_rejected(mock_tcp, mock_login):
     assert by_id["telnet.session_persist"].skipped
 
 
-@patch.object(telnet, "_telnet_login_and_probe", side_effect=[(True, KIPPO_UNAME, ""), (False, "", "auth failed")])
+@patch.object(
+    telnet,
+    "_telnet_login_and_probe",
+    side_effect=[(True, KIPPO_UNAME, ""), (False, "", "auth failed")],
+)
 @patch.object(telnet, "tcp_transact", return_value=(b"Welcome telnet\r\n", ""))
 def test_telnet_single_login_not_arbitrary_auth(mock_tcp, mock_login):
     inds = telnet.probe_telnet("127.0.0.1", 23)
@@ -75,12 +79,8 @@ def test_telnet_cowrie_hostname(mock_tcp, mock_login, mock_creds):
     assert "2nd login user_a99" in by_id["telnet.arbitrary_auth"].detail
 
 
-CISCO_IAC_BANNER = (
-    b"\xff\xfb\x03\xff\xfb\x00\r\nUser Access Verification\r\n\xff\xfc\x01Username: "
-)
-CISCO_REJECT = (
-    "User Access Verification\r\nUsername: Password: Wrong password.\r\nUsername: "
-)
+CISCO_IAC_BANNER = b"\xff\xfb\x03\xff\xfb\x00\r\nUser Access Verification\r\n\xff\xfc\x01Username: "
+CISCO_REJECT = "User Access Verification\r\nUsername: Password: Wrong password.\r\nUsername: "
 
 
 def test_strip_telnet_iac_keeps_printable_banner():
@@ -120,7 +120,9 @@ def test_telnet_cowrie_preamble(mock_tcp, mock_login):
 IAC_OPTION_SPRAY = bytes.fromhex("fffb03fffb00fffd00fffd1ffffd18fffd27fffd22") + b"\r\nUsername: "
 
 
-@patch.object(telnet, "_telnet_login_and_probe", return_value=(False, "Password: Login incorrect\r\n", ""))
+@patch.object(
+    telnet, "_telnet_login_and_probe", return_value=(False, "Password: Login incorrect\r\n", "")
+)
 @patch.object(telnet, "tcp_transact", return_value=(IAC_OPTION_SPRAY, ""))
 def test_telnet_option_spray_then_username_prompt(mock_tcp, mock_login):
     inds = telnet.probe_telnet("127.0.0.1", 23)
@@ -158,4 +160,3 @@ def test_telnet_safe_mode_accepts_bytes_iac(mock_tcp):
     assert by_id["telnet.iac_negotiate"].triggered
     assert not by_id["telnet.banner"].error
     assert by_id["telnet.arbitrary_auth"].skipped
-

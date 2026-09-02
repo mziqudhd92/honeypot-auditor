@@ -6,6 +6,7 @@ Strategies: arbitrary auth (AUTH any-password, open relay) · state non-persiste
 from __future__ import annotations
 
 import base64
+from contextlib import suppress
 
 from honeypot_auditor.config import (
     SMTP_HELO,
@@ -62,16 +63,12 @@ def probe_smtp(host: str, port: int) -> list[Indicator]:
         ext_replies = _smtp_extension_replies(smtp)
         ext_hit = match_smtp_extension_monotone(ext_replies)
 
-        try:
+        with suppress(Exception):
             smtp.rset()
-        except Exception:
-            pass
         mail_code, mail_msg = _smtp_mail(smtp)
         code, msg = _smtp_rcpt(smtp)
-        try:
+        with suppress(Exception):
             smtp.quit()
-        except Exception:
-            pass
         accepted = 200 <= int(code) < 300
         identity_blob = f"{greeting}\n{ehlo_text}"
         identity_hit = match_smtp_placeholder_identity(identity_blob)
@@ -122,7 +119,8 @@ def probe_smtp(host: str, port: int) -> list[Indicator]:
                 triggered=bool(envelope_hit),
                 protocol="smtp",
                 detail=(
-                    envelope_hit or f"MAIL FROM → {mail_code} {_smtp_text(mail_msg)[:80]}; RCPT → {code}"
+                    envelope_hit
+                    or f"MAIL FROM → {mail_code} {_smtp_text(mail_msg)[:80]}; RCPT → {code}"
                 ),
                 evidence=f"{mail_code} {_smtp_text(mail_msg)[:200]} | {code} {_smtp_text(msg)[:200]}",
             ),
@@ -183,7 +181,7 @@ def _smtp_extension_replies(smtp) -> list[tuple[str, int, str]]:
 def _smtp_try_any_auth(smtp, user: str, password: str) -> tuple[bool, str]:
     """Random USER/PASS via AUTH PLAIN (or login). Real MTAs reject; lures often 235 any password."""
     blob = base64.b64encode(b"\0" + user.encode() + b"\0" + password.encode()).decode("ascii")
-    try:
+    with suppress(Exception):
         code, msg = smtp.docmd("AUTH", f"PLAIN {blob}")
         if 200 <= int(code) < 300:
             return True, f"AUTH PLAIN accepted random {user}:**** → {code}"
@@ -191,8 +189,6 @@ def _smtp_try_any_auth(smtp, user: str, password: str) -> tuple[bool, str]:
             pass
         else:
             return False, f"AUTH PLAIN rejected → {code} {_smtp_text(msg)[:80]}"
-    except Exception:
-        pass
     try:
         smtp.login(user, password)
         return True, f"AUTH login accepted random {user}:****"
