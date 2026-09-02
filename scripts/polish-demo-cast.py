@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Polish an asciinema v2 cast for demo GIFs.
 
-- Compress long idle gaps (progress bars / probe waits) so a 90s probe does not
-  force viewers to wait wall-clock time.
-- After result panels (score / threat / HIT tables), enforce a readable hold.
+Compress long probe/progress waits, but PRESERVE human reading pauses after
+results (marked ``reading pause`` in the demo script).
 """
 
 from __future__ import annotations
@@ -14,14 +13,18 @@ import re
 import sys
 from pathlib import Path
 
-RESULT_MARKERS = re.compile(
-    r"(Honeyscore|Threat level|Suspected Honeypot|Confirmed Honeypot|"
-    r"Likely Real Host|Key findings|Why this score|SCENE \d|SCOREBOARD|"
-    r"silent-accept|KEX facade|high-signal|TOUR COMPLETE)",
+# Start of a protected reading window (demo prints this explicitly).
+READING_PAUSE = re.compile(r"reading pause", re.I)
+
+# Also treat finale scoreboard as a reading window if marker is missing.
+RESULT_SETTLE = re.compile(
+    r"(Why this score|Report written|SCOREBOARD|TOUR COMPLETE|demo finished|"
+    r"Suspected Honeypot|Confirmed Honeypot|Key findings)",
     re.I,
 )
+
 PROGRESS_MARKERS = re.compile(
-    r"(Auditing target|Finished |probing|deep audit|▮|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏)",
+    r"(Auditing target|Finished |probing|deep audit in progress|▮|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏)",
     re.I,
 )
 
@@ -43,8 +46,8 @@ def polish(
     events: list[list],
     *,
     max_idle: float,
-    result_hold: float,
     progress_idle: float,
+    reading_hold: float,
 ) -> list[list]:
     if not events:
         return events
@@ -54,6 +57,7 @@ def polish(
     prev_old_t = float(events[0][0])
     hold_until = 0.0
     last_progress_emit = -1e9
+    protect_next_gap = False
 
     for ev in events:
         old_t, etype, data = ev[0], ev[1], ev[2]
@@ -62,9 +66,15 @@ def polish(
 
         text = data if isinstance(data, str) else ""
         is_progress = bool(PROGRESS_MARKERS.search(text))
-        if is_progress:
-            # Keep a sparse heartbeat of progress frames; drop the rest so a
-            # 90s probe does not become a 90s GIF.
+
+        if protect_next_gap:
+            # Keep the intentional sleep after "reading pause" (capped to reading_hold).
+            gap = min(gap, reading_hold) if gap > 0 else gap
+            # If the sleep was already truncated by asciinema, enforce a floor.
+            if gap < reading_hold * 0.6:
+                gap = reading_hold
+            protect_next_gap = False
+        elif is_progress:
             tentative = new_t + min(gap, progress_idle)
             if tentative - last_progress_emit < 0.18:
                 continue
@@ -80,9 +90,12 @@ def polish(
         if is_progress:
             last_progress_emit = new_t
 
-        if etype == "o" and RESULT_MARKERS.search(text):
-            # Keep the panel on screen long enough to read.
-            hold_until = new_t + result_hold
+        if etype == "o" and READING_PAUSE.search(text):
+            protect_next_gap = True
+            hold_until = new_t + reading_hold
+        elif etype == "o" and RESULT_SETTLE.search(text):
+            # Soft hold while the panel is still streaming; reading pause is stronger.
+            hold_until = max(hold_until, new_t + min(3.0, reading_hold * 0.35))
 
     return out
 
@@ -91,7 +104,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("input", type=Path)
     ap.add_argument("output", type=Path)
-    ap.add_argument("--max-idle", type=float, default=0.45, help="cap general idle gaps")
+    ap.add_argument(
+        "--max-idle",
+        type=float,
+        default=0.55,
+        help="cap general idle gaps (typing / scene changes)",
+    )
     ap.add_argument(
         "--progress-idle",
         type=float,
@@ -99,10 +117,10 @@ def main() -> int:
         help="cap idle during progress/probe frames",
     )
     ap.add_argument(
-        "--result-hold",
+        "--reading-hold",
         type=float,
-        default=2.8,
-        help="minimum extra hold after result markers (stacked with demo sleeps)",
+        default=9.0,
+        help="seconds to keep on screen after each reading-pause marker",
     )
     args = ap.parse_args()
 
@@ -110,8 +128,8 @@ def main() -> int:
     polished = polish(
         events,
         max_idle=args.max_idle,
-        result_hold=args.result_hold,
         progress_idle=args.progress_idle,
+        reading_hold=args.reading_hold,
     )
     header = dict(header)
     if polished:
