@@ -198,8 +198,9 @@ def test_cowrie_facade_kex_mismatch():
 
 
 def test_find_kexinit_skips_banner_prefix():
-    from honeypot_auditor.hassh import capture_server_kexinit, find_kexinit_payload
     import struct
+
+    from honeypot_auditor.hassh import capture_server_kexinit, find_kexinit_payload
 
     # Build a minimal valid KEXINIT-ish packet after a banner.
     lists = [
