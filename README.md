@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v0.5.0 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v0.6.0 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -19,30 +19,16 @@
 
 ```
   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-  █  >>> LIVE DEMO · COWRIE ON :2222 · EC2 LAB · DEEP AUDIT <<<            █
+  █  >>> LIVE DEMO · 3 HOST LAB TOUR · -v / --deep / SILENT-ACCEPT <<<     █
   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 ```
 
-![Cowrie deep audit demo](docs/demo/honeypot-auditor-cowrie-demo.gif)
+![Lab tour demo — Cowrie, dd-stack, tarpit](docs/demo/honeypot-auditor-lab-tour-demo.gif)
 
 ```
-  "cowrie said yes to every password. the shell lied about sleep.
-   egress went quiet. scoreboard lit up — SUSPECTED."
-                                              — some random BBS elite, '96
-```
-
-```
-  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-  █  >>> LIVE DEMO · DIONAEA BUFFET · FTP/HTTP/SMB · CONFIRMED <<<         █
-  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-```
-
-![Dionaea deep audit demo](docs/demo/honeypot-auditor-dionaea-demo.gif)
-
-```
-  "PASV handed me a private IP. STOR vanished on reconnect.
-   nginx forgot the Date. that's not a NAS — that's a stage."
-                                              — file area #13 · no call waiting
+  "three hosts, three lenses: KEX facade with -v, deep on the buffet,
+   silent-accept on the tarpit. same fingerprinter — different tells."
+                                              — lab tour · authorized only
 ```
 
 ```
@@ -343,6 +329,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v0.5.0 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v0.6.0 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```

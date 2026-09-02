@@ -24,6 +24,23 @@ def test_honeyfs_and_arith():
     assert "tty is not a pty" in identity_tells("not a tty")
 
 
+def test_identity_canned_ssh_refusals():
+    bits = identity_tells("Command not handled.\nInternal error. Please try again later.")
+    assert "canned 'Command not handled' refusal" in bits
+    assert "canned internal-error stub" in bits
+
+
+def test_identity_pipe_utils_and_hypervisor():
+    bits = identity_tells("bash: awk: command not found\nProduct Name: QEMU Standard PC")
+    assert "pipe utilities missing" in bits
+    assert "hypervisor product string in dmi/cpu" in bits
+
+
+def test_whoami_empty_inputs():
+    assert not whoami_matches_lure("", "user_a1")
+    assert not whoami_matches_lure("user_a1@", "")
+
+
 def test_identity_cowrie_hostname():
     text = "Linux svr04 6.1.0-21-amd64 #1 SMP Debian GNU/Linux"
     bits = identity_tells(text)

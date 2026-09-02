@@ -115,3 +115,39 @@ def test_console_render_verbose_includes_indicators():
     assert "Indicators" in out
     assert "Why this score" in out
     assert "test" in out
+
+
+def test_json_export_nmap_exclude_and_subnet(tmp_path: Path):
+    from honeypot_auditor.reporters.json_export import export_nmap_exclude, export_subnet
+
+    exclude = tmp_path / "exclude.txt"
+    export_nmap_exclude("203.0.113.9", exclude)
+    export_nmap_exclude("203.0.113.9", exclude)  # idempotent
+    export_nmap_exclude("203.0.113.10", exclude)
+    assert exclude.read_text(encoding="utf-8").splitlines() == ["203.0.113.9", "203.0.113.10"]
+
+    report = _sample_report()
+    report.deception_leaks = [{"rank": 1, "id": "ssh.test"}]
+    dest = export_subnet(
+        target="203.0.113.0/24",
+        reports=[report],
+        path=tmp_path / "subnet.json",
+        notes=["lab"],
+        started_at="2026-01-01T00:00:00Z",
+        finished_at="2026-01-01T00:00:01Z",
+    )
+    data = json.loads(dest.read_text(encoding="utf-8"))
+    assert data["scan_type"] == "subnet"
+    assert data["host_count"] == 1
+    assert data["hosts"][0]["deception_leaks"][0]["id"] == "ssh.test"
+
+
+def test_json_default_bytearray_and_reject():
+    from honeypot_auditor.reporters import json_export
+
+    assert json_export._json_default(bytearray(b"abc")) == "abc"
+    try:
+        json_export._json_default(object())
+        raise AssertionError("expected TypeError")
+    except TypeError:
+        pass

@@ -69,6 +69,7 @@ from honeypot_auditor.config.signatures.telnet import (
     match_telnet_banner,
     match_telnet_blind_option,
     match_telnet_canned_reject,
+    match_telnet_cowrie_preamble,
     match_telnet_option_spray,
 )
 
@@ -116,6 +117,7 @@ __all__ = [
     "match_telnet_banner",
     "match_telnet_blind_option",
     "match_telnet_canned_reject",
+    "match_telnet_cowrie_preamble",
     "match_telnet_option_spray",
     "match_tls_stock_cert",
     "match_uname_signature",

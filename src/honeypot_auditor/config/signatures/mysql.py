@@ -30,7 +30,7 @@ def match_mysql_stock_handshake(raw: bytes) -> str | None:
 
 
 def match_mysql_pkt_order(raw: bytes) -> str | None:
-    """Wrong auth sequence id returns ER 1156 packets out of order (emulator FSM)."""
+    """Wrong auth sequence id — classic ER 1156 or modern emulator 'Expected seq' FSM."""
     payload = raw[4:] if len(raw) > 4 else raw
     if not payload.startswith(b"\xff"):
         return None
@@ -38,4 +38,10 @@ def match_mysql_pkt_order(raw: bytes) -> str | None:
         return "ER 1156 packets out of order on wrong auth sequence"
     if b"packets out of order" in raw:
         return "packets out of order on wrong auth sequence"
+    # Newer low-interaction MySQL lures (e.g. 8.0.x faces) use a custom seq FSM string
+    # instead of stock ER 1156 — still not how real mysqld answers a wrong seq_id.
+    low = raw.lower()
+    if b"expected seq(" in low and b"got seq(" in low:
+        msg = raw.split(b"\xff", 1)[-1][2:].decode("utf-8", "replace").strip()
+        return f"emulator seq FSM on wrong auth sequence ({msg[:80]})"
     return None

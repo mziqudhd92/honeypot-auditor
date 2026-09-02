@@ -17,6 +17,7 @@ class ProbeProfile(str, Enum):
 @dataclass
 class Settings:
     timeout_seconds: float = 3.0
+    deep_timeout_seconds: float = 90.0
     deep: bool = False
     profile: ProbeProfile = ProbeProfile.AUDIT
     safe_mode: bool = False

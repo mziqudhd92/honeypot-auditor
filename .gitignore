@@ -17,6 +17,9 @@ htmlcov/
 # Reports
 honeypot-audit-*.json
 
+# Demo intermediates
+docs/demo/*.raw.cast
+
 # Editors
 .idea/
 .vscode/

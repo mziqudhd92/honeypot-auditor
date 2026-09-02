@@ -13,6 +13,7 @@ from honeypot_auditor.config import (
     match_telnet_banner,
     match_telnet_blind_option,
     match_telnet_canned_reject,
+    match_telnet_cowrie_preamble,
     match_telnet_option_spray,
     match_uname_signature,
 )
@@ -68,8 +69,12 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
         host, port, user2, password2, extra_cmds=(f"cat {canary_path}",)
     )
     preauth = "\n".join(p for p in (banner_text, session_out) if p)
-    banner_hit = match_telnet_banner(preauth) or match_telnet_option_spray(banner_raw, banner_text)
-    iac_hit = match_telnet_blind_option(banner_raw)
+    banner_hit = (
+        match_telnet_banner(preauth)
+        or match_telnet_option_spray(banner_raw, banner_text)
+        or match_telnet_cowrie_preamble(banner_raw)
+    )
+    iac_hit = match_telnet_blind_option(banner_raw) or match_telnet_cowrie_preamble(banner_raw)
     if banner_err and banner_raw and "reset" in banner_err.lower():
         iac_hit = iac_hit or "connection reset on AUTH/NAWS subnegotiation"
     reject_hit = match_telnet_canned_reject(session_out or preauth)
@@ -268,17 +273,33 @@ def _probe_telnet_safe(host: str, port: int) -> list[Indicator]:
             id="telnet.banner",
             title="Telnet pre-auth banner matches a known lure template",
             category="static_signature",
-            triggered=bool(match_telnet_banner(banner_text)),
+            triggered=bool(
+                match_telnet_banner(banner_text) or match_telnet_cowrie_preamble(banner_raw)
+            ),
             protocol="telnet",
-            detail=banner_text[:240] or "(no banner)",
+            detail=(
+                match_telnet_cowrie_preamble(banner_raw)
+                or banner_text[:240]
+                or "(no banner)"
+            ),
         ),
         Indicator(
             id="telnet.iac_negotiate",
             title="Telnet IAC accepts unknown options or resets on AUTH/NAWS",
             category="static_signature",
-            triggered=bool(match_telnet_option_spray(iac_text) or match_telnet_blind_option(iac_text)),
+            triggered=bool(
+                match_telnet_option_spray(iac_raw, iac_text)
+                or match_telnet_blind_option(iac_raw)
+                or match_telnet_cowrie_preamble(banner_raw)
+                or match_telnet_cowrie_preamble(iac_raw)
+            ),
             protocol="telnet",
-            detail=iac_text[:240] or "(no IAC response)",
+            detail=(
+                match_telnet_cowrie_preamble(banner_raw)
+                or match_telnet_cowrie_preamble(iac_raw)
+                or iac_text[:240]
+                or "(no IAC response)"
+            ),
         ),
         *skipped,
     ]

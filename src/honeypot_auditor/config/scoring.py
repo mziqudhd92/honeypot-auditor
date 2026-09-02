@@ -14,6 +14,15 @@ CORROBORATION_PROTOCOL_THRESHOLD = 1
 CORROBORATION_PROTOCOL_STEP_PCT = 5.0
 CORROBORATION_PROTOCOL_MAX_BONUS = 35.0
 
+# Pre-auth fingerprints that are highly specific (e.g. OpenSSH banner + Twisted/Cowrie KEX).
+# Alone they clear Suspected when combined with the static_signature category weight.
+HIGH_SIGNAL_TELL_IDS = frozenset(
+    {
+        "ssh.kex_facade",
+    }
+)
+HIGH_SIGNAL_BONUS_PCT = 15.0
+
 BASIC_STRATEGIES: tuple[str, ...] = ("arbitrary_auth", "state_nonpersist", "static_signature")
 
 STRATEGY_LABELS: dict[str, str] = {
@@ -34,7 +43,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     "ssh": {
         "arbitrary_auth": "any-password (2 random users)",
         "state_nonpersist": "exec vs fake PTY · /tmp canary",
-        "static_signature": "banner · lure whoami · honeyfs",
+        "static_signature": "banner · KEX facade · lure whoami · honeyfs",
     },
     "telnet": {
         "arbitrary_auth": "any-password (2 random users)",

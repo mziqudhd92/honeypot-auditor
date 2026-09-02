@@ -12,7 +12,34 @@ from honeypot_auditor.signatures.loader import (
 
 def test_core_pack_loads():
     pack = load_core_pack()
-    assert len(pack.rules) >= 3
+    assert len(pack.rules) >= 2
+
+
+def test_exact_bytes_rejects_empty_needle():
+    from honeypot_auditor.signatures.loader import SignatureRule, match_rule
+
+    rule = SignatureRule(
+        id="bad.empty",
+        title="empty",
+        primitive="exact_bytes",
+        params={"value": ""},
+    )
+    assert match_rule(rule, body=b"anything") is False
+    errors = validate_signature_doc(
+        {
+            "name": "x",
+            "version": "1",
+            "rules": [
+                {
+                    "id": "bad.empty",
+                    "title": "empty",
+                    "primitive": "exact_bytes",
+                    "params": {"value": ""},
+                }
+            ],
+        }
+    )
+    assert any("non-empty" in e for e in errors)
 
 
 def test_validate_rejects_banned_keys():

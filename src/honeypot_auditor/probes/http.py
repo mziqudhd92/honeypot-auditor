@@ -1,13 +1,16 @@
 """HTTP fingerprint engine.
 
 Strategies: static signature (empty PUT 405, GET / → index.html login skin,
-407 Via localhost). Arbitrary auth and state non-persistence are not on the
-basic path. Server banner strings are operator-configurable; login skin and
-empty 405 are the source-hardcoded tells.
+407 Via localhost, framework 404+session cookie, silent TCP accept/tarpit).
+When GET / returns an empty 404, up to five common admin paths are probed once
+each for a stock login skin (phpMyAdmin /admin /login). Arbitrary auth and state
+non-persistence are not on the basic path. Server banner strings are
+operator-configurable; login skin and empty 405 are the source-hardcoded tells.
 """
 
 from __future__ import annotations
 
+import logging
 import warnings
 
 from honeypot_auditor.config import (
@@ -24,10 +27,12 @@ from honeypot_auditor.models import Indicator, optional_import
 from honeypot_auditor.netutil import closed_reason, tcp_transact
 from honeypot_auditor.probes.common import is_safe_mode, skip_suite
 from honeypot_auditor.proxy_detect import detect_proxy_from_headers
-from honeypot_auditor.proxy_transport import configure_requests_proxy
+from honeypot_auditor.proxy_transport import configure_requests_proxy, create_connection
 from honeypot_auditor.settings import settings
 
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
+
+_log = logging.getLogger(__name__)
 
 _HTTP_SKIP = (
     ("http.malformed_200", "HTTP static 200 OK on malformed POST", "static_signature"),
@@ -37,13 +42,96 @@ _HTTP_SKIP = (
     ("http.proxy_lure", "HTTP 407 looks like a stock proxy lure", "static_signature"),
     ("http.header_order", "HTTP response header order matches lure profile", "static_signature"),
     ("http.wildcard_host", "HTTP accepts invalid Host header", "proto_conformance"),
+    ("http.framework_404_session", "HTTP 404 serves framework session cookie", "static_signature"),
+    ("http.silent_accept", "HTTP TCP accepts then returns no response", "static_signature"),
 )
+
+# Follow-up paths when GET / is a bare 404 (common low-interaction HTTP faces).
+_ADMIN_LOGIN_PATHS = ("/phpmyadmin/", "/phpMyAdmin/", "/pma/", "/admin/", "/login")
+
+
+def _dynamic_header_detail(server_val: str, missing_dynamic: bool, header_map: dict[str, str]) -> str:
+    date_note = "missing Date" if missing_dynamic else "Date present"
+    return (
+        f"server={server_val or '?'}; {date_note}; headers: "
+        + ", ".join(sorted(header_map))
+    )[:240]
+
+
+def _looks_like_admin_login_skin(status: int, body: bytes) -> bool:
+    if status not in (200, 301, 302):
+        return False
+    low = body[:2048].lower()
+    return (
+        b"phpmyadmin" in low
+        or (b'name="username"' in low and b'name="password"' in low)
+        or b'name="pma_username"' in low
+    )
+
+
+def _probe_admin_login_skin(requests_mod, base: str) -> bool:
+    """One GET per admin path; stop on first stock login skin. Failures are soft."""
+    for path in _ADMIN_LOGIN_PATHS:
+        try:
+            admin = requests_mod.get(
+                f"{base}{path}",
+                timeout=settings.timeout_seconds,
+                allow_redirects=False,
+                headers={"User-Agent": effective_user_agent()},
+                verify=False,
+                proxies=configure_requests_proxy() or None,
+            )
+        except Exception as exc:
+            _log.debug("admin path probe %s failed: %s", path, exc)
+            continue
+        if _looks_like_admin_login_skin(int(admin.status_code), admin.content or b""):
+            return True
+    return False
+
 
 _TLS_PORTS = frozenset({443, 8443})
 
 
 def _scheme(port: int) -> str:
     return "https" if port in _TLS_PORTS else "http"
+
+
+def _tcp_accepts(host: str, port: int) -> bool:
+    try:
+        with create_connection(host, port, settings.timeout_seconds):
+            return True
+    except (OSError, ImportError, TimeoutError):
+        return False
+
+
+def _silent_accept_suite(detail: str) -> list[Indicator]:
+    """TCP connected but application never returned an HTTP response (tarpit / silent face)."""
+    out: list[Indicator] = []
+    for i, title, cat in _HTTP_SKIP:
+        if i == "http.silent_accept":
+            out.append(
+                Indicator(
+                    id=i,
+                    title=title,
+                    category=cat,
+                    triggered=True,
+                    protocol="http",
+                    detail=detail[:240],
+                    remediation="Speak HTTP or refuse the TCP connection; silent accepts look like tarpits",
+                )
+            )
+        else:
+            out.append(
+                Indicator(
+                    id=i,
+                    title=title,
+                    category=cat,
+                    triggered=False,
+                    protocol="http",
+                    detail="no HTTP response (silent TCP accept)",
+                )
+            )
+    return out
 
 
 def probe_http(host: str, port: int) -> list[Indicator]:
@@ -63,6 +151,8 @@ def probe_http(host: str, port: int) -> list[Indicator]:
     raw, err = (b"", "") if tls else tcp_transact(host, port, malformed, recv_first=False)
     if err and not raw and not tls:
         return skip_suite(_HTTP_SKIP, closed_reason(err), protocol="http", error=err)
+    if not tls and not err and not raw:
+        return _silent_accept_suite("TCP accept; request sent; no HTTP bytes before timeout")
     if tls and requests is None:
         return skip_suite(_HTTP_SKIP, "HTTPS probe needs the requests package", protocol="http")
 
@@ -79,6 +169,8 @@ def probe_http(host: str, port: int) -> list[Indicator]:
     put_first = ""
     put_text = ""
     fetched = False
+    get_status = 0
+    get_headers: dict[str, str] = {}
 
     if requests is not None:
         base = f"{_scheme(port)}://{host}:{port}"
@@ -92,7 +184,9 @@ def probe_http(host: str, port: int) -> list[Indicator]:
                 proxies=configure_requests_proxy() or None,
             )
             fetched = True
+            get_status = int(resp.status_code)
             get_headers = {k.lower(): v for k, v in resp.headers.items()}
+            header_map = {**header_map, **get_headers}
             missing_dynamic = "date" not in get_headers
             server_val = get_headers.get("server", server_val)
             server_hit = server_hit or any(tell in server_val.lower() for tell in HTTP_SERVER_TELLS if server_val)
@@ -107,9 +201,13 @@ def probe_http(host: str, port: int) -> list[Indicator]:
                 f"{k}: {v}" for k, v in resp.headers.items()
             )
             proxy_hit = proxy_hit or match_http_proxy_lure(wire)
-        except Exception:
-            pass
+            if not login_skin and resp.status_code == 404:
+                login_skin = _probe_admin_login_skin(requests, base)
+        except Exception as exc:
+            _log.debug("HTTP GET / probe failed: %s", exc)
         if tls and not fetched:
+            if _tcp_accepts(host, port):
+                return _silent_accept_suite("TCP accept; no HTTPS/HTTP response before timeout")
             return skip_suite(_HTTP_SKIP, "HTTPS handshake failed", protocol="http")
         if not login_skin:
             try:
@@ -221,10 +319,7 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             category="static_signature",
             triggered=static_http_face,
             protocol="http",
-            detail=(
-                f"server={server_val or '?'}; missing Date; headers: "
-                + ", ".join(sorted(header_map))
-            )[:240],
+            detail=_dynamic_header_detail(server_val, missing_dynamic, header_map),
             evidence=text.split("\r\n\r\n", 1)[0][:600],
         ),
         Indicator(
@@ -281,8 +376,40 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             detail=wildcard_detail,
             remediation="Reject unknown Host values with 400/421/444",
         ),
+        Indicator(
+            id="http.framework_404_session",
+            title="HTTP 404 serves framework session cookie",
+            category="static_signature",
+            triggered=_framework_404_session(get_status, server_val, get_headers or header_map),
+            protocol="http",
+            detail=_framework_404_detail(get_status, server_val, get_headers or header_map),
+            remediation="Avoid issuing session cookies on 404 error pages for decoy HTTP faces",
+        ),
+        Indicator(
+            id="http.silent_accept",
+            title="HTTP TCP accepts then returns no response",
+            category="static_signature",
+            triggered=False,
+            protocol="http",
+            detail="HTTP status received",
+        ),
     ]
     return indicators
+
+
+def _framework_404_session(status: int, server_val: str, headers: dict[str, str]) -> bool:
+    if status != 404:
+        return False
+    server = (server_val or headers.get("server", "")).lower()
+    if "werkzeug" not in server and "gunicorn" not in server and "uvicorn" not in server:
+        return False
+    return "set-cookie" in {k.lower() for k in headers}
+
+
+def _framework_404_detail(status: int, server_val: str, headers: dict[str, str]) -> str:
+    if _framework_404_session(status, server_val, headers):
+        return f"HTTP {status} with {server_val or 'framework'} Set-Cookie"
+    return f"HTTP {status or '?'} without framework session-on-404 pattern"
 
 
 def _header_order_prefix_match(names: list[str], lure: tuple[str, ...]) -> bool:
@@ -306,7 +433,7 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
             detail="safe-mode: GET/HEAD only",
         )
         for i, title, cat in _HTTP_SKIP
-        if i not in ("http.dynamic_headers",)
+        if i not in ("http.dynamic_headers", "http.silent_accept")
     ]
     if requests is None and tls:
         return skip_suite(_HTTP_SKIP, "HTTPS probe needs the requests package", protocol="http")
@@ -322,6 +449,8 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
         raw, err = tcp_transact(host, port, get_req, recv_first=False)
         if err and not raw:
             return skip_suite(_HTTP_SKIP, closed_reason(err), protocol="http", error=err)
+        if not err and not raw:
+            return _silent_accept_suite("TCP accept; request sent; no HTTP bytes before timeout")
         text = raw.decode("latin-1", "replace")
         header_map = _parse_headers(text)
     else:
@@ -340,8 +469,11 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
             )
             header_map = {k.lower(): v for k, v in resp.headers.items()}
         except Exception as exc:
+            if _tcp_accepts(host, port):
+                return _silent_accept_suite("TCP accept; no HTTPS/HTTP response before timeout")
             return skip_suite(_HTTP_SKIP, str(exc), protocol="http", error=str(exc))
     missing_dynamic = "date" not in header_map
+    server_val = header_map.get("server", "")
     return [
         Indicator(
             id="http.dynamic_headers",
@@ -349,8 +481,16 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
             category="static_signature",
             triggered=missing_dynamic,
             protocol="http",
-            detail=f"headers: {', '.join(sorted(header_map))}",
+            detail=_dynamic_header_detail(server_val, missing_dynamic, header_map),
             evidence=text.split("\r\n\r\n", 1)[0][:600] if text else "",
+        ),
+        Indicator(
+            id="http.silent_accept",
+            title="HTTP TCP accepts then returns no response",
+            category="static_signature",
+            triggered=False,
+            protocol="http",
+            detail="HTTP status received",
         ),
         *skipped,
     ]

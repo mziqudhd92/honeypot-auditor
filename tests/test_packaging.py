@@ -32,7 +32,7 @@ def test_config_package_exports_legacy_symbols():
 
 def test_bundled_signature_and_profile_data():
     pack = load_core_pack()
-    assert len(pack.rules) >= 3
+    assert len(pack.rules) >= 2
     tls = load_tls_profiles()
     assert "lures" in tls
     assert tls["lures"], "tls lure table should ship in package data"

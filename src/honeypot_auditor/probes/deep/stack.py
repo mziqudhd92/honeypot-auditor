@@ -74,8 +74,8 @@ def probe_hassh(host: str, port: int) -> list[Indicator]:
             detail=detail,
             evidence=json.dumps(evidence),
             fingerprint_type="ssh_hassh",
-            requires_corroboration=True,
-            tell_tier="edge",
+            requires_corroboration=False,
+            tell_tier="origin",
         )
     ]
 

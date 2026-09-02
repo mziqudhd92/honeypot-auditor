@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-02
+
 ### Added
 
 - Clock-drift tell (`deep.clock_drift`): HTTP Date skew/frozen samples; optional SMB SystemTime hook
@@ -13,15 +15,46 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - CLI `--jitter` fraction (alongside `--jitter-ms`); TLS wildcard SNI tell (`tls.wildcard_sni`)
 - Concurrent load latency tell (`deep.latency_under_load`): parallel banner RTTs vs serial baseline
 - `docs/SIGNATURES.md` TLS JA3S/JA4S section; nginx service in benchmark compose; Docker golden integration job
+- HTTP framework 404+session tell (`http.framework_404_session`); probes common admin paths after empty `/`
+- SARIF always emits a summary result when no indicators triggered (CI-friendly)
+- Pre-auth `ssh.kex_facade` tell for password-gated Cowrie (OpenSSH banner + Twisted host-key/AEAD/MAC suite)
+- Pre-auth `ssh.password_only` tell when OpenSSH banner advertises password auth without publickey
+- Telnet Cowrie preamble tell (`IAC DO NAWS` + bare `login:`) on `telnet.banner` / `telnet.iac_negotiate`
+- HTTP silent-accept / tarpit tell (`http.silent_accept`) when TCP connects but no HTTP bytes return
+- HTTP-proxy silent-accept tell (`httpproxy.silent_accept`) for the same tarpit pattern on proxy ports
+- SMB silent-accept tell (`smb.silent_accept`) when TCP/445 accepts but NETBIOS/SMB session times out
+- Analyzer cotenancy tell when ≥2 ports hit silent-accept (`cotenancy.silent_accept_cluster`)
+- High-signal bonus for `ssh.kex_facade` (+15%) so password-gated Cowrie alone reaches Suspected / medium confidence
+- Lab-tour demo GIF (`docs/demo/honeypot-auditor-lab-tour-demo.gif`) covering three hosts with `-v` / `--deep` / silent-accept options
 
 ### Fixed
 
 - Wheel/package data: ship `signatures/core/*.json` and packaged `data/*.json`; TLS/HTTP2 loaders use package-relative paths
 - GitHub composite action: validate `target`/`preset` via env (no shell injection); install from checkout when present
 - Plugin/signature load failures log warnings instead of silent no-ops
-- SECURITY.md supported versions updated for 0.5.x
+- SECURITY.md supported versions updated for 0.5.x / 0.6.x
 - PyPI publish workflow with wheel package-data verification; golden CI packaging smoke + docs sync
 - SARIF golden shape assertions; config barrel-export regression test
+- `--preset deception-audit` crashed before probes (alias applied after port map); now normalizes first and enables `--deep`
+- Deep probe job used the same 5s budget as single probes; dedicated deep timeout (≥90s) and non-empty `deep.error` detail
+- Declarative `exact_bytes` with empty needle always matched; reject empty needles and remove broken `mysql_ssl.json` pack rule
+- Confidence stayed `low` on Confirmed 100% due to Shodan/closed-port skips; ignore never-applicable skips; multi-user any-password → `high` / `SKIP_TARGET`
+- Tactical coverage skip-ratio now uses the same never-applicable filter as confidence
+- Never-applicable skip matcher no longer treats bare "filtered" (e.g. WAF content-filtered) as closed-port
+- Any-password bonus no longer zeroes other category contributions in the scoreboard
+- Safe-mode telnet passed strings into IAC matchers expecting bytes
+- `http.dynamic_headers` detail always claimed "missing Date"; now reflects actual Date presence
+- HTTP admin-path follow-ups after bare `/` 404 are bounded/logged and covered by tests
+- SSH KEXINIT parser skipped the identification string so HASSH/Cowrie facade tells never fired
+- MySQL seq-order tell only matched classic ER 1156; also match modern emulator `Expected seq(N) got seq(M)` replies
+- `--ports` help clarifies it remaps inside the preset; `-p/--port` is required to limit scan scope
+- SSH/Telnet identity scoring for canned `Command not handled` / `Internal error. Please try again later` refusals
+- Per-probe job budget was equal to socket timeout, so silent-accept/tarpit faces raced the outer deadline; jobs now get `2×timeout+2s` headroom
+- Confidence treated post-auth skips (`no session`) as coverage failures on password-gated hosts; those skips are never-applicable for confidence
+
+### Changed
+
+- Version 0.6.0; README and GitHub Pages use the lab-tour demo GIF as the primary live demo
 
 ## [0.5.0] - 2026-09-01
 

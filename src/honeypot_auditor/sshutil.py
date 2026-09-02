@@ -48,6 +48,44 @@ def try_ssh_auth(host: str, port: int, user: str, password: str):
         return None, str(exc)
 
 
+def probe_ssh_auth_methods(host: str, port: int, username: str = "root") -> tuple[list[str], str, str]:
+    """Return (methods, banner, error) via SSH USERAUTH none (no credentials tried)."""
+    paramiko = optional_import("paramiko")
+    if paramiko is None:
+        return [], "", "paramiko not installed"
+    from honeypot_auditor.proxy_transport import paramiko_proxy_sock
+
+    transport = None
+    try:
+        sock = paramiko_proxy_sock(host, port, settings.timeout_seconds)
+        if sock is not None:
+            transport = paramiko.Transport(sock)
+        else:
+            transport = paramiko.Transport((host, port))
+        transport.banner_timeout = settings.timeout_seconds
+        transport.auth_timeout = settings.timeout_seconds
+        transport.start_client(timeout=settings.timeout_seconds)
+        banner = transport.remote_version or ""
+        try:
+            transport.auth_none(username)
+            # Rare: none auth succeeded — treat as empty method list with note via banner path.
+            return ["none"], banner, ""
+        except paramiko.BadAuthenticationType as exc:
+            methods = [str(m) for m in (exc.allowed_types or [])]
+            return methods, banner, ""
+        except paramiko.AuthenticationException:
+            # Some servers reject none without advertising alternatives.
+            return [], banner, ""
+    except Exception as exc:
+        return [], "", str(exc)
+    finally:
+        if transport is not None:
+            try:
+                transport.close()
+            except Exception:
+                pass
+
+
 def ssh_exec(client, command: str, timeout: float | None = None) -> tuple[str, str, float]:
     """Run command; return (stdout+stderr, error, elapsed_seconds)."""
     if timeout is None:

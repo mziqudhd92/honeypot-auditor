@@ -72,6 +72,10 @@ def validate_signature_doc(doc: dict) -> list[str]:
                 re.compile(pattern)
             except re.error as exc:
                 errors.append(f"rules[{i}] invalid regex: {exc}")
+        if prim == "exact_bytes":
+            needle = (rule.get("params") or {}).get("value", "")
+            if needle is None or needle == "":
+                errors.append(f"rules[{i}] exact_bytes value must be non-empty")
     return errors
 
 
@@ -127,6 +131,8 @@ def match_rule(
         needle = params.get("value", "")
         if isinstance(needle, str):
             needle = needle.encode("latin-1")
+        if not needle:
+            return False
         return needle in body
     if rule.primitive == "regex":
         pattern = params.get("pattern", "")

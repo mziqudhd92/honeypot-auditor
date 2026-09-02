@@ -1,7 +1,8 @@
 """SMB fingerprint engine.
 
-Strategies: static signature (SMB1/EOL native_os, static NTLM challenge) ·
-state non-persistence (bogus pipe NTSTATUS). Arbitrary auth is not on the basic path.
+Strategies: static signature (SMB1/EOL native_os, static NTLM challenge,
+silent TCP accept / tarpit) · state non-persistence (bogus pipe NTSTATUS).
+Arbitrary auth is not on the basic path.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from honeypot_auditor.config import (
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import tcp_transact
 from honeypot_auditor.probes.common import skip_suite
+from honeypot_auditor.proxy_transport import create_connection
 from honeypot_auditor.settings import settings
 from honeypot_auditor.smbutil import (
     collect_ntlm_challenges,
@@ -27,7 +29,57 @@ _SMB_SKIP = (
     ("smb.dialect", "SMB dialect / native-OS emulator anomaly", "static_signature"),
     ("smb.ntlm_challenge", "NTLM server challenge is static across sessions", "static_signature"),
     ("smb.bogus_pipe", "Bogus IPC$ named pipe NTSTATUS is wrong", "state_nonpersist"),
+    ("smb.silent_accept", "SMB TCP accepts then returns no protocol response", "static_signature"),
 )
+
+
+def _tcp_accepts(host: str, port: int) -> bool:
+    try:
+        with create_connection(host, port, min(2.0, float(settings.timeout_seconds))):
+            return True
+    except (OSError, ImportError, TimeoutError):
+        return False
+
+
+def _looks_like_smb_timeout(err: str) -> bool:
+    low = (err or "").lower()
+    return any(
+        tok in low
+        for tok in (
+            "timed out",
+            "timeout",
+            "netbios connection with the remote host timed out",
+        )
+    )
+
+
+def _silent_accept_suite(detail: str) -> list[Indicator]:
+    out: list[Indicator] = []
+    for i, title, cat in _SMB_SKIP:
+        if i == "smb.silent_accept":
+            out.append(
+                Indicator(
+                    id=i,
+                    title=title,
+                    category=cat,
+                    triggered=True,
+                    protocol="smb",
+                    detail=detail[:240],
+                    remediation="Speak SMB or refuse the TCP connection; silent accepts look like tarpits",
+                )
+            )
+        else:
+            out.append(
+                Indicator(
+                    id=i,
+                    title=title,
+                    category=cat,
+                    triggered=False,
+                    protocol="smb",
+                    detail="no SMB session (silent TCP accept)",
+                )
+            )
+    return out
 
 
 def probe_smb(host: str, port: int) -> list[Indicator]:
@@ -89,11 +141,25 @@ def probe_smb(host: str, port: int) -> list[Indicator]:
             detail=pipe_hit or (pipe_detail or "STATUS_OBJECT_NAME_NOT_FOUND on bogus pipe"),
             evidence=f"0x{pipe_code:08X}" if pipe_code is not None else pipe_detail[:160],
         ),
+        Indicator(
+            id="smb.silent_accept",
+            title="SMB TCP accepts then returns no protocol response",
+            category="static_signature",
+            triggered=False,
+            protocol="smb",
+            detail="SMB session established",
+        ),
     ]
 
 
 def _smb_session_failure_indicator(host: str, port: int, exc: Exception | str) -> list[Indicator]:
     err = str(exc)
+    # TCP open + negotiate/session timeout = tarpit / silent SMB face.
+    if _looks_like_smb_timeout(err) and _tcp_accepts(host, port):
+        return _silent_accept_suite(
+            f"TCP accept; SMB/NETBIOS session timed out without a dialect ({err[:120]})"
+        )
+
     framing_anomaly = any(
         tok in err.lower()
         for tok in ("unpack requires", "ntlm", "protocol", "not supported", "connection reset")
@@ -122,6 +188,14 @@ def _smb_session_failure_indicator(host: str, port: int, exc: Exception | str) -
                 "state_nonpersist",
                 "no SMB session",
                 protocol="smb",
+            ),
+            Indicator(
+                id="smb.silent_accept",
+                title="SMB TCP accepts then returns no protocol response",
+                category="static_signature",
+                triggered=False,
+                protocol="smb",
+                detail="SMB framing anomaly (not a silent accept)",
             ),
         ]
     raw, _ = tcp_transact(host, port, b"", recv_first=True, timeout=min(2.0, settings.timeout_seconds))
@@ -156,5 +230,13 @@ def _smb_session_failure_indicator(host: str, port: int, exc: Exception | str) -
             "state_nonpersist",
             "session setup failed",
             protocol="smb",
+        ),
+        Indicator(
+            id="smb.silent_accept",
+            title="SMB TCP accepts then returns no protocol response",
+            category="static_signature",
+            triggered=False,
+            protocol="smb",
+            detail="SMB bytes observed (not a silent accept)",
         ),
     ]

@@ -11,8 +11,14 @@ from honeypot_auditor.config import STATUS_OBJECT_NAME_NOT_FOUND
 def test_smb_skipped_without_impacket():
     with patch.object(smb, "optional_impacket", return_value=(None, None)):
         inds = smb.probe_smb("127.0.0.1", 445)
-    assert len(inds) == 3
+    assert len(inds) == 4
     assert all(i.skipped for i in inds)
+    assert {i.id for i in inds} == {
+        "smb.dialect",
+        "smb.ntlm_challenge",
+        "smb.bogus_pipe",
+        "smb.silent_accept",
+    }
 
 
 @patch.object(smb, "probe_bogus_pipe", return_value=(STATUS_OBJECT_NAME_NOT_FOUND, "ok", False))
@@ -61,3 +67,20 @@ def test_smb_framing_anomaly_on_open_port(_imp, _summary, mock_tcp):
     assert "session setup failed" in by_id["smb.dialect"].detail
     assert by_id["smb.ntlm_challenge"].skipped
     assert by_id["smb.bogus_pipe"].skipped
+    assert not by_id["smb.silent_accept"].triggered
+
+
+@patch.object(smb, "_tcp_accepts", return_value=True)
+@patch.object(
+    smb,
+    "smb_connection_summary",
+    return_value={"login_error": "The NETBIOS connection with the remote host timed out."},
+)
+@patch.object(smb, "optional_impacket", return_value=(MagicMock(), MagicMock()))
+def test_smb_silent_accept_on_netbios_timeout(_imp, _summary, _tcp):
+    inds = smb.probe_smb("127.0.0.1", 445)
+    by_id = {i.id: i for i in inds}
+    assert by_id["smb.silent_accept"].triggered
+    assert "timed out" in by_id["smb.silent_accept"].detail.lower()
+    assert not by_id["smb.dialect"].triggered
+    assert not by_id["smb.dialect"].skipped

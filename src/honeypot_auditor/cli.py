@@ -138,7 +138,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="extra_ports",
         help="Only these TCP ports (nmap-style; repeatable or 22,2222). 22→ssh, 80→http; unknown numbers probed as SSH. Omit to use --preset",
     )
-    p.add_argument("--ports", default="", help="Override ports, e.g. ssh=2222,http=8081")
+    p.add_argument(
+        "--ports",
+        default="",
+        help="Remap protocol ports inside the preset (e.g. ssh=2222,http=8081). "
+        "Does not limit which protocols are scanned — use -p/--port for that",
+    )
     p.add_argument(
         "--confirm-authorized",
         action="store_true",
@@ -290,23 +295,45 @@ def run_check_sig(argv: list[str]) -> int:
     return 0 if ok else 1
 
 
+def _job_timeout_seconds(name: str) -> float:
+    """Per-job budget. Deep runs many probes; give it a dedicated ceiling.
+
+    Non-deep jobs need headroom over a single ``tcp_transact`` (connect + full
+    recv timeout); otherwise silent-accept / tarpit faces race the outer budget.
+    """
+    base = max(5.0, float(settings.timeout_seconds))
+    if name == "deep":
+        return max(90.0, base * 4.0, float(settings.deep_timeout_seconds))
+    return base * 2.0 + 2.0
+
+
+def _format_job_error(exc: BaseException, *, timeout: float) -> str:
+    if isinstance(exc, TimeoutError):
+        return f"timed out after {timeout:.0f}s"
+    msg = str(exc).strip()
+    name = type(exc).__name__
+    return f"{name}: {msg}" if msg else name
+
+
 async def _run_named(name: str, fn: Callable[[], list[Indicator]], progress, task_id) -> list[Indicator]:
     _apply_jitter()
     mgr = get_transport_manager()
+    timeout = _job_timeout_seconds(name)
     try:
-        result = await mgr.run_sync(fn, timeout=max(5.0, settings.timeout_seconds), jitter=False)
+        result = await mgr.run_sync(fn, timeout=timeout, jitter=False)
         return result if isinstance(result, list) else []
     except Exception as exc:
+        detail = _format_job_error(exc, timeout=timeout)
         return [
             Indicator(
                 id=f"{name}.error",
                 title=f"{name} probe error",
                 category="static_signature",
                 skipped=True,
-                skip_reason=str(exc),
-                error=str(exc),
+                skip_reason=detail,
+                error=detail,
                 protocol=name,
-                detail=str(exc),
+                detail=detail,
             )
         ]
     finally:
@@ -327,6 +354,11 @@ def _build_notes(
     ]
     if args.extra_ports:
         notes.append("-p/--port selects only the listed ports (preset not applied)")
+    elif getattr(args, "ports", ""):
+        notes.append(
+            "--ports remaps protocol ports inside the preset; "
+            "use -p/--port to scan only selected TCP ports"
+        )
     if ports:
         notes.append(f"ports {_port_note(ports)}")
     if public_target and args.confirm_authorized:
@@ -418,13 +450,21 @@ def _parse_jitter_ms(raw: str) -> tuple[int, int] | None:
     return int(parts[0]), int(parts[1])
 
 
+def _normalize_preset_alias(args: argparse.Namespace) -> None:
+    """Map CLI-only aliases before port resolution.
+
+    ``deception-audit`` is a workflow preset (both + deep), not a separate port map.
+    """
+    if getattr(args, "preset", "") == "deception-audit":
+        args.preset = DEFAULT_PORT_PRESET
+        if not bool(getattr(args, "safe_mode", False)):
+            args.deep = True
+
+
 def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.timeout_seconds = float(args.timeout)
     safe = bool(getattr(args, "safe_mode", False))
-    if getattr(args, "preset", "") == "deception-audit":
-        args.preset = DEFAULT_PORT_PRESET
-        if not safe:
-            args.deep = True
+    _normalize_preset_alias(args)
     settings.deep = bool(args.deep) and not safe
     settings.safe_mode = safe
     settings.profile = ProbeProfile.SAFE if safe else ProbeProfile(getattr(args, "profile", "audit"))
@@ -437,6 +477,8 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.seed = getattr(args, "seed", None)
     settings.signature_pack = getattr(args, "signature_pack", "core")
     settings.output_format = getattr(args, "format", "json")
+    # Deep suite runs many probes; keep a floor so --timeout 3 does not kill it at 5s.
+    settings.deep_timeout_seconds = max(90.0, float(args.timeout) * 4.0)
     jitter = float(getattr(args, "jitter", 0.0) or 0.0)
     if jitter < 0:
         raise ValueError("--jitter must be >= 0")
@@ -622,6 +664,7 @@ async def run_audit(args: argparse.Namespace) -> int:
     console.print(f"[dim]{TAGLINE}[/dim]\n")
 
     try:
+        _normalize_preset_alias(args)
         scan_kind, hosts = expand_scan_targets(args.target)
         extra = _flatten_extra_ports(args.extra_ports)
         ports = probe_port_map(args.preset, parse_port_overrides(args.ports), extra)

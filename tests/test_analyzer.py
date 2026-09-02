@@ -98,6 +98,52 @@ def test_multi_user_arbitrary_auth_scores_100():
     assert report.threat_level == "Confirmed Honeypot"
     assert report.category_hits["arbitrary_auth"]["contribution"] == 100.0
     assert report.category_hits["arbitrary_auth"]["dynamic"] is True
+    assert report.confidence == "high"
+    assert report.tactical_action == "SKIP_TARGET"
+
+
+def test_ssh_kex_facade_alone_is_suspected_medium():
+    """Cowrie KEX facade is a high-signal pre-auth tell — not 'Likely Real Host' / low."""
+    inds = [
+        Indicator(
+            id="ssh.kex_facade",
+            title="SSH OpenSSH banner with Twisted/Cowrie KEX facade",
+            category="static_signature",
+            triggered=True,
+            protocol="ssh",
+            detail="OpenSSH banner with Twisted/Cowrie KEX facade",
+        ),
+        Indicator(
+            id="ssh.arbitrary_auth",
+            title="SSH arbitrary credential acceptance",
+            category="arbitrary_auth",
+            triggered=False,
+            protocol="ssh",
+        ),
+        Indicator(
+            id="ssh.uname",
+            title="SSH uname",
+            category="static_signature",
+            skipped=True,
+            skip_reason="no session (auth failed)",
+            protocol="ssh",
+        ),
+    ]
+    report = build_report(
+        target="203.0.113.50",
+        resolved_ip="203.0.113.50",
+        ports={"ssh": [22]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+    )
+    # static 20 + high-signal bonus 15 = 35
+    assert report.score == 35.0
+    assert report.threat_level == "Suspected Honeypot"
+    assert report.confidence == "medium"
+    assert any(i.id == "corroboration.high_signal" for i in report.indicators)
+    assert report.tactical_action == "PROCEED_CAUTION"
 
 
 def test_buffet_cotenancy_confirms_deny_all_stack():
@@ -129,6 +175,45 @@ def test_buffet_cotenancy_confirms_deny_all_stack():
     assert any(i.id == "cotenancy.buffet" for i in report.indicators)
     assert any(i.id == "corroboration.protocol_buffet" for i in report.indicators)
     assert report.category_hits["corroboration"]["contribution"] == 25.0
+
+
+def test_silent_accept_cluster_scores_cotenancy():
+    inds = [
+        Indicator(
+            id="http.silent_accept",
+            title="h",
+            category="static_signature",
+            triggered=True,
+            protocol="http",
+        ),
+        Indicator(
+            id="http.silent_accept",
+            title="h2",
+            category="static_signature",
+            triggered=True,
+            protocol="http",
+        ),
+        Indicator(
+            id="httpproxy.silent_accept",
+            title="p",
+            category="static_signature",
+            triggered=True,
+            protocol="httpproxy",
+        ),
+    ]
+    report = build_report(
+        target="203.0.113.9",
+        resolved_ip="203.0.113.9",
+        ports={"http": [80, 443], "httpproxy": [8080]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+    )
+    assert any(i.id == "cotenancy.silent_accept_cluster" for i in report.indicators)
+    # static 20 + cotenancy 15 + corroboration 5 = 40
+    assert report.score == 40.0
+    assert report.threat_level == "Suspected Honeypot"
 
 
 def test_buffet_lab_scale_scores_95_without_shodan():
@@ -327,3 +412,143 @@ def test_tactical_action_matrix(score, confidence, proxy, expected):
         indicators=[Indicator(id="x", title="x", category="static_signature", triggered=True)],
     )
     assert action == expected
+
+
+def test_confidence_ignores_shodan_and_closed_port_skips():
+    from honeypot_auditor.analyzer import compute_confidence
+
+    inds = [
+        Indicator(
+            id="shodan.honeyscore",
+            title="s",
+            category="shodan",
+            skipped=True,
+            skip_reason="no API key (--shodan-key)",
+            protocol="shodan",
+        ),
+        Indicator(
+            id="ftp.banner",
+            title="f",
+            category="static_signature",
+            skipped=True,
+            skip_reason="connection refused (closed port or filtered)",
+            protocol="ftp",
+        ),
+        Indicator(
+            id="ssh.arbitrary_auth",
+            title="a",
+            category="arbitrary_auth",
+            triggered=True,
+            protocol="ssh",
+            evidence="user_a1,user_a2",
+        ),
+        Indicator(
+            id="ssh.uname",
+            title="u",
+            category="static_signature",
+            triggered=True,
+            protocol="ssh",
+        ),
+    ]
+    assert compute_confidence(inds) == "high"
+
+
+def test_secondary_contributions_kept_under_any_password_bonus():
+    inds = [
+        Indicator(
+            id="ssh.arbitrary_auth",
+            title="SSH arbitrary credential acceptance",
+            category="arbitrary_auth",
+            triggered=True,
+            protocol="ssh",
+            evidence="user_a15,user_a99",
+        ),
+        Indicator(
+            id="ssh.uname",
+            title="uname",
+            category="static_signature",
+            triggered=True,
+            protocol="ssh",
+        ),
+    ]
+    report = build_report(
+        target="203.0.113.1",
+        resolved_ip="203.0.113.1",
+        ports={"ssh": [22]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+    )
+    assert report.score == 100.0
+    assert report.category_hits["static_signature"]["triggered"] is True
+    assert report.category_hits["static_signature"]["contribution"] > 0
+    assert report.tactical_action == "SKIP_TARGET"
+
+
+def test_never_applicable_skip_does_not_match_content_filtered():
+    from honeypot_auditor.analyzer import _is_never_applicable_skip
+
+    ind = Indicator(
+        id="http.waf",
+        title="waf",
+        category="static_signature",
+        skipped=True,
+        skip_reason="response body looked content-filtered by WAF",
+        protocol="http",
+    )
+    assert not _is_never_applicable_skip(ind)
+    closed = Indicator(
+        id="ftp.banner",
+        title="f",
+        category="static_signature",
+        skipped=True,
+        skip_reason="connection refused (closed port or filtered)",
+        protocol="ftp",
+    )
+    assert _is_never_applicable_skip(closed)
+
+
+def test_tactical_ignores_never_applicable_skips_for_coverage():
+    from honeypot_auditor.analyzer import compute_tactical_action
+
+    inds = [
+        Indicator(
+            id="shodan.honeyscore",
+            title="s",
+            category="shodan",
+            skipped=True,
+            skip_reason="no API key (--shodan-key)",
+            protocol="shodan",
+        ),
+        Indicator(
+            id="ftp.banner",
+            title="f",
+            category="static_signature",
+            skipped=True,
+            skip_reason="connection refused (closed port or filtered)",
+            protocol="ftp",
+        ),
+        Indicator(
+            id="ssh.banner",
+            title="b",
+            category="static_signature",
+            triggered=True,
+            protocol="ssh",
+        ),
+        Indicator(
+            id="http.login_skin",
+            title="h",
+            category="static_signature",
+            triggered=True,
+            protocol="http",
+        ),
+    ]
+    action, _ = compute_tactical_action(
+        70.0,
+        "medium",
+        proxy_detected=False,
+        threat_level="Suspected Honeypot",
+        indicators=inds,
+    )
+    assert action == "SKIP_TARGET"

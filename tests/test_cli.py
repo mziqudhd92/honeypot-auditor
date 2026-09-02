@@ -263,3 +263,57 @@ def test_run_audit_with_nmap_opt_in(mock_shodan, mock_nmap, mock_deep, mock_rend
         code = asyncio.run(run_audit(args))
     assert code == 0
     mock_nmap.assert_called_once()
+
+
+def test_deception_audit_preset_normalizes_before_port_map():
+    from honeypot_auditor.cli import _normalize_preset_alias
+
+    args = build_parser().parse_args(
+        ["--target", "127.0.0.1", "--preset", "deception-audit"]
+    )
+    assert args.preset == "deception-audit"
+    _normalize_preset_alias(args)
+    assert args.preset == "both"
+    assert args.deep is True
+
+
+@patch("honeypot_auditor.cli.export")
+@patch("honeypot_auditor.cli.render")
+@patch("honeypot_auditor.cli.run_deep_probes", return_value=[])
+@patch("honeypot_auditor.cli.nmap_scan", return_value=[])
+@patch("honeypot_auditor.cli.shodan_lookup", return_value=[])
+def test_run_audit_deception_audit_preset(mock_shodan, mock_nmap, mock_deep, mock_render, mock_export, tmp_path):
+    args = build_parser().parse_args(
+        [
+            "--target",
+            "127.0.0.1",
+            "--preset",
+            "deception-audit",
+            "--output",
+            str(tmp_path / "audit.json"),
+        ]
+    )
+    with _stub_cli_probes():
+        code = asyncio.run(run_audit(args))
+    assert code == 0
+    assert args.preset == "both"
+    assert args.deep is True
+    mock_deep.assert_called_once()
+
+
+def test_job_timeout_deep_has_dedicated_budget():
+    from honeypot_auditor.cli import _job_timeout_seconds
+    from honeypot_auditor.settings import settings
+
+    settings.timeout_seconds = 3.0
+    settings.deep_timeout_seconds = 90.0
+    assert _job_timeout_seconds("ssh:22") == 12.0
+    assert _job_timeout_seconds("deep") >= 90.0
+
+
+def test_format_job_error_timeout_and_generic():
+    from honeypot_auditor.cli import _format_job_error
+
+    assert _format_job_error(TimeoutError(), timeout=90.0) == "timed out after 90s"
+    assert "ValueError" in _format_job_error(ValueError("boom"), timeout=5.0)
+    assert _format_job_error(RuntimeError(), timeout=5.0) == "RuntimeError"

@@ -14,4 +14,4 @@ def test_module_version():
         text=True,
     )
     assert proc.returncode == 0
-    assert "0.5.0" in proc.stdout
+    assert "0.6.0" in proc.stdout

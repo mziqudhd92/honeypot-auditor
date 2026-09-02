@@ -11,6 +11,8 @@ from honeypot_auditor.config import (
     CORROBORATION_PROTOCOL_THRESHOLD,
     COTENANCY_CORROBORATION_CATEGORIES,
     DEEP_WEIGHTS,
+    HIGH_SIGNAL_BONUS_PCT,
+    HIGH_SIGNAL_TELL_IDS,
     PROTOCOL_STRATEGIES,
     THREAT_CONFIRMED,
     THREAT_LEVELS,
@@ -94,6 +96,28 @@ def apply_cotenancy_corroboration(indicators: list[Indicator]) -> list[Indicator
     return out
 
 
+def silent_accept_cluster_indicator(indicators: list[Indicator]) -> Indicator | None:
+    """≥2 silent-accept ports is a classic tarpit / non-speaking listener cluster."""
+    hits = [
+        ind
+        for ind in indicators
+        if ind.triggered and not ind.skipped and ind.id.endswith(".silent_accept")
+    ]
+    if len(hits) < 2:
+        return None
+    labels = sorted({f"{_protocol_name(ind.protocol)}" for ind in hits})
+    return Indicator(
+        id="cotenancy.silent_accept_cluster",
+        title="Multiple ports accept TCP then return no application response",
+        category="cotenancy",
+        triggered=True,
+        protocol="multi",
+        detail=f"{len(hits)} silent-accept faces across {', '.join(labels)}",
+        evidence=",".join(sorted(ind.id for ind in hits)),
+        remediation="Refuse unused listeners or speak the expected protocol; silent accepts look like tarpits",
+    )
+
+
 def buffet_cotenancy_indicator(indicators: list[Indicator]) -> Indicator | None:
     """Score multi-lure buffets when several protocol probes fire with corroboration."""
     has_corroboration = any(
@@ -172,6 +196,27 @@ def protocol_corroboration_bonus(indicators: list[Indicator]) -> tuple[float, In
             f"(>{CORROBORATION_PROTOCOL_THRESHOLD} at {CORROBORATION_PROTOCOL_STEP_PCT:.0f}% each): {names}"
         ),
         evidence=",".join(protos),
+    )
+
+
+def high_signal_bonus(indicators: list[Indicator]) -> tuple[float, Indicator | None]:
+    """Bonus for pre-auth fingerprints that are highly specific (e.g. Cowrie KEX facade)."""
+    hits = [
+        ind
+        for ind in indicators
+        if ind.triggered and not ind.skipped and not ind.suppressed and ind.id in HIGH_SIGNAL_TELL_IDS
+    ]
+    if not hits:
+        return 0.0, None
+    names = ", ".join(sorted({ind.id for ind in hits}))
+    return HIGH_SIGNAL_BONUS_PCT, Indicator(
+        id="corroboration.high_signal",
+        title="High-signal decoy fingerprint",
+        category="corroboration",
+        triggered=True,
+        protocol="multi",
+        detail=f"+{HIGH_SIGNAL_BONUS_PCT:.0f}% for high-signal tell(s): {names}",
+        evidence=names,
     )
 
 
@@ -257,23 +302,58 @@ def threat_level(score: float, indicators: list[Indicator]) -> str:
 
 def compute_confidence(indicators: list[Indicator], *, deep: bool = False) -> str:
     """Derive low/medium/high confidence from audit breadth."""
-    attempted = [i for i in indicators if not i.skipped]
+    if multi_user_arbitrary_auth(indicators):
+        return "high"
+    relevant = [i for i in indicators if not _is_never_applicable_skip(i)]
+    attempted = [i for i in relevant if not i.skipped]
     if not attempted:
         return "low"
-    skipped_ratio = sum(1 for i in indicators if i.skipped) / max(len(indicators), 1)
-    if skipped_ratio > 0.5:
-        return "low"
+    skipped_ratio = sum(1 for i in relevant if i.skipped) / max(len(relevant), 1)
     triggered = [i for i in attempted if i.triggered and not i.suppressed]
     protos = _protocol_hits(indicators)
     categories = {i.category for i in triggered}
-    if len(triggered) <= 1 and len(protos) < 3:
-        return "low"
-    deep_cats = sum(1 for c in categories if c in DEEP_WEIGHTS)
-    if len(protos) >= 5 or (deep and deep_cats >= 3):
-        return "high"
-    if len(protos) >= 3 and len(categories) >= 2:
+    high_signal = any(i.id in HIGH_SIGNAL_TELL_IDS for i in triggered)
+
+    if skipped_ratio > 0.5:
+        level = "low"
+    elif len(triggered) <= 1 and len(protos) < 3:
+        level = "low"
+    else:
+        deep_cats = sum(1 for c in categories if c in DEEP_WEIGHTS)
+        if len(protos) >= 5 or (deep and deep_cats >= 3):
+            level = "high"
+        elif len(protos) >= 3 and len(categories) >= 2:
+            level = "medium"
+        else:
+            level = "medium" if len(protos) >= 3 else "low"
+
+    # A high-signal pre-auth fingerprint (Cowrie KEX facade) is medium even alone.
+    if high_signal and level == "low":
         return "medium"
-    return "medium" if len(protos) >= 3 else "low"
+    return level
+
+
+_NEVER_APPLICABLE_SKIP_MARKERS = (
+    "no api key",
+    "connection refused",
+    "closed port or filtered",
+    "closed port",
+    "safe-mode",
+    "disabled (",
+    "not installed",
+    "pass --with-nmap",
+    "needs the requests package",
+    "no session (auth failed)",
+    "need two sessions",
+)
+
+
+def _is_never_applicable_skip(ind: Indicator) -> bool:
+    """Skips that should not drag confidence down (missing optional deps / closed ports)."""
+    if not ind.skipped:
+        return False
+    reason = f"{ind.skip_reason or ''} {ind.detail or ''}".lower()
+    return any(marker in reason for marker in _NEVER_APPLICABLE_SKIP_MARKERS)
 
 
 def collect_proxy_evidence(indicators: list[Indicator]) -> list[str]:
@@ -344,11 +424,18 @@ def compute_tactical_action(
             "INCONCLUSIVE",
             "Edge proxy masks L4/TLS origin; use origin tells and manual verify.",
         )
-    attempted = [i for i in indicators if not i.skipped]
+    relevant = [i for i in indicators if not _is_never_applicable_skip(i)]
+    attempted = [i for i in relevant if not i.skipped]
     if not attempted or threat_level == "Inconclusive":
-        skipped_ratio = sum(1 for i in indicators if i.skipped) / max(len(indicators), 1)
+        denom = max(len(relevant), 1)
+        skipped_ratio = sum(1 for i in relevant if i.skipped) / denom
         if skipped_ratio > 0.5 or threat_level == "Inconclusive":
             return "INCONCLUSIVE", "Insufficient probe coverage or inconclusive threat level."
+    if multi_user_arbitrary_auth(indicators) and score >= 60:
+        return (
+            "SKIP_TARGET",
+            "Multi-user any-password is a definitive low-interaction decoy signature.",
+        )
     if score >= 60:
         if confidence == "low":
             return (
@@ -483,7 +570,11 @@ def build_report(
     if deep:
         indicators = apply_cotenancy_corroboration(indicators)
         indicators = apply_stack_corroboration(indicators)
-    if not any(i.category == "cotenancy" for i in indicators):
+    if not any(i.id == "cotenancy.silent_accept_cluster" for i in indicators):
+        cluster = silent_accept_cluster_indicator(indicators)
+        if cluster is not None:
+            indicators = [*indicators, cluster]
+    if not any(i.id == "cotenancy.buffet" for i in indicators):
         buffet = buffet_cotenancy_indicator(indicators)
         if buffet is not None:
             indicators = [*indicators, buffet]
@@ -491,19 +582,23 @@ def build_report(
     bonus, corroboration = protocol_corroboration_bonus(indicators)
     if corroboration is not None:
         indicators = [*indicators, corroboration]
-    if bonus > 0:
-        score = min(round(score + bonus, 2), 100.0)
+    signal_bonus, signal_ind = high_signal_bonus(indicators)
+    if signal_ind is not None:
+        indicators = [*indicators, signal_ind]
+    total_bonus = bonus + signal_bonus
+    if total_bonus > 0:
+        score = min(round(score + total_bonus, 2), 100.0)
         hits["corroboration"] = {
             "weight": 0.0,
             "triggered": True,
-            "contribution": bonus,
+            "contribution": total_bonus,
             "attempted": True,
             "dynamic": True,
         }
     if multi_user_arbitrary_auth(indicators):
         score = 100.0
-        for key in hits:
-            hits[key]["contribution"] = 0.0
+        # Keep secondary category contributions visible for analysts; the
+        # any-password bonus caps the headline score without erasing other hits.
         hits["arbitrary_auth"]["triggered"] = True
         hits["arbitrary_auth"]["contribution"] = 100.0
         hits["arbitrary_auth"]["dynamic"] = True

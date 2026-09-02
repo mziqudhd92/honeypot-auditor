@@ -40,6 +40,25 @@ def test_sarif_schema_fields(tmp_path):
     assert "ssh.static" in path.read_text(encoding="utf-8")
 
 
+def test_sarif_emits_summary_when_no_hits():
+    report = AuditReport(
+        target="127.0.0.1",
+        resolved_ip="127.0.0.1",
+        score=0.0,
+        threat_level="Likely Real Host",
+        category_hits={},
+        indicators=[],
+        confidence="low",
+        tactical_action="INCONCLUSIVE",
+    )
+    sarif = build_sarif(report)
+    run = sarif["runs"][0]
+    assert run["results"]
+    assert run["results"][0]["ruleId"] == "honeypot-auditor.summary"
+    assert run["tool"]["driver"]["rules"]
+    assert run["properties"]["honeyscore"] == 0.0
+
+
 def test_sarif_golden_snapshot_keys():
     """Stable SARIF shape for DevSecOps consumers."""
     report = AuditReport(

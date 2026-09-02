@@ -59,6 +59,47 @@ def build_sarif(report: AuditReport) -> dict:
                 "fullDescription": {"text": ind.remediation or ind.title},
             }
         )
+    results = [_indicator_result(i) for i in triggered]
+    if not results:
+        summary_id = "honeypot-auditor.summary"
+        rules.append(
+            {
+                "id": summary_id,
+                "name": summary_id,
+                "shortDescription": {"text": "Honeypot Auditor summary"},
+                "fullDescription": {
+                    "text": "No triggered decoy indicators; summary is always emitted for CI consumers."
+                },
+            }
+        )
+        results.append(
+            {
+                "ruleId": summary_id,
+                "level": "note",
+                "message": {
+                    "text": (
+                        f"Honeyscore {report.score}% — {report.threat_level} "
+                        f"(confidence={report.confidence}, tactical={report.tactical_action})"
+                    )
+                },
+                "locations": [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {
+                                "uri": f"target://{report.resolved_ip or report.target}"
+                            }
+                        }
+                    }
+                ],
+                "properties": {
+                    "category": "info",
+                    "triggered": False,
+                    "suppressed": False,
+                    "remediation": "",
+                    "evidence": "",
+                },
+            }
+        )
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": _SARIF_VERSION,
@@ -72,7 +113,7 @@ def build_sarif(report: AuditReport) -> dict:
                         "rules": rules,
                     }
                 },
-                "results": [_indicator_result(i) for i in triggered],
+                "results": results,
                 "properties": {
                     "honeyscore": report.score,
                     "confidence": report.confidence,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import honeypot_auditor.probes.mysql as mysql
 
@@ -68,3 +68,68 @@ def test_mysql_closed_port(mock_rt):
     inds = mysql.probe_mysql("127.0.0.1", 3306)
     assert len(inds) == 5
     assert all(i.skipped for i in inds)
+
+
+def test_mysql_expected_seq_fsm_is_honeypot_tell():
+    from honeypot_auditor.config.signatures.mysql import match_mysql_pkt_order
+
+    raw = bytes.fromhex(
+        "23000002ff1304313833353a2045787065637465642073657128312920676f7420736571283029"
+    )
+    hit = match_mysql_pkt_order(raw)
+    assert hit is not None
+    assert "Expected seq" in hit or "emulator seq FSM" in hit
+
+
+def test_mysql_ssl_request_sets_client_ssl_flag():
+    pkt = mysql._mysql_ssl_request()
+    assert len(pkt) >= 5
+    # payload length + seq + CLIENT_SSL bit set in capability dword
+    assert pkt[3] == 1
+    caps = int.from_bytes(pkt[4:8], "little")
+    assert caps & mysql._CLIENT_SSL
+
+
+@patch("socket.create_connection")
+def test_mysql_ssl_drop_probe_silent_close(mock_conn):
+    greeting = _greeting("5.5.43-0ubuntu0.14.04.1")
+    sock = MagicMock()
+    mock_conn.return_value.__enter__.return_value = sock
+    # greeting then EOF to end read loop; empty follow after CLIENT_SSL
+    sock.recv.side_effect = [greeting, b"", b""]
+    sock.sendall.side_effect = [None, OSError("Broken pipe")]
+    triggered, detail, evidence, skipped = mysql._mysql_ssl_drop_probe("127.0.0.1", 3306)
+    assert triggered and not skipped
+    assert "closed" in detail.lower() or evidence == "closed"
+
+
+@patch("socket.create_connection")
+def test_mysql_ssl_drop_probe_err_packet(mock_conn):
+    greeting = _greeting("8.0.36")
+    sock = MagicMock()
+    mock_conn.return_value.__enter__.return_value = sock
+    sock.recv.side_effect = [greeting, b"", _denied()]
+    sock.sendall.return_value = None
+    triggered, detail, _evidence, skipped = mysql._mysql_ssl_drop_probe("127.0.0.1", 3306)
+    assert not triggered and not skipped
+    assert "ERR" in detail
+
+
+@patch("socket.create_connection")
+def test_mysql_ssl_drop_probe_stays_open(mock_conn):
+    greeting = _greeting("8.0.36")
+    sock = MagicMock()
+    mock_conn.return_value.__enter__.return_value = sock
+    sock.recv.side_effect = [greeting, b"", b"\x00"]
+    sock.sendall.return_value = None
+    triggered, detail, evidence, skipped = mysql._mysql_ssl_drop_probe("127.0.0.1", 3306)
+    assert not triggered and not skipped
+    assert "stayed open" in detail.lower() or evidence
+
+
+@patch("socket.create_connection")
+def test_mysql_ssl_drop_probe_connection_error(mock_conn):
+    mock_conn.side_effect = OSError("Connection refused")
+    triggered, detail, _evidence, skipped = mysql._mysql_ssl_drop_probe("127.0.0.1", 3306)
+    assert skipped and not triggered
+    assert "refused" in detail.lower() or "closed" in detail.lower()

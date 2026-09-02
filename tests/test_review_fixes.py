@@ -121,6 +121,7 @@ def test_safe_mode_ssh_skips_auth():
             mock_import.assert_not_called()
     by_id = {i.id: i for i in inds}
     assert by_id["ssh.arbitrary_auth"].skipped
+    assert "ssh.kex_facade" in by_id
 
 
 @patch.object(settings, "safe_mode", True)

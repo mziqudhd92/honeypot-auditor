@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import honeypot_auditor.probes.telnet as telnet
+from honeypot_auditor.settings import settings
 
 KIPPO_UNAME = "Linux myhost 2.6.26-2-686 #1 SMP Wed Nov 4 20:45:08 UTC 2009 i686 GNU/Linux"
 COWRIE_SHELL = (
@@ -102,6 +103,20 @@ def test_telnet_cisco_lure_without_any_password(mock_tcp, mock_login):
     assert by_id["telnet.uname"].skipped
 
 
+IAC_COWRIE_PREAMBLE = b"\xff\xfd\x1flogin: "
+
+
+@patch.object(telnet, "_telnet_login_and_probe", return_value=(False, "login: ", ""))
+@patch.object(telnet, "tcp_transact", return_value=(IAC_COWRIE_PREAMBLE, ""))
+def test_telnet_cowrie_preamble(mock_tcp, mock_login):
+    inds = telnet.probe_telnet("127.0.0.1", 23)
+    by_id = {i.id: i for i in inds}
+    assert by_id["telnet.banner"].triggered
+    assert by_id["telnet.iac_negotiate"].triggered
+    assert "NAWS" in by_id["telnet.banner"].detail
+    assert "login:" in by_id["telnet.banner"].detail.lower()
+
+
 IAC_OPTION_SPRAY = bytes.fromhex("fffb03fffb00fffd00fffd1ffffd18fffd27fffd22") + b"\r\nUsername: "
 
 
@@ -127,4 +142,20 @@ def test_telnet_blind_unknown_option(mock_tcp, mock_login):
     assert by_id["telnet.iac_negotiate"].triggered
     mock_tcp.assert_called()
     assert mock_tcp.call_args[0][2] == telnet._IAC_PROBE
+
+
+@patch.object(settings, "safe_mode", True)
+@patch.object(telnet, "tcp_transact")
+def test_telnet_safe_mode_accepts_bytes_iac(mock_tcp):
+    mock_tcp.side_effect = [
+        (b"login: ", ""),
+        (IAC_BLIND, ""),
+    ]
+    inds = telnet.probe_telnet("127.0.0.1", 23)
+    by_id = {i.id: i for i in inds}
+    assert "telnet.banner" in by_id
+    assert "telnet.iac_negotiate" in by_id
+    assert by_id["telnet.iac_negotiate"].triggered
+    assert not by_id["telnet.banner"].error
+    assert by_id["telnet.arbitrary_auth"].skipped
 

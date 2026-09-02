@@ -35,3 +35,13 @@ def test_httpproxy_closed_port(mock_tcp):
     mock_tcp.return_value = (b"", "Connection refused")
     inds = httpproxy.probe_httpproxy("127.0.0.1", 3128)
     assert all(i.skipped for i in inds)
+    assert {i.id for i in inds} == {"httpproxy.signature", "httpproxy.silent_accept"}
+
+
+@patch.object(httpproxy, "tcp_transact")
+def test_httpproxy_silent_accept(mock_tcp):
+    mock_tcp.return_value = (b"", "")
+    inds = httpproxy.probe_httpproxy("127.0.0.1", 8080)
+    by_id = {i.id: i for i in inds}
+    assert by_id["httpproxy.silent_accept"].triggered
+    assert not by_id["httpproxy.signature"].triggered

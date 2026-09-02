@@ -45,3 +45,14 @@ def match_telnet_blind_option(raw: bytes) -> str | None:
     if b"\xff\xfb\x63" in data or b"\xff\xfd\x63" in data:
         return "accepted unknown Telnet option 99"
     return None
+
+
+def match_telnet_cowrie_preamble(raw: bytes) -> str | None:
+    """Cowrie/Kippo often emits IAC DO NAWS then a bare 'login:' prompt."""
+    data = raw or b""
+    if not data:
+        return None
+    low = data.lower()
+    if b"\xff\xfd\x1f" in data and b"login:" in low:
+        return "IAC DO NAWS then login: (Cowrie-style preamble)"
+    return None

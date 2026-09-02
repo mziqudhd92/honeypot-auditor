@@ -1,6 +1,7 @@
 """HTTP proxy fingerprint engine.
 
-Strategies: static signature (407 Via localhost / frozen squid / ISA deny).
+Strategies: static signature (407 Via localhost / frozen squid / ISA deny),
+silent TCP accept (tarpit / non-speaking listener on a proxy port).
 Arbitrary auth and state non-persistence are not on the basic path
 (deny-all 407 is also a real proxy requiring credentials).
 """
@@ -14,6 +15,7 @@ from honeypot_auditor.probes.common import skip_suite
 
 _PROXY_SKIP = (
     ("httpproxy.signature", "HTTP proxy 407 looks like a stock lure", "static_signature"),
+    ("httpproxy.silent_accept", "HTTP proxy port TCP accepts then returns no response", "static_signature"),
 )
 
 
@@ -27,6 +29,26 @@ def probe_httpproxy(host: str, port: int) -> list[Indicator]:
     raw, err = tcp_transact(host, port, req)
     if err and not raw:
         return skip_suite(_PROXY_SKIP, closed_reason(err), protocol="httpproxy", error=err)
+    if not err and not raw:
+        return [
+            Indicator(
+                id="httpproxy.signature",
+                title="HTTP proxy 407 looks like a stock lure",
+                category="static_signature",
+                triggered=False,
+                protocol="httpproxy",
+                detail="no HTTP response (silent TCP accept)",
+            ),
+            Indicator(
+                id="httpproxy.silent_accept",
+                title="HTTP proxy port TCP accepts then returns no response",
+                category="static_signature",
+                triggered=True,
+                protocol="httpproxy",
+                detail="TCP accept; proxy request sent; no HTTP bytes before timeout",
+                remediation="Speak HTTP proxy or refuse the TCP connection; silent accepts look like tarpits",
+            ),
+        ]
     text = raw.decode("latin-1", "replace")
     first = text.split("\r\n", 1)[0] if text else ""
     if not first.startswith("HTTP/"):
@@ -41,5 +63,13 @@ def probe_httpproxy(host: str, port: int) -> list[Indicator]:
             protocol="httpproxy",
             detail=hit or (first[:160] or "(no status line)"),
             evidence=text.split("\r\n\r\n", 1)[0][:600],
-        )
+        ),
+        Indicator(
+            id="httpproxy.silent_accept",
+            title="HTTP proxy port TCP accepts then returns no response",
+            category="static_signature",
+            triggered=False,
+            protocol="httpproxy",
+            detail="HTTP status received",
+        ),
     ]

@@ -73,6 +73,10 @@ def identity_tells(transcript: str) -> list[str]:
         bits.append("tty is not a pty")
     if "command not found" in low and ("awk" in low or "grep" in low):
         bits.append("pipe utilities missing")
+    if "command not handled" in low:
+        bits.append("canned 'Command not handled' refusal")
+    if "internal error. please try again later" in low:
+        bits.append("canned internal-error stub")
     if "qemu" in low or "virtualbox" in low or "bochs" in low:
         bits.append("hypervisor product string in dmi/cpu")
     return bits
