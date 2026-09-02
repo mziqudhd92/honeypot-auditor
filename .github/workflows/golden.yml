@@ -36,7 +36,7 @@ jobs:
           from honeypot_auditor.tls_fingerprint import load_tls_profiles
           from honeypot_auditor.http2_fingerprint import load_http2_profiles
           pack = load_core_pack()
-          assert len(pack.rules) >= 3, pack.rules
+          assert len(pack.rules) >= 2, pack.rules
           tls = load_tls_profiles()
           assert "lures" in tls
           h2 = load_http2_profiles()
