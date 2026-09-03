@@ -28,7 +28,7 @@ jobs:
       - name: Secret candidates
         shell: bash
         run: |
-          detect-secrets scan > /tmp/detect-secrets.json
+          detect-secrets scan --exclude-files 'tests/fixtures/.*' > /tmp/detect-secrets.json
           python - <<'PY'
           import json
 

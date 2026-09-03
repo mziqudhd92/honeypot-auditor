@@ -41,10 +41,9 @@ from honeypot_auditor.signatures.evaluate import evaluate_signatures
 from honeypot_auditor.transport import _apply_jitter, get_transport_manager
 
 try:
-    from rich_argparse import RichHelpFormatter
+    from rich_argparse import RichHelpFormatter as HelpFormatter
 except ImportError:  # pragma: no cover - dependency should always be installed
-    RichHelpFormatter = argparse.HelpFormatter
-
+    HelpFormatter = argparse.HelpFormatter  # type: ignore[misc,assignment]
 BANNER = (
     "Multi-protocol decoy fingerprinter for authorized lab and CTI use. "
     "Probes are banner/state checks (no exploits, no SMTP DATA, cleanup of probe artifacts)."
@@ -127,7 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="honeypot-auditor",
         description=BANNER,
-        formatter_class=RichHelpFormatter,
+        formatter_class=HelpFormatter,
         epilog=CLI_EPILOG,
         add_help=True,
     )
