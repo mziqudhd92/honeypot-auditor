@@ -1,5 +1,8 @@
 name: publish
 
+# Release-page workflow: test only.
+# PyPI uploads are owned exclusively by publish-pypi.yml (tag push v*),
+# which matches the project's trusted publisher on pypi.org.
 on:
   release:
     types: [published]
@@ -21,27 +24,9 @@ jobs:
           pip install -e ".[full,dev]"
           pytest --cov-fail-under=60
           ruff check src tests
-
-  publish:
-    needs: test
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-      - name: Verify tag matches package version
+      - name: Verify release tag matches package version
         if: github.event_name == 'release'
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           PKG=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           test "$TAG" = "$PKG" || { echo "Tag v$TAG != pyproject version $PKG"; exit 1; }
-      - name: Build package
-        run: |
-          pip install build
-          python -m build
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1

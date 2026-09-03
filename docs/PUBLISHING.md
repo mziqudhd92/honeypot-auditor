@@ -8,31 +8,30 @@ Repository: **https://github.com/mziqudhd92/honeypot-auditor**
 
 | Event | What runs |
 |-------|-----------|
-| Push / PR to `main` | Unit tests (3.10–3.14), ruff, dedicated coverage job ≥60%, build |
-| Push to `main` | + Cowrie Docker integration audit |
-| GitHub Release `vX.Y.Z` | Tests → PyPI publish (Trusted Publishing) |
+| Push / PR to `main` | Unit tests (3.10–3.14), ruff, coverage, build, security, golden |
+| Push tag `vX.Y.Z` | **`publish-pypi.yml`** → PyPI (Trusted Publishing) + GHCR |
+| GitHub Release `vX.Y.Z` | **`publish.yml`** → tests + version check only (does **not** upload to PyPI) |
 
-**Versions are not auto-bumped on push.** Bump `pyproject.toml` + `__init__.py`, update `CHANGELOG.md`, tag `vX.Y.Z`, publish release.
+**Versions are not auto-bumped on push.** Bump `pyproject.toml` + `__init__.py`, update `CHANGELOG.md`, tag `vX.Y.Z`, push the tag, then optionally create a GitHub Release for notes.
 
-## Trusted Publishing (recommended)
+## Trusted Publishing (required for CI uploads)
 
-1. [pypi.org](https://pypi.org/) → **Publishing** → **Add a new pending publisher**
-   - Project: `honeypot-auditor`
+1. [pypi.org](https://pypi.org/) → project **honeypot-auditor** → **Publishing** → add publisher:
    - Owner: `mziqudhd92`
    - Repository: `honeypot-auditor`
-   - Workflow: `publish.yml`
+   - Workflow: **`publish-pypi.yml`** (not `publish.yml`)
    - Environment: `pypi`
-2. GitHub → repo → **Settings** → **Environments** → create **`pypi`**
-3. Tag and release:
+2. GitHub → repo → **Settings** → **Environments** → ensure **`pypi`** exists
+3. Tag and push (this is what publishes):
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag -a v0.7.3 -m "v0.7.3"
+   git push origin v0.7.3
    ```
 
-   GitHub → **Releases** → publish release for `v0.2.0`
+   Optionally create a GitHub Release from that tag for release notes — it will **not** re-upload to PyPI.
 
-Tag must match `version` in `pyproject.toml` (CI enforces this).
+Tag must match `version` in `pyproject.toml`.
 
 ## Manual upload
 
@@ -45,7 +44,7 @@ twine upload dist/*
 ## After publish
 
 ```bash
-pip install honeypot-auditor
+pip install -U honeypot-auditor
 pip install "honeypot-auditor[full]"
 honeypot-auditor --version
 ```
