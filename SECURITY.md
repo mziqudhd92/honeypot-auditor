@@ -84,8 +84,9 @@ It is for authorized defensive research, lab validation, and purple-team work on
 
 ### POP3 probe safety
 
-- POP3 checks greeting framing, pre-authentication command state, unknown-command
-  handling, and two independent synthetic login pairs.
+- POP3 checks response framing, pre-authentication state boundaries, unknown-command
+  handling, identical auth-failed `-ERR` blankets (including optional `CAPA`), stock
+  lure banners, and two independent synthetic login pairs.
 - After a synthetic login is accepted, it sends `QUIT`. It never sends `LIST`, `RETR`,
   `TOP`, `DELE`, or other commands that read or modify a maildrop.
 

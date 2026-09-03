@@ -68,7 +68,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     "pop3": {
         "arbitrary_auth": "two random USER/PASS pairs",
         "state_nonpersist": "STAT/NOOP before authentication",
-        "static_signature": "+OK greeting framing · unknown-command rejection",
+        "static_signature": (
+            "+OK greeting framing · unknown-command rejection · "
+            "auth-failed -ERR blanket (STAT/CAPA/HPAU) · stock lure banner"
+        ),
     },
     "smb": {
         "arbitrary_auth": "",

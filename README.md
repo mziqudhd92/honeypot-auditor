@@ -270,7 +270,7 @@ Closed faces are skipped, not scored.
 
 `-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
-The POP3 engine checks response framing, pre-authentication state boundaries, unknown-command handling, and repeated synthetic logins. It never lists, reads, retrieves, or deletes mail; see [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.html).
+The POP3 engine checks response framing, pre-authentication state boundaries (STAT), optional CAPA sampling, identical auth-failed `-ERR` blankets, stock lure banners, unknown-command handling, and repeated synthetic logins. It never lists, reads, retrieves, or deletes mail; see [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.html) and [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.html) (CAPA).
 
 `--deep` adds cross-protocol axes (shell semantics, HASSH/TCP stack, FSM fuzz, co-tenancy, serial + concurrent-load latency) on top of the basic strategies above. Passive-intel providers and Nmap NSE (`-n`) are optional layers, not protocol engines.
 

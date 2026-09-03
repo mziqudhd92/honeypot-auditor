@@ -25,6 +25,9 @@ Fusion Technology Strategies) for the substantial contribution in
 - Maintained mypy gate with a clean source-tree baseline
 - Immutable commit pins for every third-party GitHub Actions dependency
 - Offline POP3 replay fixture and passive-intel URL allowlist tests
+- POP3 `pop3.auth_failed_blanket` (primary): identical auth-themed `-ERR` across distinct
+  pre-auth commands including RFC 2449 `CAPA` (catches qeeqbox/Twisted POP3 skins)
+- POP3 `pop3.stock_banner` (corroboration-gated): stock Exchange lure greeting fingerprint
 - Richer offline socket replays: TLS ServerHello, FTP Dionaea banner, and SSH Cowrie KEXINIT
   fixtures (plus `makefile` / `source_address` support in the replay harness)
 - `deep.kexinit_rigid` when SSH KEXINIT matches Paramiko/Twisted trap templates
