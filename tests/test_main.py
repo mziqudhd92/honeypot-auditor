@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 import sys
 
+from honeypot_auditor import __version__
+
 
 def test_module_version():
     proc = subprocess.run(
@@ -14,4 +16,4 @@ def test_module_version():
         text=True,
     )
     assert proc.returncode == 0
-    assert "0.6.0" in proc.stdout
+    assert __version__ in proc.stdout
