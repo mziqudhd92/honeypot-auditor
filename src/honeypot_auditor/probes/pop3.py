@@ -31,24 +31,43 @@ _POP3_SKIP = (
 )
 
 _MAX_RESPONSE_BYTES = 512
+_RECV_CHUNK = 256
+
+
+class _LineReader:
+    """Buffered CRLF reader — larger recv chunks with leftover carry across commands."""
+
+    def __init__(self, sock) -> None:
+        self._sock = sock
+        self._buf = bytearray()
+
+    def readline(self) -> str:
+        while b"\r\n" not in self._buf and len(self._buf) < _MAX_RESPONSE_BYTES:
+            need = min(_RECV_CHUNK, _MAX_RESPONSE_BYTES - len(self._buf))
+            if need <= 0:
+                break
+            chunk = self._sock.recv(need)
+            if not chunk:
+                break
+            self._buf.extend(chunk)
+        nl = self._buf.find(b"\r\n")
+        if nl == -1:
+            line = bytes(self._buf[:_MAX_RESPONSE_BYTES])
+            self._buf.clear()
+            return line.decode("utf-8", "replace").rstrip("\r\n")
+        line = bytes(self._buf[:nl])
+        del self._buf[: nl + 2]
+        return line.decode("utf-8", "replace")
 
 
 def _read_line(sock) -> str:
-    """Read one bounded POP3 response line."""
-    data = bytearray()
-    while len(data) < _MAX_RESPONSE_BYTES:
-        chunk = sock.recv(1)
-        if not chunk:
-            break
-        data.extend(chunk)
-        if data.endswith(b"\r\n"):
-            break
-    return bytes(data).decode("utf-8", "replace").rstrip("\r\n")
+    """Read one bounded POP3 response line (single-shot; no leftover reuse)."""
+    return _LineReader(sock).readline()
 
 
-def _send_command(sock, command: str) -> str:
+def _send_command(reader: _LineReader, sock, command: str) -> str:
     sock.sendall(command.encode("ascii") + b"\r\n")
-    return _read_line(sock)
+    return reader.readline()
 
 
 def _is_positive(response: str) -> bool:
@@ -59,10 +78,11 @@ def _single_command(host: str, port: int, command: str) -> tuple[str, str, str]:
     """Open a fresh authorization-state session and issue one command."""
     try:
         with closing(create_connection(host, port, settings.timeout_seconds)) as sock:
-            greeting = _read_line(sock)
+            reader = _LineReader(sock)
+            greeting = reader.readline()
             if not _is_positive(greeting):
                 return greeting, "", "server did not issue a positive POP3 greeting"
-            return greeting, _send_command(sock, command), ""
+            return greeting, _send_command(reader, sock, command), ""
     except OSError as exc:
         return "", "", closed_reason(str(exc))
 
@@ -70,7 +90,7 @@ def _single_command(host: str, port: int, command: str) -> tuple[str, str, str]:
 def _read_greeting(host: str, port: int) -> tuple[str, str]:
     try:
         with closing(create_connection(host, port, settings.timeout_seconds)) as sock:
-            return _read_line(sock), ""
+            return _LineReader(sock).readline(), ""
     except OSError as exc:
         return "", closed_reason(str(exc))
 
@@ -79,16 +99,17 @@ def _try_login(host: str, port: int, username: str, password: str) -> tuple[bool
     """Try one synthetic account without accessing the resulting maildrop."""
     try:
         with closing(create_connection(host, port, settings.timeout_seconds)) as sock:
-            greeting = _read_line(sock)
+            reader = _LineReader(sock)
+            greeting = reader.readline()
             if not _is_positive(greeting):
                 return False, f"greeting={greeting!r}", ""
-            user_reply = _send_command(sock, f"USER {username}")
+            user_reply = _send_command(reader, sock, f"USER {username}")
             credential_reply = ""
             if _is_positive(user_reply):
-                credential_reply = _send_command(sock, f"PASS {password}")
+                credential_reply = _send_command(reader, sock, f"PASS {password}")
             accepted = _is_positive(credential_reply)
             if accepted:
-                _send_command(sock, "QUIT")
+                _send_command(reader, sock, "QUIT")
             return accepted, f"USER={user_reply!r}; PASS={credential_reply!r}", ""
     except OSError as exc:
         return False, "", closed_reason(str(exc))
@@ -110,6 +131,15 @@ def _greeting_indicator(greeting: str) -> Indicator:
         evidence=greeting[:_MAX_RESPONSE_BYTES],
         remediation="Emit a standards-conformant, service-specific POP3 greeting",
     )
+
+
+def _preauth_state_triggered(state_replies: dict[str, str]) -> bool:
+    """STAT is the decisive TRANSACTION-state tell; NOOP alone does not trigger.
+
+    RFC 1939 lists both under TRANSACTION, but some stacks answer NOOP loosely
+    in AUTHORIZATION. Require STAT +OK so odd servers are less likely to FP.
+    """
+    return _is_positive(state_replies.get("STAT", ""))
 
 
 def probe_pop3(host: str, port: int) -> list[Indicator]:
@@ -145,6 +175,7 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
         elif error:
             state_errors.append(f"{command}: {error}")
     state_hits = [name for name, reply in state_replies.items() if _is_positive(reply)]
+    state_triggered = _preauth_state_triggered(state_replies)
     state_skipped = not state_replies
 
     _, unknown_reply, unknown_error = _single_command(host, port, "HPAU")
@@ -165,6 +196,16 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
             auth_errors.append(f"{username}: {error}")
     auth_hit = len(accepted_users) == len(attempts)
     auth_skipped = not auth_evidence and bool(auth_errors)
+
+    if state_triggered:
+        state_detail = f"authorization-state bypass: STAT returned +OK ({', '.join(state_hits)})"
+    elif state_hits:
+        state_detail = (
+            f"NOOP returned +OK before auth but STAT did not "
+            f"(not scored alone): {', '.join(state_hits)}"
+        )
+    else:
+        state_detail = "STAT and NOOP were rejected before authentication"
 
     return [
         Indicator(
@@ -188,16 +229,12 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
             id="pop3.preauth_state",
             title="POP3 accepts transaction commands before authentication",
             category="state_nonpersist",
-            triggered=bool(state_hits),
+            triggered=state_triggered,
             skipped=state_skipped,
             skip_reason="; ".join(state_errors) if state_skipped else "",
             error="; ".join(state_errors),
             protocol="pop3",
-            detail=(
-                f"authorization-state bypass: {', '.join(state_hits)} returned +OK"
-                if state_hits
-                else "STAT and NOOP were rejected before authentication"
-            ),
+            detail=state_detail,
             evidence="; ".join(f"{name}={reply!r}" for name, reply in state_replies.items()),
             remediation="Enforce AUTHORIZATION and TRANSACTION state boundaries",
         ),

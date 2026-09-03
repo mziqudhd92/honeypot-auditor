@@ -1,0 +1,16 @@
+# CODEOWNERS — default reviewers for honeypot-auditor
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+*       @mziqudhd92
+
+# Scoring, report schema, and analyzer changes need maintainer review
+/src/honeypot_auditor/analyzer.py   @mziqudhd92
+/src/honeypot_auditor/models.py     @mziqudhd92
+/src/honeypot_auditor/reporters/    @mziqudhd92
+
+# Active probes and passive-intel plugin contracts
+/src/honeypot_auditor/probes/       @mziqudhd92
+/src/honeypot_auditor/plugins/      @mziqudhd92
+
+# CI / release automation
+/.github/                           @mziqudhd92

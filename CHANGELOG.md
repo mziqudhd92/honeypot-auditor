@@ -30,6 +30,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Passive REST fallback now rejects non-HTTPS URLs and hosts outside the Shodan API allowlist
 - Named `--intel-provider` plugins now run independently of Shodan / dual-stack IPv6 gating
 - `--intel-key` warns on stderr; environment variables override argv keys when both are set
+- POP3 `pop3.preauth_state` requires pre-auth **STAT** `+OK` (NOOP alone no longer triggers)
+- POP3 response reading uses a buffered CRLF reader instead of per-byte `recv(1)`
 
 ### Changed
 

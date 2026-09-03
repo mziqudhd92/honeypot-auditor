@@ -39,11 +39,15 @@ When changing probe or scoring logic, add or update tests and keep `make test-co
 3. Run `make test-cov`, `make lint` (Ruff plus mypy), and `make security`.
 4. Keep probes **non-destructive** — banner/state checks only.
 5. Do not add exploit payloads or third-party honeypot product names in shipped strings (use neutral “low-interaction emulator” language).
+6. Prefer **small, focused PRs** (one theme: protocol probe · scoring/schema · CI/docs). Mega-PRs are hard to review.
+7. Do **not** mix pure `ruff format` / import churn with behavior changes — land formatting as a separate `chore:` PR so `git blame` stays useful.
 
 Security-tool suppressions must be line-scoped, identify the exact rule, and have an adjacent
 reason explaining why the construct is necessary. Never add a repository-wide rule exclusion to
 make a pull request pass. Synthetic secret fixtures must use an inline allowlist marker or an exact
 historical fingerprint; real credentials must never enter the repository.
+
+Required reviewers are listed in `.github/CODEOWNERS` (analyzer, probes, plugins, reporters, workflows).
 
 ## Commit messages
 

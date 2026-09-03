@@ -94,6 +94,31 @@ def test_pop3_safe_mode_is_greeting_only():
     assert by_id["pop3.unknown_command"].skipped
 
 
+def test_pop3_noop_alone_does_not_trigger_preauth_state():
+    """NOOP +OK without STAT +OK is recorded but not scored (fewer FPs)."""
+    sessions = [
+        ScriptedSocket("+OK ready", "+OK bye"),
+        ScriptedSocket("+OK ready", "-ERR auth required"),  # STAT
+        ScriptedSocket("+OK ready", "+OK"),  # NOOP only
+        ScriptedSocket("+OK ready", "-ERR unknown command"),
+        ScriptedSocket("+OK ready", "-ERR no"),
+        ScriptedSocket("+OK ready", "-ERR no"),
+    ]
+    inds = _run_with_sessions(*sessions)
+    by_id = {ind.id: ind for ind in inds}
+    assert not by_id["pop3.preauth_state"].triggered
+    assert "NOOP" in by_id["pop3.preauth_state"].detail
+    assert "not scored alone" in by_id["pop3.preauth_state"].detail
+
+
+def test_pop3_buffered_reader_handles_chunked_crlf():
+    sock = ScriptedSocket("+OK ready")
+    # Force multi-byte recv path used by _LineReader
+    reader = pop3._LineReader(sock)
+    assert reader.readline() == "+OK ready"
+    assert reader.readline() == ""
+
+
 def test_pop3_connection_error_skips_suite():
     with patch.object(pop3, "create_connection", side_effect=OSError("refused")):
         inds = pop3.probe_pop3("127.0.0.1", 110)
