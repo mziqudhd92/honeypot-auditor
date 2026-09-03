@@ -28,6 +28,8 @@ Fusion Technology Strategies) for the substantial contribution in
 - POP3 `pop3.auth_failed_blanket` (primary): identical auth-themed `-ERR` across distinct
   pre-auth commands including RFC 2449 `CAPA` (catches qeeqbox/Twisted POP3 skins)
 - POP3 `pop3.stock_banner` (corroboration-gated): stock Exchange lure greeting fingerprint
+- `pop3.auth_failed_blanket` is a high-signal tell (+15% bonus, same band as `ssh.kex_facade`)
+  so a single-protocol POP3 lure clears Suspected instead of stalling at 20% / Likely Real
 - Richer offline socket replays: TLS ServerHello, FTP Dionaea banner, and SSH Cowrie KEXINIT
   fixtures (plus `makefile` / `source_address` support in the replay harness)
 - `deep.kexinit_rigid` when SSH KEXINIT matches Paramiko/Twisted trap templates

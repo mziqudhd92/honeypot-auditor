@@ -28,6 +28,12 @@ Deep mode adds (`DEEP_WEIGHTS`): behavior 18%, coherence 15%, stack_fingerprint 
 
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
+**High-signal bonus**: +15% when a highly specific pre-auth fingerprint fires
+(`ssh.kex_facade`, `pop3.auth_failed_blanket`). Multiple indicators in the *same*
+category (e.g. POP3 stock banner + auth-failed blanket) still only unlock that
+category's weight once — the high-signal bonus is how those fingerprints clear
+the Suspected band without inventing a second category.
+
 The calculation is additive and capped:
 
 ```text

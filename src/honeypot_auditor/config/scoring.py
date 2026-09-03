@@ -19,6 +19,8 @@ CORROBORATION_PROTOCOL_MAX_BONUS = 35.0
 HIGH_SIGNAL_TELL_IDS = frozenset(
     {
         "ssh.kex_facade",
+        # Identical auth-themed -ERR across STAT/CAPA/HPAU (qeeqbox/Twisted POP3 skins).
+        "pop3.auth_failed_blanket",
     }
 )
 HIGH_SIGNAL_BONUS_PCT = 15.0

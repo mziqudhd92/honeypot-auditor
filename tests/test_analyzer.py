@@ -155,6 +155,49 @@ def test_ssh_kex_facade_alone_is_suspected_medium():
     assert report.tactical_action == "PROCEED_CAUTION"
 
 
+def test_pop3_auth_failed_blanket_is_high_signal_suspected():
+    """Blanket + stock banner share static_signature; high-signal bonus clears Suspected."""
+    inds = [
+        Indicator(
+            id="pop3.auth_failed_blanket",
+            title="POP3 auth-failed blanket",
+            category="static_signature",
+            triggered=True,
+            protocol="pop3",
+            detail="identical auth-themed -ERR on CAPA, STAT",
+        ),
+        Indicator(
+            id="pop3.stock_banner",
+            title="POP3 stock banner",
+            category="static_signature",
+            triggered=True,
+            protocol="pop3",
+            requires_corroboration=True,
+        ),
+        Indicator(
+            id="pop3.arbitrary_auth",
+            title="POP3 arbitrary auth",
+            category="arbitrary_auth",
+            triggered=False,
+            protocol="pop3",
+        ),
+    ]
+    report = build_report(
+        target="203.0.113.50",
+        resolved_ip="203.0.113.50",
+        ports={"pop3": [110]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+    )
+    assert report.score == 35.0
+    assert report.threat_level == "Suspected Honeypot"
+    assert report.confidence == "medium"
+    assert any(i.id == "corroboration.high_signal" for i in report.indicators)
+    assert report.tactical_action == "PROCEED_CAUTION"
+
+
 def test_buffet_cotenancy_confirms_deny_all_stack():
     """Deny-all multi-lure stacks: ≥5 protocol hits → buffet; corroboration from 2nd protocol."""
     protos = ("ftp", "http", "vnc", "git", "rdp", "mongodb")
