@@ -1,0 +1,13 @@
+{
+  "_meta": {
+    "note": "CDN edge JA3S/JA4S profiles for proxy_detect TLS hints. Placeholders are ignored at match time. Capture with: scripts/capture-tls-baseline.sh --cdn --name cloudflare HOST:PORT",
+    "capture": "scripts/capture-tls-baseline.sh --cdn --name NAME HOST:PORT"
+  },
+  "cdn_edge": {
+    "cloudflare": {
+      "ja3s": "placeholder",
+      "ja4s": "",
+      "description": "Cloudflare edge TLS — run capture-tls-baseline.sh --cdn against an authorized CF origin"
+    }
+  }
+}

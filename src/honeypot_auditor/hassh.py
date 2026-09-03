@@ -115,6 +115,28 @@ _TWISTED_KEX_MARKERS = (
 _OPENSSH_MAJOR_RE = re.compile(r"^(\d+)\.(\d+)")
 
 
+# Prefixes that match Paramiko / Twisted / classic Cowrie default KEXINIT lists.
+_RIGID_KEX_PREFIXES: tuple[tuple[str, ...], ...] = (
+    ("diffie-hellman-group1-sha1", "diffie-hellman-group14-sha1"),
+    (
+        "diffie-hellman-group14-sha1",
+        "diffie-hellman-group-exchange-sha1",
+        "diffie-hellman-group1-sha1",
+    ),
+)
+
+
+def kexinit_is_rigid(kex: SSHKexInit) -> tuple[bool, str]:
+    """Return (triggered, detail) when KEX algo list matches a rigid trap template."""
+    algs = [a for a in (kex.kex or "").split(",") if a]
+    if not algs:
+        return False, "empty KEX list"
+    for template in _RIGID_KEX_PREFIXES:
+        if tuple(algs[: len(template)]) == template:
+            return True, f"KEXINIT matches rigid trap template ({','.join(template)})"
+    return False, f"KEX first={algs[0]}"
+
+
 def hassh_algo_mismatch(banner: str, kex: SSHKexInit) -> tuple[bool, str]:
     """Return (triggered, detail) when claimed OpenSSH banner disagrees with KEXINIT shape.
 

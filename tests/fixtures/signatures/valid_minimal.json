@@ -1,0 +1,14 @@
+{
+  "name": "fixture-valid",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "fixture.exact",
+      "title": "Exact bytes fixture",
+      "category": "static_signature",
+      "primitive": "exact_bytes",
+      "params": {"value": "220 Welcome"},
+      "remediation": "Replace canned banner"
+    }
+  ]
+}

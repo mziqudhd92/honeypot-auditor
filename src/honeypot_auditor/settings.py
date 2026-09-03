@@ -25,6 +25,7 @@ class Settings:
     proxy_allow_local_dns: bool = False
     passive_first: bool = False
     osint_only: bool = False
+    passive_first_confirm: bool = False
     dual_stack: bool = False
     jitter_fraction: float = 0.0
     jitter_ms_range: tuple[int, int] | None = None

@@ -6,6 +6,26 @@ on:
   pull_request:
 
 jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install actionlint (checksum-verified)
+        run: |
+          set -euo pipefail
+          VER=1.7.7
+          ARCHIVE="actionlint_${VER}_linux_amd64.tar.gz"
+          EXPECTED_SHA256=023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
+          BASE="https://github.com/rhysd/actionlint/releases/download/v${VER}"
+          curl -fsSL "${BASE}/${ARCHIVE}" -o "${ARCHIVE}"
+          curl -fsSL "${BASE}/actionlint_${VER}_checksums.txt" -o checksums.txt
+          echo "${EXPECTED_SHA256}  ${ARCHIVE}" | sha256sum -c -
+          grep -F "${ARCHIVE}" checksums.txt | sha256sum -c -
+          tar -xzf "${ARCHIVE}" actionlint
+          ./actionlint -version
+      - name: Lint workflows and composite action
+        run: ./actionlint -color
+
   replay:
     runs-on: ubuntu-latest
     steps:
@@ -39,6 +59,7 @@ jobs:
           assert len(pack.rules) >= 2, pack.rules
           tls = load_tls_profiles()
           assert "lures" in tls
+          assert "cdn_edge" in tls and "cloudflare" in tls["cdn_edge"]
           h2 = load_http2_profiles()
           assert h2.get("lures"), h2
           print("package-data ok", len(pack.rules), "rules")

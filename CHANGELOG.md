@@ -25,6 +25,17 @@ Fusion Technology Strategies) for the substantial contribution in
 - Maintained mypy gate with a clean source-tree baseline
 - Immutable commit pins for every third-party GitHub Actions dependency
 - Offline POP3 replay fixture and passive-intel URL allowlist tests
+- Richer offline socket replays: TLS ServerHello, FTP Dionaea banner, and SSH Cowrie KEXINIT
+  fixtures (plus `makefile` / `source_address` support in the replay harness)
+- `deep.kexinit_rigid` when SSH KEXINIT matches Paramiko/Twisted trap templates
+- `--passive-first-confirm` to run a safe-mode active verify after high passive score or
+  `--osint-only` (handshake-only; does not enable deep/shell probes)
+- Packaged `cdn_tls_profiles.json` merged into TLS CDN edge matching; lab capture helpers
+  (`capture_tls_baseline`, `merge_tls_profile_entry`) and merge-safe
+  `scripts/capture-tls-baseline.sh` (`--name`, `--cdn`, `--update-package`; default output
+  under `.lab-tls-capture/`)
+- `actionlint` CI job for workflows and the composite GitHub Action
+- Offline `check-sig` signature fixtures under `tests/fixtures/signatures/`
 
 ### Fixed
 
@@ -36,6 +47,10 @@ Fusion Technology Strategies) for the substantial contribution in
 - `--intel-key` warns on stderr; environment variables override argv keys when both are set
 - POP3 `pop3.preauth_state` requires pre-auth **STAT** `+OK` (NOOP alone no longer triggers)
 - POP3 response reading uses a buffered CRLF reader instead of per-byte `recv(1)`
+- `--passive-first-confirm` now aligns `args` + `settings` and builds notes/report after job
+  planning so JSON no longer claims `deep=True` for handshake-only verify passes
+- `deep.kexinit_rigid` no longer double-fires when `deep.hassh` already covers the same KEX
+- TLS capture target parsing accepts `[IPv6]:PORT`; actionlint CI verifies release checksums
 
 ### Changed
 
@@ -44,6 +59,9 @@ Fusion Technology Strategies) for the substantial contribution in
 - JSON and SARIF outputs distinguish triggered, clear, skipped, and suppressed results
 - SARIF export uses `report.triggered()` (excludes suppressed indicators); fingerprints are
   stable across multi-host runs
+- Composite GitHub Action pins `actions/setup-python` to an immutable commit SHA
+- README, GitHub Pages, `SECURITY.md`, and `scripts/sync-public-docs.sh` document
+  `--passive-first-confirm` and the safer TLS baseline capture workflow
 
 ## [0.6.0] - 2026-09-02
 

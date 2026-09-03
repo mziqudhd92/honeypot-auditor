@@ -7,7 +7,12 @@ import socket
 from contextlib import suppress
 
 from honeypot_auditor.config import claimed_os_from_banner, match_tls_stock_cert
-from honeypot_auditor.hassh import capture_server_kexinit, find_kexinit_payload, hassh_algo_mismatch
+from honeypot_auditor.hassh import (
+    capture_server_kexinit,
+    find_kexinit_payload,
+    hassh_algo_mismatch,
+    kexinit_is_rigid,
+)
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason, tcp_transact
 from honeypot_auditor.settings import ProbeProfile, settings
@@ -65,7 +70,7 @@ def probe_hassh(host: str, port: int) -> list[Indicator]:
         "kex": kex.kex[:120],
         "raw_kexinit": raw_kexinit,
     }
-    return [
+    out = [
         Indicator(
             id="deep.hassh",
             title="SSH HASSHServer diverges from claimed OpenSSH baseline",
@@ -79,6 +84,31 @@ def probe_hassh(host: str, port: int) -> list[Indicator]:
             tell_tier="origin",
         )
     ]
+    rigid, rigid_detail = kexinit_is_rigid(kex)
+    # Avoid double-counting the same Twisted/Cowrie KEX shape when hassh already fired.
+    rigid_triggered = rigid and not triggered
+    out.append(
+        Indicator(
+            id="deep.kexinit_rigid",
+            title="SSH KEXINIT matches Paramiko/Twisted trap template",
+            category="stack_fingerprint",
+            triggered=rigid_triggered,
+            protocol="ssh",
+            detail=(
+                "suppressed: covered by deep.hassh"
+                if rigid and triggered
+                else rigid_detail
+            ),
+            evidence=json.dumps(
+                {"banner": banner, "kex": kex.kex[:160], "raw_kexinit": raw_kexinit}
+            ),
+            fingerprint_type="ssh_kexinit",
+            requires_corroboration=True,
+            tell_tier="origin",
+            remediation="Replace stock Paramiko/Twisted KEX lists with a realistic OpenSSH suite",
+        )
+    )
+    return out
 
 
 def _parse_synack_options(resp) -> str:

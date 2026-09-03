@@ -1,0 +1,6 @@
+{
+  "connect": "127.0.0.1:21",
+  "recv_first": true,
+  "note": "Dionaea-style FTP welcome + QUIT reply for safe-mode banner probe",
+  "response_text": "220 Welcome to the dionaea honeypot FTP service\r\n221 Goodbye.\r\n"
+}

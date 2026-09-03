@@ -65,10 +65,12 @@ It is for authorized defensive research, lab validation, and purple-team work on
 - Bare `socks5://` with hostname targets is rejected unless `--proxy-allow-local-dns`.
 - Credentials are never logged; use `HONEYPOT_AUDITOR_PROXY` env var alternatively.
 
-### Passive-first / OSINT (`--passive-first`, `--osint-only`)
+### Passive-first / OSINT (`--passive-first`, `--osint-only`, `--passive-first-confirm`)
 
 - `--osint-only` runs passive intel only — no TCP probes.
 - `--passive-first` skips active probes when the passive score is high.
+- `--passive-first-confirm` overrides that skip with a **safe-mode** active verify
+  (handshake-only; never enables deep/shell probes).
 - Does not replace `--confirm-authorized` for public targets.
 
 ### Passive-intel plugin boundary
@@ -96,9 +98,11 @@ It is for authorized defensive research, lab validation, and purple-team work on
 
 ### TLS lure profiles
 
-- Packaged `data/tls_profiles.json` ships with placeholder JA3S values until you run
-  `scripts/capture-tls-baseline.sh` against authorized lab lures. Placeholders are
-  ignored at match time (no false positives).
+- Packaged `data/tls_profiles.json` and `data/cdn_tls_profiles.json` ship with
+  placeholder JA3S values until you run `scripts/capture-tls-baseline.sh` against
+  authorized lab lures. Default output is `.lab-tls-capture/` (merge-safe);
+  `--update-package` writes into the packaged files. Placeholders are ignored at
+  match time (no false positives).
 
 ### GitHub Action
 

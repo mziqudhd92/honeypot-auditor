@@ -105,6 +105,248 @@ def test_passive_score_high_buffet_and_open_ports():
     assert _passive_score_high(port_inds)
 
 
+def test_passive_first_confirm_forces_safe_verify():
+    import argparse
+
+    from honeypot_auditor.cli import _probe_jobs
+
+    args = argparse.Namespace(
+        deep=True,
+        safe_mode=False,
+        shodan_key="",
+        with_nmap=False,
+        intel_key=[],
+        intel_provider=[],
+        passive_first_confirm=True,
+    )
+    high = [
+        Indicator(
+            id="shodan.honeyscore",
+            title="h",
+            category="shodan",
+            triggered=True,
+            protocol="shodan",
+        )
+    ]
+    old = (
+        settings.osint_only,
+        settings.passive_first,
+        settings.passive_first_confirm,
+        settings.safe_mode,
+        settings.deep,
+        settings.profile,
+    )
+    settings.osint_only = True
+    settings.passive_first_confirm = True
+    settings.safe_mode = False
+    settings.deep = True
+    try:
+        with patch("honeypot_auditor.cli.shodan_lookup", return_value=high):
+            with patch("honeypot_auditor.cli.PROBE_BY_PROTOCOL", {"ssh": MagicMock()}):
+                jobs = _probe_jobs(
+                    "203.0.113.10",
+                    {"ssh": [22]},
+                    args,
+                    include_shodan=True,
+                )
+        names = [n for n, _ in jobs]
+        assert any(n.startswith("ssh:") for n in names)
+        assert "deep" not in names
+        assert settings.safe_mode is True
+        assert settings.deep is False
+        assert args.safe_mode is True
+        assert args.deep is False
+    finally:
+        (
+            settings.osint_only,
+            settings.passive_first,
+            settings.passive_first_confirm,
+            settings.safe_mode,
+            settings.deep,
+            settings.profile,
+        ) = old
+
+
+def test_passive_first_confirm_aligns_report_notes_and_deep_flag():
+    import argparse
+    import asyncio
+
+    from honeypot_auditor.cli import _audit_host
+
+    args = argparse.Namespace(
+        deep=True,
+        safe_mode=False,
+        shodan_key="",
+        with_nmap=False,
+        intel_key=[],
+        intel_provider=[],
+        passive_first_confirm=True,
+        preset="iana",
+        timeout=3.0,
+        extra_ports=[],
+        ports="",
+        confirm_authorized=True,
+    )
+    high = [
+        Indicator(
+            id="shodan.honeyscore",
+            title="h",
+            category="shodan",
+            triggered=True,
+            protocol="shodan",
+        )
+    ]
+    old = (
+        settings.osint_only,
+        settings.passive_first_confirm,
+        settings.safe_mode,
+        settings.deep,
+        settings.profile,
+    )
+    settings.osint_only = True
+    settings.passive_first_confirm = True
+    settings.safe_mode = False
+    settings.deep = True
+    try:
+        with patch("honeypot_auditor.cli.shodan_lookup", return_value=high):
+            with patch("honeypot_auditor.cli.PROBE_BY_PROTOCOL", {}):
+                with patch("honeypot_auditor.cli.evaluate_signatures", return_value=[]):
+                    report = asyncio.run(
+                        _audit_host("203.0.113.10", args, {}, include_shodan=True)
+                    )
+        assert report.notes and any("deep=False" in n for n in report.notes)
+        assert any("passive-first-confirm" in n for n in report.notes)
+        # build_report stores deep on the report via the deep kwarg — check score path
+        # by ensuring notes reflect settings after confirm.
+        assert args.deep is False
+        assert settings.deep is False
+    finally:
+        (
+            settings.osint_only,
+            settings.passive_first_confirm,
+            settings.safe_mode,
+            settings.deep,
+            settings.profile,
+        ) = old
+
+
+def test_passive_first_low_score_does_not_force_safe_on_confirm():
+    import argparse
+
+    from honeypot_auditor.cli import _probe_jobs
+
+    args = argparse.Namespace(
+        deep=True,
+        safe_mode=False,
+        shodan_key="",
+        with_nmap=False,
+        intel_key=[],
+        intel_provider=[],
+        passive_first_confirm=True,
+    )
+    low = [
+        Indicator(
+            id="shodan.open_ports",
+            title="p",
+            category="shodan",
+            triggered=False,
+            protocol="shodan",
+        )
+    ]
+    old = (
+        settings.osint_only,
+        settings.passive_first,
+        settings.passive_first_confirm,
+        settings.safe_mode,
+        settings.deep,
+    )
+    settings.osint_only = False
+    settings.passive_first = True
+    settings.passive_first_confirm = True
+    settings.safe_mode = False
+    settings.deep = True
+    try:
+        with patch("honeypot_auditor.cli.shodan_lookup", return_value=low):
+            with patch("honeypot_auditor.cli.PROBE_BY_PROTOCOL", {"ssh": MagicMock()}):
+                jobs = _probe_jobs(
+                    "203.0.113.10",
+                    {"ssh": [22]},
+                    args,
+                    include_shodan=True,
+                )
+        names = [n for n, _ in jobs]
+        assert any(n.startswith("ssh:") for n in names)
+        assert "deep" in names
+        assert settings.safe_mode is False
+        assert settings.deep is True
+        assert args.safe_mode is False
+    finally:
+        (
+            settings.osint_only,
+            settings.passive_first,
+            settings.passive_first_confirm,
+            settings.safe_mode,
+            settings.deep,
+        ) = old
+
+
+def test_passive_first_confirm_with_high_passive_score():
+    import argparse
+
+    from honeypot_auditor.cli import _probe_jobs
+
+    args = argparse.Namespace(
+        deep=True,
+        safe_mode=False,
+        shodan_key="",
+        with_nmap=False,
+        intel_key=[],
+        intel_provider=[],
+        passive_first_confirm=True,
+    )
+    high = [
+        Indicator(
+            id="shodan.honeyscore",
+            title="h",
+            category="shodan",
+            triggered=True,
+            protocol="shodan",
+        )
+    ]
+    old = (
+        settings.osint_only,
+        settings.passive_first,
+        settings.passive_first_confirm,
+        settings.safe_mode,
+        settings.deep,
+    )
+    settings.osint_only = False
+    settings.passive_first = True
+    settings.passive_first_confirm = True
+    settings.safe_mode = False
+    settings.deep = True
+    try:
+        with patch("honeypot_auditor.cli.shodan_lookup", return_value=high):
+            with patch("honeypot_auditor.cli.PROBE_BY_PROTOCOL", {"ssh": MagicMock()}):
+                jobs = _probe_jobs(
+                    "203.0.113.10",
+                    {"ssh": [22]},
+                    args,
+                    include_shodan=True,
+                )
+        assert "deep" not in [n for n, _ in jobs]
+        assert settings.safe_mode is True
+        assert args.deep is False
+    finally:
+        (
+            settings.osint_only,
+            settings.passive_first,
+            settings.passive_first_confirm,
+            settings.safe_mode,
+            settings.deep,
+        ) = old
+
+
 @patch.object(settings, "safe_mode", True)
 def test_safe_mode_ssh_skips_auth():
     import honeypot_auditor.probes.ssh as ssh_mod

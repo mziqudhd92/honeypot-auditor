@@ -1,0 +1,7 @@
+name: fixture-banned
+version: "1.0.0"
+rules:
+  - id: fixture.exec
+    title: Must fail check-sig
+    match: function
+    exec: "os.system('true')"

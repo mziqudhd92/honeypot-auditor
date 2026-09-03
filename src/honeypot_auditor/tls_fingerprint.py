@@ -97,28 +97,128 @@ def _tls_profiles_path() -> Path:
     return Path(__file__).resolve().parent / "data" / "tls_profiles.json"
 
 
+def _cdn_tls_profiles_path() -> Path:
+    return Path(__file__).resolve().parent / "data" / "cdn_tls_profiles.json"
+
+
+def _is_placeholder(value: str) -> bool:
+    text = (value or "").strip().lower()
+    return not text or text in {"n/a", "placeholder"} or "placeholder" in text
+
+
+def parse_host_port(target: str, *, default_port: int = 443) -> tuple[str, int]:
+    """Parse HOST:PORT, [IPv6]:PORT, or bare host/IPv6 (uses default_port)."""
+    text = (target or "").strip()
+    if not text:
+        raise ValueError("empty target")
+    if text.startswith("["):
+        end = text.find("]")
+        if end < 0:
+            raise ValueError("invalid bracketed IPv6 target")
+        host = text[1:end]
+        rest = text[end + 1 :]
+        if not rest:
+            return host, default_port
+        if not rest.startswith(":") or not rest[1:].isdigit():
+            raise ValueError("invalid [IPv6]:PORT target")
+        return host, int(rest[1:])
+    if text.count(":") == 1:
+        host, _, port_s = text.partition(":")
+        if not host or not port_s.isdigit():
+            raise ValueError("invalid HOST:PORT target")
+        return host, int(port_s)
+    # Bare hostname, IPv4, or unbracketed IPv6
+    return text, default_port
+
+
 @lru_cache(maxsize=1)
 def load_tls_profiles() -> dict:
-    """Load lure/CDN TLS profiles from packaged data/tls_profiles.json."""
+    """Load lure/CDN TLS profiles from packaged JSON (cdn file merges into cdn_edge)."""
     path = _tls_profiles_path()
     if not path.is_file():
-        return {"lures": {}, "cdn_edge": {}}
-    return json.loads(path.read_text(encoding="utf-8"))
+        doc: dict = {"lures": {}, "cdn_edge": {}}
+    else:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc.setdefault("lures", {})
+        doc.setdefault("cdn_edge", {})
+    cdn_path = _cdn_tls_profiles_path()
+    if cdn_path.is_file():
+        cdn_doc = json.loads(cdn_path.read_text(encoding="utf-8"))
+        doc["cdn_edge"].update(cdn_doc.get("cdn_edge") or {})
+    return doc
+
+
+def clear_tls_profile_cache() -> None:
+    """Drop cached profiles (after lab capture / tests mutate files)."""
+    load_tls_profiles.cache_clear()
+
+
+def merge_tls_profile_entry(
+    doc: dict,
+    *,
+    name: str,
+    ja3s: str = "",
+    ja4s: str = "",
+    description: str = "",
+    kind: str = "lure",
+) -> dict:
+    """Merge a captured baseline into a profiles document (does not write disk)."""
+    if kind not in ("lure", "cdn"):
+        raise ValueError("kind must be 'lure' or 'cdn'")
+    if not name or any(ch in name for ch in "/\\"):
+        raise ValueError("invalid profile name")
+    bucket = "cdn_edge" if kind == "cdn" else "lures"
+    out = {
+        "lures": dict(doc.get("lures") or {}),
+        "cdn_edge": dict(doc.get("cdn_edge") or {}),
+        "_meta": dict(doc.get("_meta") or {}),
+    }
+    entry = {
+        "ja3s": ja3s or "",
+        "ja4s": ja4s or "",
+        "description": description
+        or f"Captured baseline ({kind}) — fixed ClientHello audit profile",
+    }
+    out[bucket][name] = entry
+    return out
+
+
+def capture_tls_baseline(
+    host: str,
+    port: int,
+    *,
+    timeout: float = 5.0,
+) -> tuple[str, str, str]:
+    """Handshake with fixed ClientHello; return (ja3s, ja4s, error)."""
+    raw, err = tls_handshake(host, port, timeout=timeout)
+    if err:
+        return "", "", err
+    parsed = read_server_hello(raw)
+    if not parsed:
+        return "", "", "no ServerHello parsed"
+    ja3s = compute_ja3s(parsed) if parsed.version < 0x0304 else ""
+    ja4s = compute_ja4s(parsed) if parsed.version >= 0x0304 else ""
+    if _is_placeholder(ja3s) and _is_placeholder(ja4s):
+        return ja3s, ja4s, "empty fingerprints"
+    return ja3s, ja4s, ""
 
 
 def match_lure_profile(ja3s: str, ja4s: str = "") -> tuple[str, str]:
     """Return (profile_name, kind) when ja3s/ja4s matches a lure entry."""
     profiles = load_tls_profiles()
     for name, prof in profiles.get("lures", {}).items():
-        prof_ja3s = prof.get("ja3s", "")
-        if prof_ja3s and "placeholder" not in str(prof_ja3s).lower() and prof_ja3s == ja3s:
+        prof_ja3s = str(prof.get("ja3s", ""))
+        if not _is_placeholder(prof_ja3s) and prof_ja3s == ja3s:
             return name, "lure"
-        prof_ja4s = prof.get("ja4s", "")
-        if ja4s and prof_ja4s and "placeholder" not in str(prof_ja4s).lower() and prof_ja4s == ja4s:
+        prof_ja4s = str(prof.get("ja4s", ""))
+        if ja4s and not _is_placeholder(prof_ja4s) and prof_ja4s == ja4s:
             return name, "lure"
     for name, prof in profiles.get("cdn_edge", {}).items():
-        prof_ja3s = prof.get("ja3s", "")
-        if prof_ja3s and "placeholder" not in str(prof_ja3s).lower() and prof_ja3s == ja3s:
+        prof_ja3s = str(prof.get("ja3s", ""))
+        if not _is_placeholder(prof_ja3s) and prof_ja3s == ja3s:
+            return name, "cdn"
+        prof_ja4s = str(prof.get("ja4s", ""))
+        if ja4s and not _is_placeholder(prof_ja4s) and prof_ja4s == ja4s:
             return name, "cdn"
     return "", ""
 

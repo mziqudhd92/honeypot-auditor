@@ -1,0 +1,6 @@
+{
+  "connect": "127.0.0.1:443",
+  "recv_first": false,
+  "note": "Synthetic TLS 1.2 ServerHello (cipher TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256)",
+  "response_hex": "160303002a0200002e0303000000000000000000000000000000000000000000000000000000000000000000c02f00"
+}

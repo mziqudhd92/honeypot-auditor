@@ -322,6 +322,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
               <tr><td><code>--proxy</code></td><td>SOCKS5 egress (<code>socks5h://</code> remote DNS preferred)</td></tr>
               <tr><td><code>--passive-first</code></td><td>Passive intelligence before active probes; skip active when its score is high</td></tr>
               <tr><td><code>--osint-only</code></td><td>Passive intelligence only — no TCP probes</td></tr>
+              <tr><td><code>--passive-first-confirm</code></td><td>After high passive / osint-only, run safe-mode active verify</td></tr>
               <tr><td><code>--dual-stack</code></td><td>Resolve A+AAAA and compare IPv4 vs IPv6 results</td></tr>
               <tr><td><code>--jitter</code></td><td>Fraction of timeout as max random delay (e.g. <code>0.3</code>)</td></tr>
               <tr><td><code>--jitter-ms</code></td><td>Random delay range before probes (e.g. <code>50-500</code>)</td></tr>

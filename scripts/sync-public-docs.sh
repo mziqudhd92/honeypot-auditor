@@ -26,7 +26,7 @@ grep_file() {
   grep -Fq -- "$needle" "$file"
 }
 
-for flag in --safe-mode --passive-first --osint-only --dual-stack --profile --jitter --jitter-ms --max-concurrent --seed --preset --format --intel-provider --intel-key; do
+for flag in --safe-mode --passive-first --osint-only --passive-first-confirm --dual-stack --profile --jitter --jitter-ms --max-concurrent --seed --preset --format --intel-provider --intel-key; do
   if ! grep_flag "$HELP" "$flag"; then
     echo "missing from --help: $flag" >&2
     missing=1
@@ -42,7 +42,7 @@ if ! grep_file "$ROOT/docs/index.html" "check-sig"; then
 fi
 
 for doc in README.md docs/index.html; do
-  for needle in --safe-mode --passive-first --osint-only --dual-stack --jitter --intel-provider sarif deception-audit; do
+  for needle in --safe-mode --passive-first --osint-only --passive-first-confirm --dual-stack --jitter --intel-provider sarif deception-audit; do
     if ! grep_file "$ROOT/$doc" "$needle"; then
       echo "missing from $doc: $needle" >&2
       missing=1

@@ -222,6 +222,7 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
   --proxy socks5h://host:port  SOCKS5 egress (remote DNS enforced)
   --passive-first            passive intel before active; skip active when score high
   --osint-only               passive intel only — no TCP probes
+  --passive-first-confirm    after high passive / osint-only, run safe-mode active verify
   --dual-stack               resolve A+AAAA and compare IPv4 vs IPv6
   --jitter 0.3               fraction of timeout as max random delay (authorized OPSEC)
   --jitter-ms 50-500         random delay range in ms before each probe (authorized OPSEC)

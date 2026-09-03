@@ -1,5 +1,6 @@
 {
   "connect": "127.0.0.1:110",
+  "recv_first": true,
   "sessions": [
     { "response_text": "+OK mail ready\r\n+OK bye\r\n" },
     { "response_text": "+OK mail ready\r\n-ERR authenticate first\r\n" },

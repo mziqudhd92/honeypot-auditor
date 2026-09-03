@@ -16,6 +16,8 @@ htmlcov/
 
 # Reports
 honeypot-audit-*.json
+.lab-audit-results/
+.lab-tls-capture/
 
 # Demo intermediates
 docs/demo/*.raw.cast

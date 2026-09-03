@@ -253,6 +253,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Shodan OSINT only — no TCP probes (alias strict passive mode)",
     )
     p.add_argument(
+        "--passive-first-confirm",
+        action="store_true",
+        help="After high passive score (or with --osint-only), run --safe-mode active verify",
+    )
+    p.add_argument(
         "--dual-stack",
         action="store_true",
         help="Resolve A+AAAA and compare IPv4 vs IPv6 probe results",
@@ -381,6 +386,15 @@ async def _run_named(
             progress.update(task_id, advance=1, description=f"Finished {name}")
 
 
+def _apply_passive_confirm(args: argparse.Namespace) -> None:
+    """Engage safe-mode active verify; keep args and settings aligned."""
+    args.safe_mode = True
+    args.deep = False
+    settings.safe_mode = True
+    settings.deep = False
+    settings.profile = ProbeProfile.SAFE
+
+
 def _build_notes(
     args: argparse.Namespace,
     *,
@@ -388,10 +402,18 @@ def _build_notes(
     public_target: bool,
     ports: dict[str, list[int]] | None = None,
 ) -> list[str]:
+    deep = bool(settings.deep)
+    safe = bool(settings.safe_mode)
     notes = [
-        f"preset={args.preset} timeout={args.timeout}s deep={args.deep}",
+        f"preset={args.preset} timeout={args.timeout}s deep={deep}",
         "Closed ports are skipped and do not raise the score.",
     ]
+    if safe:
+        notes.append("Safe mode: handshake-only probes (no deep shell/path/auth attempts).")
+    if getattr(args, "passive_first_confirm", False) and safe:
+        notes.append(
+            "--passive-first-confirm: active verify after passive skip (safe-mode only)."
+        )
     if args.extra_ports:
         notes.append("-p/--port selects only the listed ports (preset not applied)")
     elif getattr(args, "ports", ""):
@@ -408,7 +430,7 @@ def _build_notes(
     providers = list(dict.fromkeys(getattr(args, "intel_provider", []) or []))
     if providers:
         notes.append(f"Opt-in passive intelligence providers: {', '.join(providers)}")
-    if args.deep:
+    if deep:
         notes.append("Deep mode: co-tenancy requires corroboration from another emulator tell.")
     if subnet:
         notes.append(
@@ -515,17 +537,24 @@ def _probe_jobs(
         passive_inds.extend(shodan_inds)
         jobs.append(("shodan", _constant_indicators(shodan_inds)))
 
+    confirm = settings.passive_first_confirm
+    skip_active = False
     if settings.osint_only:
+        skip_active = True
+    elif settings.passive_first and (include_shodan or providers) and _passive_score_high(
+        passive_inds
+    ):
+        skip_active = True
+    if skip_active and not confirm:
         return jobs
-    if settings.passive_first and (include_shodan or providers):
-        if _passive_score_high(passive_inds):
-            return jobs
-    if args.with_nmap and not settings.osint_only:
+    if skip_active and confirm:
+        _apply_passive_confirm(args)
+    if args.with_nmap and not settings.osint_only and not settings.safe_mode:
         jobs.append(("nmap", lambda: nmap_scan(ip, ports)))
     for proto, fn in PROBE_BY_PROTOCOL.items():
         for port in ports.get(proto, []):
             jobs.append((f"{proto}:{port}", _port_probe_job(fn, ip, port, proto)))
-    if args.deep and not getattr(args, "safe_mode", False):
+    if settings.deep and not settings.safe_mode:
         jobs.append(("deep", lambda: run_deep_probes(ip, ports)))
     return jobs
 
@@ -563,6 +592,7 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.proxy_allow_local_dns = bool(getattr(args, "proxy_allow_local_dns", False))
     settings.passive_first = bool(getattr(args, "passive_first", False))
     settings.osint_only = bool(getattr(args, "osint_only", False))
+    settings.passive_first_confirm = bool(getattr(args, "passive_first_confirm", False))
     settings.dual_stack = bool(getattr(args, "dual_stack", False))
     settings.max_concurrent = max(1, int(getattr(args, "max_concurrent", 32)))
     settings.seed = getattr(args, "seed", None)
@@ -664,7 +694,7 @@ async def _audit_dual_stack(
                 notes=primary.notes,
                 started_at=primary.started_at,
                 finished_at=primary.finished_at,
-                deep=args.deep,
+                deep=bool(settings.deep),
                 capabilities=capabilities,
                 capability_warnings=capability_warnings,
             )
@@ -687,10 +717,11 @@ async def _audit_host(
     jobs: list[tuple[str, Callable[[], list[Indicator]]]] | None = None,
 ) -> AuditReport:
     started = datetime.now(timezone.utc).isoformat()
+    # Build jobs first so --passive-first-confirm can align args/settings before notes/report.
+    jobs = jobs if jobs is not None else _probe_jobs(ip, ports, args, include_shodan=include_shodan)
     notes = _build_notes(
         args, subnet=False, public_target=not is_private_or_loopback(ip), ports=ports
     )
-    jobs = jobs if jobs is not None else _probe_jobs(ip, ports, args, include_shodan=include_shodan)
 
     indicators: list[Indicator] = []
     if progress is not None and task_id is not None:
@@ -713,7 +744,7 @@ async def _audit_host(
         notes=notes,
         started_at=started,
         finished_at=finished,
-        deep=args.deep,
+        deep=bool(settings.deep),
         capabilities=capabilities,
         capability_warnings=capability_warnings,
     )
