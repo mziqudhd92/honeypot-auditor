@@ -99,6 +99,30 @@ def test_evaluate_signatures_fires_from_http_evidence():
     assert any(i.id == "http.header_order_lure" for i in sig_inds)
 
 
+def test_evaluate_signatures_tolerates_numeric_json_evidence():
+    """SMTP (and others) store reply codes as evidence; json.loads('250') is an int."""
+    inds = [
+        Indicator(
+            id="smtp.open_relay",
+            title="SMTP open relay",
+            category="arbitrary_auth",
+            triggered=False,
+            protocol="smtp",
+            evidence="250",
+        ),
+        Indicator(
+            id="smtp.banner",
+            title="SMTP banner",
+            category="static_signature",
+            triggered=False,
+            protocol="smtp",
+            evidence="220 mail.example.com",
+        ),
+    ]
+    # Must not raise AttributeError when evidence is a JSON number
+    assert isinstance(evaluate_signatures(inds), list)
+
+
 def test_passive_score_high_buffet_and_open_ports():
     host_info = {"data": [{"product": "Cowrie", "port": p} for p in range(1, 9)]}
     port_inds = _shodan_port_indicators(host_info)

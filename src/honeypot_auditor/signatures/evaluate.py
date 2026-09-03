@@ -48,11 +48,16 @@ def _indicator_headers(ind: Indicator) -> list[str] | None:
 def _indicator_ja3s(ind: Indicator) -> str:
     import json
 
-    try:
-        data = json.loads(ind.evidence)
-        return str(data.get("ja3s", "") or "")
-    except (json.JSONDecodeError, TypeError):
+    raw = ind.evidence
+    if not raw or not isinstance(raw, str):
         return ""
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("ja3s", "") or "")
 
 
 def evaluate_signatures(indicators: list[Indicator]) -> list[Indicator]:

@@ -51,6 +51,8 @@ Fusion Technology Strategies) for the substantial contribution in
   planning so JSON no longer claims `deep=True` for handshake-only verify passes
 - `deep.kexinit_rigid` no longer double-fires when `deep.hassh` already covers the same KEX
 - TLS capture target parsing accepts `[IPv6]:PORT`; actionlint CI verifies release checksums
+- Signature evaluation no longer crashes when indicator evidence is a JSON number (e.g. SMTP
+  reply code `"250"`)
 
 ### Changed
 
