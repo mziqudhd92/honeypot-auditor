@@ -67,11 +67,19 @@ HONEYPOT_AUDITOR_INTEL_EXAMPLE_KEY=... \
   honeypot-auditor --target 203.0.113.10 --intel-provider example --confirm-authorized
 ```
 
-`--intel-key example=...` is available for controlled automation, but the environment variable is
-preferred because it is less likely to enter shell history. Provider names are validated, only the
-selected entry point is imported, and each provider runs once per host. Returned IDs are namespaced as
-`intel.<provider>.*`; categories are restricted to `shodan` (the backwards-compatible passive-intel
-score bucket) or `info`. Provider failures become skipped indicators, and API keys are redacted from
-errors and reports.
+`--intel-key example=...` is available for controlled lab automation only (argv is visible in
+process lists / shell history). Prefer `HONEYPOT_AUDITOR_INTEL_<NAME>_KEY`; when both are set,
+**the environment variable wins**. Using `--intel-key` prints a stderr warning.
 
-See also [SIGNATURES.md](SIGNATURES.md).
+Provider names are validated, only the selected entry point is imported, and each provider runs
+once per host (including dual-stack IPv6 faces — intel is not gated behind Shodan). Returned IDs
+are namespaced as `intel.<provider>.*`. Categories are restricted to:
+
+| Category | Scores? | Use |
+|----------|---------|-----|
+| `shodan` | Yes (passive-intel weight bucket) | Backwards-compatible scoring tells |
+| `info` | **No** — never contributes to Honeyscore | Informational annotations only |
+
+Provider failures become skipped indicators, and API keys are redacted from errors and reports.
+
+See also [SIGNATURES.md](SIGNATURES.md) and [SCORING.md](SCORING.md).

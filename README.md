@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v0.6.0 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v0.7.0 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -342,6 +342,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v0.6.0 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v0.7.0 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```

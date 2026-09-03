@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-03
+
 ### Added
 
 - Non-destructive POP3 engine on ports 110/1110: greeting framing, pre-auth state,
@@ -26,12 +28,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Passive Shodan/provider work executing twice during progress-enabled host audits
 - Silent broad exception handling across optional probes and connection cleanup
 - Passive REST fallback now rejects non-HTTPS URLs and hosts outside the Shodan API allowlist
+- Named `--intel-provider` plugins now run independently of Shodan / dual-stack IPv6 gating
+- `--intel-key` warns on stderr; environment variables override argv keys when both are set
 
 ### Changed
 
 - Passive-intel category labeling now covers Shodan and selected providers while retaining the
   stable `shodan` category key for report compatibility
 - JSON and SARIF outputs distinguish triggered, clear, skipped, and suppressed results
+- SARIF export uses `report.triggered()` (excludes suppressed indicators); fingerprints are
+  stable across multi-host runs
 
 ## [0.6.0] - 2026-09-02
 

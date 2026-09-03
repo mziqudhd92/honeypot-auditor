@@ -155,7 +155,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="NAME=KEY",
-        help="Provider API key; prefer HONEYPOT_AUDITOR_INTEL_<NAME>_KEY",
+        help=(
+            "Lab-only provider API key (argv is visible in process lists). "
+            "Prefer HONEYPOT_AUDITOR_INTEL_<NAME>_KEY; env wins when both are set"
+        ),
     )
     p.add_argument("--output", default="", help="Report path (default: honeypot-audit-<ip>.json)")
     p.add_argument(
@@ -457,11 +460,29 @@ def _parse_intel_keys(values: list[str]) -> dict[str, str]:
     return keys
 
 
-def _intel_key(args: argparse.Namespace, provider: str, keys: dict[str, str]) -> str:
-    if provider in keys:
-        return keys[provider]
-    env_name = "HONEYPOT_AUDITOR_INTEL_" + re.sub(r"[^A-Z0-9]", "_", provider.upper()) + "_KEY"
-    return os.environ.get(env_name, "")
+def _intel_env_name(provider: str) -> str:
+    return "HONEYPOT_AUDITOR_INTEL_" + re.sub(r"[^A-Z0-9]", "_", provider.upper()) + "_KEY"
+
+
+def _intel_key(provider: str, keys: dict[str, str]) -> str:
+    """Resolve a provider key: environment wins over --intel-key."""
+    env_val = os.environ.get(_intel_env_name(provider), "")
+    if env_val:
+        return env_val
+    return keys.get(provider, "")
+
+
+def _warn_intel_argv_keys(args: argparse.Namespace) -> None:
+    raw = getattr(args, "intel_key", []) or []
+    if not raw:
+        return
+    import sys
+
+    print(
+        "warning: --intel-key places secrets in argv/process lists; "
+        "prefer HONEYPOT_AUDITOR_INTEL_<NAME>_KEY (env overrides CLI when both are set)",
+        file=sys.stderr,
+    )
 
 
 def _probe_jobs(
@@ -473,26 +494,30 @@ def _probe_jobs(
 ) -> list[tuple[str, Callable[[], list[Indicator]]]]:
     jobs: list[tuple[str, Callable[[], list[Indicator]]]] = []
     passive_inds: list[Indicator] = []
+    intel_keys = _parse_intel_keys(getattr(args, "intel_key", []) or [])
+    providers = list(dict.fromkeys(getattr(args, "intel_provider", []) or []))
+
+    # Named intel providers are independent of Shodan / address-family gating.
+    for provider in providers:
+        if provider == "shodan":
+            continue
+        provider_inds = run_intel_provider(
+            provider,
+            ip,
+            _intel_key(provider, intel_keys) or None,
+        )
+        passive_inds.extend(provider_inds)
+        jobs.append((f"intel:{provider}", _constant_indicators(provider_inds)))
+
     if include_shodan:
-        intel_keys = _parse_intel_keys(getattr(args, "intel_key", []) or [])
-        providers = list(dict.fromkeys(getattr(args, "intel_provider", []) or []))
-        shodan_key = args.shodan_key or _intel_key(args, "shodan", intel_keys)
+        shodan_key = args.shodan_key or _intel_key("shodan", intel_keys)
         shodan_inds = shodan_lookup(ip, shodan_key or None)
         passive_inds.extend(shodan_inds)
         jobs.append(("shodan", _constant_indicators(shodan_inds)))
-        for provider in providers:
-            if provider == "shodan":
-                continue
-            provider_inds = run_intel_provider(
-                provider,
-                ip,
-                _intel_key(args, provider, intel_keys) or None,
-            )
-            passive_inds.extend(provider_inds)
-            jobs.append((f"intel:{provider}", _constant_indicators(provider_inds)))
+
     if settings.osint_only:
         return jobs
-    if settings.passive_first and include_shodan:
+    if settings.passive_first and (include_shodan or providers):
         if _passive_score_high(passive_inds):
             return jobs
     if args.with_nmap and not settings.osint_only:
@@ -544,6 +569,7 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.signature_pack = getattr(args, "signature_pack", "core")
     settings.output_format = getattr(args, "format", "json")
     _parse_intel_keys(getattr(args, "intel_key", []) or [])
+    _warn_intel_argv_keys(args)
     # Deep suite runs many probes; keep a floor so --timeout 3 does not kill it at 5s.
     settings.deep_timeout_seconds = max(90.0, float(args.timeout) * 4.0)
     jitter = float(getattr(args, "jitter", 0.0) or 0.0)

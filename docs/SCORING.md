@@ -35,8 +35,9 @@ min(category contributions + bonuses, 100)
 ```
 
 Repeated arbitrary authentication for two independent synthetic users is a decisive override to 100%.
-Suppressed, skipped, and non-triggered indicators contribute zero. Passive-intel plugins are constrained to
-the existing passive category and cannot create higher-weight categories.
+Suppressed, skipped, and non-triggered indicators contribute zero. Passive-intel plugins may only use
+categories `shodan` (scores via the existing passive weight) or `info` (**never scores**). They cannot
+create higher-weight categories such as `arbitrary_auth`.
 
 ## Score explanation in reports
 

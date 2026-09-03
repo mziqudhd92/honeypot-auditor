@@ -105,10 +105,34 @@ def test_probe_jobs_runs_selected_provider_once():
             jobs = _probe_jobs("203.0.113.10", {}, args, include_shodan=True)
     finally:
         settings.osint_only = old_osint
-    assert [name for name, _ in jobs] == ["shodan", "intel:example"]
+    assert [name for name, _ in jobs] == ["intel:example", "shodan"]
     run.assert_called_once_with("example", "203.0.113.10", "secret")
     emitted = [ind.id for _, job in jobs for ind in job()]
     assert emitted.count("honeypot_tag") == 1
+
+
+def test_probe_jobs_runs_intel_without_shodan_gate():
+    """Named intel providers must run even when include_shodan is False (e.g. dual-stack IPv6)."""
+    args = build_parser().parse_args(
+        ["--target", "203.0.113.10", "--intel-provider", "example", "--osint-only"]
+    )
+    with (
+        patch("honeypot_auditor.cli.shodan_lookup") as shodan,
+        patch("honeypot_auditor.cli.run_intel_provider", return_value=_finding()) as run,
+    ):
+        jobs = _probe_jobs("203.0.113.10", {}, args, include_shodan=False)
+    shodan.assert_not_called()
+    run.assert_called_once_with("example", "203.0.113.10", None)
+    assert [name for name, _ in jobs] == ["intel:example"]
+
+
+def test_intel_key_prefers_environment_over_argv(monkeypatch):
+    from honeypot_auditor.cli import _intel_key
+
+    monkeypatch.setenv("HONEYPOT_AUDITOR_INTEL_EXAMPLE_KEY", "from-env")
+    assert _intel_key("example", {"example": "from-argv"}) == "from-env"
+    monkeypatch.delenv("HONEYPOT_AUDITOR_INTEL_EXAMPLE_KEY")
+    assert _intel_key("example", {"example": "from-argv"}) == "from-argv"
 
 
 def test_invalid_intel_key_is_reported_as_cli_input_error():
