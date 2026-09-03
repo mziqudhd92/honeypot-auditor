@@ -8,6 +8,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.7.0] - 2026-09-03
 
+Thanks to [@fusiontechstrategies](https://github.com/fusiontechstrategies) (Jeffrey Friedler /
+Fusion Technology Strategies) for the substantial contribution in
+[#1](https://github.com/mziqudhd92/honeypot-auditor/pull/1), which this release builds on.
+
 ### Added
 
 - Non-destructive POP3 engine on ports 110/1110: greeting framing, pre-auth state,

@@ -2,6 +2,9 @@
 
 Thanks for helping improve Honeypot Auditor.
 
+Human credits live in [CONTRIBUTORS.md](CONTRIBUTORS.md). Significant PRs are also thanked in
+[CHANGELOG.md](CHANGELOG.md) for the release that ships them.
+
 ## Setup
 
 ```bash

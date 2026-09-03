@@ -310,6 +310,7 @@ Use this one if you just need a fast external fingerprint.
     Shodan · Salesforce HASSH · everyone who ever typed USER anonymous
     BBS sysops who ran 9600 baud file areas for "utilz"
     and the three people who still read NFO files in 2026
+    <a href="https://github.com/fusiontechstrategies">@fusiontechstrategies</a> — POP3, intel plugins, scoring/SARIF, Windows+security CI (v0.7.0)
 
   NO GREETS TO:
     script kiddies scanning /0
