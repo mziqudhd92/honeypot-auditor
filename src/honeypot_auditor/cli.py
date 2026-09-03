@@ -140,7 +140,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--shodan-key",
         default=os.environ.get("SHODAN_API_KEY", ""),
-        help="Shodan API key (or set SHODAN_API_KEY)",
+        help=(
+            "Enable Shodan OSINT with this API key (or set SHODAN_API_KEY). "
+            "Shodan is not queried unless a key is set or --intel-provider shodan is used"
+        ),
     )
     p.add_argument(
         "--intel-provider",
@@ -494,6 +497,19 @@ def _intel_key(provider: str, keys: dict[str, str]) -> str:
     return keys.get(provider, "")
 
 
+def _resolve_shodan_key(args: argparse.Namespace, intel_keys: dict[str, str]) -> str:
+    """CLI --shodan-key / SHODAN_API_KEY, else HONEYPOT_AUDITOR_INTEL_SHODAN_KEY / --intel-key."""
+    return (getattr(args, "shodan_key", "") or "").strip() or _intel_key("shodan", intel_keys)
+
+
+def _shodan_requested(args: argparse.Namespace, intel_keys: dict[str, str]) -> bool:
+    """Shodan is opt-in: only run when a key is present or --intel-provider shodan."""
+    providers = getattr(args, "intel_provider", []) or []
+    if "shodan" in providers:
+        return True
+    return bool(_resolve_shodan_key(args, intel_keys))
+
+
 def _warn_intel_argv_keys(args: argparse.Namespace) -> None:
     raw = getattr(args, "intel_key", []) or []
     if not raw:
@@ -531,8 +547,8 @@ def _probe_jobs(
         passive_inds.extend(provider_inds)
         jobs.append((f"intel:{provider}", _constant_indicators(provider_inds)))
 
-    if include_shodan:
-        shodan_key = args.shodan_key or _intel_key("shodan", intel_keys)
+    if include_shodan and _shodan_requested(args, intel_keys):
+        shodan_key = _resolve_shodan_key(args, intel_keys)
         shodan_inds = shodan_lookup(ip, shodan_key or None)
         passive_inds.extend(shodan_inds)
         jobs.append(("shodan", _constant_indicators(shodan_inds)))
@@ -541,7 +557,7 @@ def _probe_jobs(
     skip_active = False
     if settings.osint_only:
         skip_active = True
-    elif settings.passive_first and (include_shodan or providers) and _passive_score_high(
+    elif settings.passive_first and (passive_inds or providers) and _passive_score_high(
         passive_inds
     ):
         skip_active = True
@@ -668,6 +684,7 @@ async def _audit_dual_stack(
         dual[key] = {
             "resolved_ip": rep.resolved_ip,
             "score": rep.score,
+            "scoped_score": rep.scoped_score,
             "threat_level": rep.threat_level,
             "triggered_count": len(rep.triggered()),
         }

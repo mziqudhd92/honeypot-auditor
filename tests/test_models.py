@@ -19,6 +19,7 @@ def test_indicator_as_dict_includes_new_fields():
     assert d["remediation"] == "Align header order with production nginx"
     assert d["fingerprint_type"] == "http_header_order"
     assert d["tell_tier"] == "edge"
+    assert d["fidelity"] == "medium"
     assert d["requires_corroboration"] is False
     assert d["suppressed"] is False
     assert d["status"] == "triggered"

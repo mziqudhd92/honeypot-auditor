@@ -33,6 +33,8 @@ class Indicator:
     suppressed: bool = False
     suppression_reason: str = ""
     tell_tier: str = "origin"
+    # CTI fidelity: low | medium | high | decisive (high/decisive → high-signal bonus).
+    fidelity: str = "medium"
 
     def __post_init__(self) -> None:
         self.id = _as_text(self.id)
@@ -47,6 +49,8 @@ class Indicator:
         self.fingerprint_type = _as_text(self.fingerprint_type)
         self.suppression_reason = _as_text(self.suppression_reason)
         self.tell_tier = _as_text(self.tell_tier) or "origin"
+        fidelity = _as_text(self.fidelity).lower() or "medium"
+        self.fidelity = fidelity if fidelity in {"low", "medium", "high", "decisive"} else "medium"
 
     def as_dict(self) -> dict:
         status = (
@@ -85,6 +89,7 @@ class Indicator:
             "suppressed": self.suppressed,
             "suppression_reason": self.suppression_reason,
             "tell_tier": self.tell_tier,
+            "fidelity": self.fidelity,
         }
 
 
@@ -133,6 +138,8 @@ class AuditReport:
     deception_leaks: list[dict] = field(default_factory=list)
     dual_stack: dict = field(default_factory=dict)
     score_breakdown: dict = field(default_factory=dict)
+    # Normalized score for targeted single-port (-p) audits; None when not applicable.
+    scoped_score: float | None = None
 
     def triggered(self) -> list[Indicator]:
         return [i for i in self.indicators if i.triggered and not i.skipped and not i.suppressed]

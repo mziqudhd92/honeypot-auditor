@@ -16,6 +16,7 @@ def _report_payload(report: AuditReport) -> dict:
         "target": report.target,
         "resolved_ip": report.resolved_ip,
         "score": report.score,
+        "scoped_score": report.scoped_score,
         "threat_level": report.threat_level,
         "category_hits": report.category_hits,
         "score_breakdown": report.score_breakdown,

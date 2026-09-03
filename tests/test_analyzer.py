@@ -50,6 +50,14 @@ def test_shodan_only_is_25():
     inds = [_ind("shodan", True), _ind("arbitrary_auth", False)]
     score, _ = compute_score(inds)
     assert score == 25.0
+    # Fired tells below Suspected must never read as Likely Real Host.
+    assert threat_level(score, inds) == "Inconclusive (Low-confidence anomalies detected)"
+
+
+def test_clean_host_is_likely_real():
+    inds = [_ind("shodan", False), _ind("arbitrary_auth", False)]
+    score, _ = compute_score(inds)
+    assert score == 0.0
     assert threat_level(score, inds) == "Likely Real Host"
 
 
@@ -112,7 +120,7 @@ def test_multi_user_arbitrary_auth_scores_100():
 
 
 def test_ssh_kex_facade_alone_is_suspected_medium():
-    """Cowrie KEX facade is a high-signal pre-auth tell — not 'Likely Real Host' / low."""
+    """Cowrie KEX facade is a high-fidelity pre-auth tell — not 'Likely Real Host' / low."""
     inds = [
         Indicator(
             id="ssh.kex_facade",
@@ -121,6 +129,7 @@ def test_ssh_kex_facade_alone_is_suspected_medium():
             triggered=True,
             protocol="ssh",
             detail="OpenSSH banner with Twisted/Cowrie KEX facade",
+            fidelity="high",
         ),
         Indicator(
             id="ssh.arbitrary_auth",
@@ -147,8 +156,9 @@ def test_ssh_kex_facade_alone_is_suspected_medium():
         started_at="",
         finished_at="",
     )
-    # static 20 + high-signal bonus 15 = 35
+    # static 20 + high-signal bonus 15 = 35 global; scoped = 35/75*100 ≈ 46.67
     assert report.score == 35.0
+    assert report.scoped_score == 46.67
     assert report.threat_level == "Suspected Honeypot"
     assert report.confidence == "medium"
     assert any(i.id == "corroboration.high_signal" for i in report.indicators)
@@ -156,7 +166,7 @@ def test_ssh_kex_facade_alone_is_suspected_medium():
 
 
 def test_pop3_auth_failed_blanket_is_high_signal_suspected():
-    """Blanket + stock banner share static_signature; high-signal bonus clears Suspected."""
+    """Blanket + stock banner: intra-category + high fidelity clear Suspected."""
     inds = [
         Indicator(
             id="pop3.auth_failed_blanket",
@@ -165,6 +175,7 @@ def test_pop3_auth_failed_blanket_is_high_signal_suspected():
             triggered=True,
             protocol="pop3",
             detail="identical auth-themed -ERR on CAPA, STAT",
+            fidelity="high",
         ),
         Indicator(
             id="pop3.stock_banner",
@@ -173,11 +184,19 @@ def test_pop3_auth_failed_blanket_is_high_signal_suspected():
             triggered=True,
             protocol="pop3",
             requires_corroboration=True,
+            fidelity="medium",
         ),
         Indicator(
             id="pop3.arbitrary_auth",
             title="POP3 arbitrary auth",
             category="arbitrary_auth",
+            triggered=False,
+            protocol="pop3",
+        ),
+        Indicator(
+            id="pop3.preauth_state",
+            title="POP3 preauth",
+            category="state_nonpersist",
             triggered=False,
             protocol="pop3",
         ),
@@ -191,11 +210,68 @@ def test_pop3_auth_failed_blanket_is_high_signal_suspected():
         started_at="",
         finished_at="",
     )
-    assert report.score == 35.0
+    # static 20 + intra 7.5 + high-signal 15 = 42.5; scoped = 42.5/75*100 ≈ 56.67
+    assert report.score == 42.5
+    assert report.scoped_score == 56.67
+    assert report.category_hits["static_signature"]["intra_category_bonus"] == 7.5
     assert report.threat_level == "Suspected Honeypot"
     assert report.confidence == "medium"
     assert any(i.id == "corroboration.high_signal" for i in report.indicators)
     assert report.tactical_action == "PROCEED_CAUTION"
+    assert report.score_breakdown["scoped"]["applicable"] is True
+
+
+def test_intra_category_bonus_caps_at_15():
+    inds = [
+        Indicator(
+            id=f"static.{i}",
+            title="t",
+            category="static_signature",
+            triggered=True,
+            protocol="http",
+        )
+        for i in range(4)
+    ]
+    score, hits = compute_score(inds)
+    assert hits["static_signature"]["hit_count"] == 4
+    assert hits["static_signature"]["intra_category_bonus"] == 15.0
+    assert score == 35.0  # 20 + 15
+
+
+def test_scoped_score_only_for_single_port():
+    inds = [
+        Indicator(
+            id="ssh.kex_facade",
+            title="kex",
+            category="static_signature",
+            triggered=True,
+            protocol="ssh",
+            fidelity="high",
+        ),
+        _ind("arbitrary_auth", False),
+    ]
+    multi = build_report(
+        target="203.0.113.1",
+        resolved_ip="203.0.113.1",
+        ports={"ssh": [22], "http": [80]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+    )
+    assert multi.scoped_score is None
+    assert multi.score_breakdown["scoped"]["applicable"] is False
+    single = build_report(
+        target="203.0.113.1",
+        resolved_ip="203.0.113.1",
+        ports={"ssh": [22]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+    )
+    assert single.scoped_score is not None
+    assert single.scoped_score > single.score
 
 
 def test_buffet_cotenancy_confirms_deny_all_stack():
@@ -221,16 +297,17 @@ def test_buffet_cotenancy_confirms_deny_all_stack():
         started_at="",
         finished_at="",
     )
-    # state 25 + static 20 + buffet 15 + corroboration (6-1)*5 = 25 → 85
-    assert report.score == 85.0
+    # state 25+15 + static 20+15 + buffet 15 + corroboration (6-1)*5 = 25 → 115 → 100
+    assert report.score == 100.0
     assert report.threat_level == "Confirmed Honeypot"
     assert any(i.id == "cotenancy.buffet" for i in report.indicators)
     assert any(i.id == "corroboration.protocol_buffet" for i in report.indicators)
     assert report.category_hits["corroboration"]["contribution"] == 25.0
-    assert report.score_breakdown["category_total_pct"] == 60.0
+    assert report.score_breakdown["category_total_pct"] == 90.0
     assert report.score_breakdown["bonus_total_pct"] == 25.0
-    assert report.score_breakdown["raw_score_pct"] == 85.0
-    assert report.score_breakdown["final_score_pct"] == 85.0
+    assert report.score_breakdown["raw_score_pct"] == 115.0
+    assert report.score_breakdown["final_score_pct"] == 100.0
+    assert report.score_breakdown["cap_applied"] is True
 
 
 def test_silent_accept_cluster_scores_cotenancy():
@@ -267,8 +344,8 @@ def test_silent_accept_cluster_scores_cotenancy():
         finished_at="",
     )
     assert any(i.id == "cotenancy.silent_accept_cluster" for i in report.indicators)
-    # static 20 + cotenancy 15 + corroboration 5 = 40
-    assert report.score == 40.0
+    # static 20+15 (3 hits) + cotenancy 15 + corroboration 5 = 55
+    assert report.score == 55.0
     assert report.threat_level == "Suspected Honeypot"
 
 
@@ -307,8 +384,9 @@ def test_buffet_lab_scale_scores_95_without_shodan():
         started_at="",
         finished_at="",
     )
-    assert report.score == 95.0
+    assert report.score == 100.0
     assert report.category_hits["corroboration"]["contribution"] == 35.0
+    assert report.score_breakdown["cap_applied"] is True
 
 
 def test_trapster_class_two_protocol_fsm_stacks():
@@ -475,12 +553,20 @@ def test_confidence_medium_two_protocols():
 def test_tactical_action_matrix(score, confidence, proxy, expected):
     from honeypot_auditor.analyzer import compute_tactical_action
 
+    triggered = expected != "PIVOT_POSSIBLE"
     action, _ = compute_tactical_action(
         score,
         confidence,
         proxy_detected=proxy,
-        threat_level="Suspected Honeypot",
-        indicators=[Indicator(id="x", title="x", category="static_signature", triggered=True)],
+        threat_level="Suspected Honeypot" if triggered else "Likely Real Host",
+        indicators=[
+            Indicator(
+                id="x",
+                title="x",
+                category="static_signature",
+                triggered=triggered,
+            )
+        ],
     )
     assert action == expected
 

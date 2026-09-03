@@ -6,6 +6,32 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-09-03
+
+CTI-aligned scoring redesign (roadmap items formerly labeled 0.7.1 / 0.7.2 / 0.8.0).
+
+### Changed
+
+- Verdict: never emit `Likely Real Host` when any unsuppressed indicator triggered;
+  below Suspected with hits → `Inconclusive (Low-confidence anomalies detected)`
+- Intra-category corroboration: first hit awards full category weight; each extra hit
+  in the same category adds +7.5% (cap +15%)
+- First-class `Indicator.fidelity` (`low` / `medium` / `high` / `decisive`) replaces the
+  hardcoded `HIGH_SIGNAL_TELL_IDS` set; `high`/`decisive` awards the +15% high-signal bonus
+  (`ssh.kex_facade`, `pop3.auth_failed_blanket` set to `high`)
+- Targeted single-port audits (`-p`): report **Scoped/Normalized Honeyscore** alongside
+  global Honeyscore; threat level uses `max(global, scoped)` when scoped applies
+
+### Added
+
+- JSON/console/SARIF fields: `scoped_score`, `score_breakdown.scoped`, indicator `fidelity`
+- Verbose (`-v`) console: hit counts, intra-category bonuses, global + scoped formulas,
+  fidelity column, effective score on single-port audits
+- Docs/site/README/agents briefs updated for the v0.7.3 scoring model
+- Shodan OSINT is opt-in: only scheduled when `--shodan-key` / `SHODAN_API_KEY` /
+  `HONEYPOT_AUDITOR_INTEL_SHODAN_KEY` is set, or `--intel-provider shodan` is passed
+  (no more empty “Finished shodan” step on plain `-p` audits)
+
 ## [0.7.0] - 2026-09-03
 
 Thanks to [@fusiontechstrategies](https://github.com/fusiontechstrategies) (Jeffrey Friedler /

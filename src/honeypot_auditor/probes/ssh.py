@@ -99,6 +99,7 @@ def _kex_facade_indicator(banner: str, kex: object | None, raw: bytes) -> Indica
             detail=f"no KEXINIT captured; banner={banner or '?'}",
             evidence=json.dumps({"banner": banner}),
             fingerprint_type="ssh_hassh",
+            fidelity="high",
         )
     triggered, detail = hassh_algo_mismatch(banner, kex)  # type: ignore[arg-type]
     evidence = {
@@ -118,6 +119,7 @@ def _kex_facade_indicator(banner: str, kex: object | None, raw: bytes) -> Indica
         detail=detail,
         evidence=json.dumps(evidence),
         fingerprint_type="ssh_hassh",
+        fidelity="high",
         remediation="Align KEXINIT host keys / AEAD ciphers / ETM MACs with the claimed OpenSSH version",
     )
 

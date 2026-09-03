@@ -124,6 +124,7 @@ def build_sarif(report: AuditReport) -> dict:
                 "properties": {
                     "report_schema_version": "1.0",
                     "honeyscore": report.score,
+                    "scoped_honeyscore": report.scoped_score,
                     "score_breakdown": report.score_breakdown,
                     "threat_level": report.threat_level,
                     "confidence": report.confidence,

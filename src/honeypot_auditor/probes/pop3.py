@@ -258,6 +258,7 @@ def _stock_banner_indicator(greeting: str) -> Indicator:
         fingerprint_type="pop3_stock_banner",
         requires_corroboration=True,
         tell_tier="origin",
+        fidelity="medium",
     )
 
 
@@ -417,6 +418,7 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
             fingerprint_type="pop3_auth_failed_blanket",
             requires_corroboration=False,
             tell_tier="origin",
+            fidelity="high",
         ),
         stock_ind,
     ]

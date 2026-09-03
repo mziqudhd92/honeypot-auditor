@@ -105,10 +105,25 @@ def test_probe_jobs_runs_selected_provider_once():
             jobs = _probe_jobs("203.0.113.10", {}, args, include_shodan=True)
     finally:
         settings.osint_only = old_osint
-    assert [name for name, _ in jobs] == ["intel:example", "shodan"]
+    assert [name for name, _ in jobs] == ["intel:example"]
     run.assert_called_once_with("example", "203.0.113.10", "secret")
     emitted = [ind.id for _, job in jobs for ind in job()]
     assert emitted.count("honeypot_tag") == 1
+
+
+def test_probe_jobs_runs_shodan_when_key_present():
+    args = build_parser().parse_args(
+        ["--target", "203.0.113.10", "--osint-only", "--shodan-key", "secret"]
+    )
+    old_osint = settings.osint_only
+    settings.osint_only = True
+    try:
+        with patch("honeypot_auditor.cli.shodan_lookup", return_value=[]) as shodan:
+            jobs = _probe_jobs("203.0.113.10", {}, args, include_shodan=True)
+    finally:
+        settings.osint_only = old_osint
+    shodan.assert_called_once_with("203.0.113.10", "secret")
+    assert [name for name, _ in jobs] == ["shodan"]
 
 
 def test_probe_jobs_runs_intel_without_shodan_gate():

@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v0.7.0 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v0.7.3 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -55,7 +55,7 @@
 > *Does this IP behave like a low-interaction honeypot, or like something
 > that might actually bill someone for downtime?*
 
-Passive intel ([Shodan Honeyscore](https://honeyscore.shodan.io/) or explicitly selected providers) plus active,
+Passive intel ([Shodan Honeyscore](https://honeyscore.shodan.io/) when you pass a key, or explicitly selected providers) plus active,
 **non-destructive** probes across the usual decoy faces. Outputs a weighted
 **Honeyscore (0–100%)**, Rich console table, versioned JSON report, or SARIF 2.1.0.
 
@@ -91,7 +91,7 @@ made Cowrie sweat in `'09 and still catches clones in `'26.
 | `pip install honeypot-auditor` | Core probes (Paramiko + Requests + Rich + figlet header) |
 | `pip install "honeypot-auditor[full]"` | + Nmap integration · SMB/Impacket · Shodan SDK · Scapy · deep telnet |
 
-`SHODAN_API_KEY` or `--shodan-key` is still **your** key — `[full]` only installs the client lib.
+`SHODAN_API_KEY` or `--shodan-key` enables Shodan OSINT (opt-in — not queried otherwise). `[full]` only installs the client lib.
 The Nmap executable is a separate trusted system installation.
 
 Windows PowerShell uses `py -m venv .venv` followed by `.\.venv\Scripts\Activate.ps1`.
@@ -159,9 +159,24 @@ honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16 \
 
 ## -=[ STRATEGIES ]=-
 
-Honeyscore adds triggered **category weights**. **Different categories stack** (e.g. static 20% + state 25% = 45%).
+Honeyscore adds triggered **category weights**. **Different categories stack**
+(e.g. static 20% + state 25% = 45%). Extra hits **inside the same category** add
+**+7.5%** each (cap **+15%**). High-fidelity tells (`fidelity: high|decisive`, e.g.
+`ssh.kex_facade`, `pop3.auth_failed_blanket`) award a **+15%** high-signal bonus.
 
-**Multi-protocol corroboration** — when basic tells fire on more than one protocol, each protocol beyond the first adds **+5%**, capped at **+35%**. Example: telnet static + ftp state → 20 + 25 + 5 = **50% Suspected**. Deny-all buffets with ≥5 protocol lures can also trigger **co-tenancy** (15%) once another tell corroborates.
+**Multi-protocol corroboration** — when basic tells fire on more than one protocol, each
+protocol beyond the first adds **+5%**, capped at **+35%**. Example: telnet static + ftp
+state → 20 + 25 + 5 = **50% Suspected**. Deny-all buffets with ≥5 protocol lures can also
+trigger **co-tenancy** (15%) once another tell corroborates.
+
+**Scoped Honeyscore (`-p`)** — on a **single-port** audit, a normalized score is reported
+alongside the global score:
+`scoped = (category_total + bonuses) / (in-scope weights × 100) × 100`.
+Threat level uses `max(global, scoped)`. Fired tells below 30% never read as
+**Likely Real Host** — they surface as **Inconclusive (Low-confidence anomalies detected)**.
+
+Pass `-v` / `--verbose` for the full calculation: hit counts, intra-category bonuses,
+score/scoped formulas, fidelity, and the per-protocol matrix. See [`docs/SCORING.md`](docs/SCORING.md).
 
 ```
   ╭──────────────────────────┬────────╮
@@ -174,8 +189,9 @@ Honeyscore adds triggered **category weights**. **Different categories stack** (
   │ Co-tenancy               │  15%   │
   ╰──────────────────────────┴────────╯
 
-  CORROBORATION BONUS (dynamic):
-    +5% per protocol with a basic-strategy hit, from the 2nd protocol up, max +35%
+  INTRA-CATEGORY: +7.5% per extra hit in the same category (cap +15%)
+  HIGH-SIGNAL:    +15% when any triggered indicator has fidelity high|decisive
+  CORROBORATION:  +5% per extra protocol with a basic-strategy hit (max +35%)
 
   --deep ADDS (on top of basic):
   ┌──────────────────────────┬────────┐
@@ -186,10 +202,11 @@ Honeyscore adds triggered **category weights**. **Different categories stack** (
   │ temporal                 │  10%   │
   └──────────────────────────┴────────┘
 
-  VERDICT BANDS:
-    [##########----------]  < 30%   LIKELY REAL HOST
-    [################----]  30-59%  SUSPECTED HONEYPOT
-    [####################]  >= 60%  CONFIRMED HONEYPOT
+  VERDICT BANDS (effective = max(global, scoped) when scoped applies):
+    [##########----------]  < 30% + hits   INCONCLUSIVE (anomalies)
+    [##########----------]  < 30% + clean  LIKELY REAL HOST
+    [################----]  30-59%         SUSPECTED HONEYPOT
+    [####################]  >= 60%         CONFIRMED HONEYPOT
 ```
 
 The protocol table’s **Strategies** column counts only the three probe strategies per face (up to 3).
@@ -209,12 +226,12 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
   --preset docker-research   lab ports only (2222, 8081, 1445, …)
   -p, --port 22              only these TCP ports (nmap-style; 22,2222 or -p 22 -p 80)
   --ports ssh=2222,http=8081 per-protocol override (map unused protos to =9)
-  --shodan-key KEY           or env SHODAN_API_KEY
+  --shodan-key KEY           enable Shodan (or env SHODAN_API_KEY); opt-in only
   --intel-provider NAME      opt in to a named passive-intel plugin (repeatable)
   --intel-key NAME=KEY       provider key; prefer HONEYPOT_AUDITOR_INTEL_<NAME>_KEY
   --output report.json       JSON path (subnet default: honeypot-audit-subnet-<cidr>.json)
   --confirm-authorized       REQUIRED if any scanned IP is public
-  -v, --verbose              strategy breakdown, per-protocol matrix, indicators, notes
+  -v, --verbose              score formula, hits/intra, scoped math, matrix, indicators
   -n, --with-nmap            run Nmap -sV / NSE phase (slow; off by default)
   --deep                     advanced six-axis probes
   --safe-mode                handshake-only; disables deep shell/path probes
@@ -344,6 +361,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v0.7.0 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v0.7.3 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```

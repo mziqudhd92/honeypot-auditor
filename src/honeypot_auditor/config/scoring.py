@@ -14,16 +14,16 @@ CORROBORATION_PROTOCOL_THRESHOLD = 1
 CORROBORATION_PROTOCOL_STEP_PCT = 5.0
 CORROBORATION_PROTOCOL_MAX_BONUS = 35.0
 
-# Pre-auth fingerprints that are highly specific (e.g. OpenSSH banner + Twisted/Cowrie KEX).
-# Alone they clear Suspected when combined with the static_signature category weight.
-HIGH_SIGNAL_TELL_IDS = frozenset(
-    {
-        "ssh.kex_facade",
-        # Identical auth-themed -ERR across STAT/CAPA/HPAU (qeeqbox/Twisted POP3 skins).
-        "pop3.auth_failed_blanket",
-    }
-)
+# Extra hits in the same category add diminishing corroboration (cap +15%).
+INTRA_CATEGORY_STEP_PCT = 7.5
+INTRA_CATEGORY_MAX_BONUS_PCT = 15.0
+
+# Indicator.fidelity "high" / "decisive" awards this bonus once per audit.
 HIGH_SIGNAL_BONUS_PCT = 15.0
+HIGH_SIGNAL_FIDELITIES = frozenset({"high", "decisive"})
+
+# Valid Indicator.fidelity values (default medium).
+FIDELITY_LEVELS = frozenset({"low", "medium", "high", "decisive"})
 
 BASIC_STRATEGIES: tuple[str, ...] = ("arbitrary_auth", "state_nonpersist", "static_signature")
 
@@ -166,4 +166,6 @@ THREAT_LEVELS = {
     "suspected": "Suspected Honeypot",
     "likely_real": "Likely Real Host",
     "inconclusive": "Inconclusive",
+    # Fired tells below Suspected must never read as "Likely Real Host".
+    "anomalies": "Inconclusive (Low-confidence anomalies detected)",
 }

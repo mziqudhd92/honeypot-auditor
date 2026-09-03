@@ -1,6 +1,6 @@
 # honeypot-auditor — full brief for answer engines & agents
 
-Version: 0.7.0
+Version: 0.7.3
 License: MIT
 Canonical site: https://mziqudhd92.github.io/honeypot-auditor/
 Repository: https://github.com/mziqudhd92/honeypot-auditor
@@ -65,10 +65,10 @@ honeypot-auditor --target HOST --ports ftp=21,http=80,smb=445,ssh=9 --confirm-au
 # JSON out (single host)
 honeypot-auditor --target HOST --confirm-authorized --output report.json
 
-# Blue deception QA (v0.7.0)
+# Blue deception QA (v0.7.3)
 honeypot-auditor --target DECOY --preset deception-audit --deep -v --confirm-authorized
 
-# Red authorized OPSEC (v0.7.0)
+# Red authorized OPSEC (v0.7.3)
 honeypot-auditor --target HOST --safe-mode --passive-first --proxy socks5h://127.0.0.1:9050 --confirm-authorized
 
 # SARIF export
@@ -82,11 +82,16 @@ Close unused preset ports by mapping them to a closed port (e.g. `=9`) so they a
 
 ## Scoring (claim-honest)
 
-Basic categories: passive intel 25%, arbitrary auth 30%, state non-persistence 25%, static signature 20%, co-tenancy 15%. Different categories stack. Multi-protocol corroboration: +5% per protocol with a basic-strategy hit from the 2nd protocol up (max +35%). Co-tenancy (≥5 protocol lures) needs corroboration. Default console prints the score panel only; pass `-v` for strategy breakdown and per-protocol HIT/clean/skip/— matrix. Versioned JSON includes `score_breakdown`, `protocol_strategies`, and indicator status/provenance. When nmap is enabled, every open preset port is version-scanned; `tcpwrapped` is ignored.
+Basic categories: passive intel 25%, arbitrary auth 30%, state non-persistence 25%, static signature 20%, co-tenancy 15%. Different categories stack. Extra hits in the **same** category add **+7.5%** each (cap +15%). Indicator `fidelity` of `high`/`decisive` awards **+15%** high-signal bonus (replaces hardcoded ID lists). Multi-protocol corroboration: +5% per protocol with a basic-strategy hit from the 2nd protocol up (max +35%). Co-tenancy (≥5 protocol lures) needs corroboration.
+
+**Scoped Honeyscore** on single-port (`-p`) audits: normalize `(category_total + bonuses) / (in-scope weights × 100) × 100`. Threat level uses `max(global, scoped)`. Fired tells below 30% → `Inconclusive (Low-confidence anomalies detected)`, never `Likely Real Host`.
+
+Default console prints the score panel only (global + scoped when applicable); pass `-v` for hits/intra columns, score + scoped formulas, fidelity, and per-protocol HIT/clean/skip/— matrix. Versioned JSON includes `scoped_score`, `score_breakdown` (with `scoped` + `intra_category_bonus_pct`), `protocol_strategies`, and indicator `fidelity`/status/provenance. Full reference: `docs/SCORING.md`. When nmap is enabled, every open preset port is version-scanned; `tcpwrapped` is ignored.
 Deep adds behavior 18%, coherence 15%, stack 12%, proto FSM 12%, temporal 10% (does not invent catch rates).
 
-Verdict bands:
-- < 30% Likely Real Host
+Verdict bands (effective = max(global, scoped) when scoped applies):
+- < 30% + triggered tells → Inconclusive (Low-confidence anomalies detected)
+- < 30% + no triggered tells → Likely Real Host
 - 30–59% Suspected Honeypot
 - ≥ 60% Confirmed Honeypot
 
@@ -129,7 +134,7 @@ Default (`--preset both`) probes IANA **and** docker/lab ports. Closed ports are
 - `--intel-key NAME=KEY` — lab-only argv key (warns); prefer `HONEYPOT_AUDITOR_INTEL_<NAME>_KEY` (env overrides argv)
 - `--output report.json` — subnet default: `honeypot-audit-subnet-<cidr>.json`
 - `--confirm-authorized` (required if any scanned IP is public)
-- `-v`, `--verbose` — strategy breakdown, per-protocol matrix, indicator table, why-this-score, run notes (default is score panel only)
+- `-v`, `--verbose` — score/scoped formulas, hits & intra-category, fidelity, matrix, indicators
 - `-n`, `--with-nmap` — opt in to Nmap version/NSE checks
 - `--deep`
 - `--timeout SECS` (default 3)

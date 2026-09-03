@@ -87,4 +87,4 @@ def test_chn_like_report_stays_real_host():
         deep=True,
     )
     assert report.score < 30.0
-    assert report.threat_level == "Likely Real Host"
+    assert report.threat_level == "Inconclusive (Low-confidence anomalies detected)"

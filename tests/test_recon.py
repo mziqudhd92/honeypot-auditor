@@ -253,9 +253,31 @@ def test_osint_only_skips_tcp_probes(monkeypatch):
     from honeypot_auditor.settings import settings
 
     settings.osint_only = True
-    args = cli.build_parser().parse_args(["--target", "127.0.0.1"])
-    jobs = cli._probe_jobs("127.0.0.1", {"ssh": [22]}, args, include_shodan=True)
-    names = [n for n, _ in jobs]
-    assert "shodan" in names
-    assert not any(":" in n for n in names)
-    settings.osint_only = False
+    try:
+        # Without a key, Shodan is not scheduled at all (opt-in).
+        args = cli.build_parser().parse_args(["--target", "127.0.0.1", "--osint-only"])
+        jobs = cli._probe_jobs("127.0.0.1", {"ssh": [22]}, args, include_shodan=True)
+        assert [n for n, _ in jobs] == []
+
+        # With a key, only the Shodan job runs — no TCP probes.
+        args = cli.build_parser().parse_args(
+            ["--target", "127.0.0.1", "--osint-only", "--shodan-key", "fake"]
+        )
+        with patch("honeypot_auditor.cli.shodan_lookup", return_value=[]):
+            jobs = cli._probe_jobs("127.0.0.1", {"ssh": [22]}, args, include_shodan=True)
+        names = [n for n, _ in jobs]
+        assert names == ["shodan"]
+        assert not any(":" in n for n in names)
+    finally:
+        settings.osint_only = False
+
+
+def test_shodan_job_skipped_without_key():
+    from honeypot_auditor import cli
+
+    args = cli.build_parser().parse_args(["--target", "127.0.0.1", "-p", "21"])
+    with patch("honeypot_auditor.cli.shodan_lookup") as shodan:
+        jobs = cli._probe_jobs("127.0.0.1", {"ftp": [21]}, args, include_shodan=True)
+    shodan.assert_not_called()
+    assert "shodan" not in [n for n, _ in jobs]
+    assert any(n.startswith("ftp:") for n, _ in jobs)

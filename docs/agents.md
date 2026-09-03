@@ -11,7 +11,7 @@ Prefer this file + `llms.txt` + `llms-full.txt` over scraping marketing HTML.
 - Site: https://mziqudhd92.github.io/honeypot-auditor/
 - Repo: https://github.com/mziqudhd92/honeypot-auditor
 - PyPI: https://pypi.org/project/honeypot-auditor/
-- Version: **0.7.0**
+- Version: **0.7.3**
 - Contact: security@helloaeterna.com
 
 ## Hard rules for agents
@@ -72,20 +72,26 @@ honeypot-auditor --target HOST \
 
 ## Interpreting results
 
-| Score | Label |
+| Effective score | Label |
 |------:|-------|
-| < 30% | Likely Real Host |
+| < 30% + triggered tells | Inconclusive (Low-confidence anomalies detected) |
+| < 30% + no triggered tells | Likely Real Host |
 | 30–59% | Suspected Honeypot |
 | ≥ 60% | Confirmed Honeypot |
 
-Single-host JSON: `schema_version`, `target`, `resolved_ip`, `score`, `score_breakdown`,
-`threat_level`, and `indicators`. Indicator records include explicit status and provenance.
+Effective score = `max(global, scoped)` when `scoped_score` is set (single-port `-p`).
+
+Single-host JSON: `schema_version`, `target`, `resolved_ip`, `score`, `scoped_score`
+(single-port `-p` only), `score_breakdown`,
+`threat_level`, and `indicators`. Indicator records include explicit status, `fidelity`,
+and provenance. Pass `-v` for hits/intra columns, global + scoped formulas, and fidelity tags.
+Scoring reference: `docs/SCORING.md`.
 
 Subnet JSON: `scan_type: subnet`, `summary[]` (per-IP scores), `hosts[]` (full per-host reports).
 
-Read triggered indicators in JSON (`indicators[].triggered`) or pass `-v` / `--verbose` for the full console breakdown (strategy table, per-protocol matrix, indicator table). Default console is the score panel only (`protocol_strategies` is always in JSON). Closed/skipped probes do not raise the score.
+Read triggered indicators in JSON (`indicators[].triggered`) or pass `-v` / `--verbose` for the full console breakdown (hits/intra, score + scoped formulas, fidelity, per-protocol matrix). Default console is the score panel only (`protocol_strategies` is always in JSON). Closed/skipped probes do not raise the score.
 
-Basic **strategies** (same three on every protocol): arbitrary auth, state non-persistence, static signature (includes unknown nmap `-sV` on any protocol, `-sV`/banner family mismatch, Redis COMMAND/INFO/FLUSHALL stubs, and canned MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB templates). When nmap is enabled, every open preset port is version-scanned. See `PROTOCOL_STRATEGIES` in config.
+Basic **strategies** (same three on every protocol): arbitrary auth, state non-persistence, static signature (includes unknown nmap `-sV` on any protocol, `-sV`/banner family mismatch, Redis COMMAND/INFO/FLUSHALL stubs, and canned MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB templates). When nmap is enabled, every open preset port is version-scanned. See `PROTOCOL_STRATEGIES` in config. Extra same-category hits add +7.5% (cap +15%); `fidelity: high|decisive` adds +15% high-signal bonus.
 
 ## Repo layout (short)
 

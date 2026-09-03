@@ -48,7 +48,7 @@
         "name": "honeypot-auditor",
         "applicationCategory": "SecurityApplication",
         "operatingSystem": "Linux, macOS, Windows",
-        "softwareVersion": "0.7.0",
+        "softwareVersion": "0.7.3",
         "license": "https://opensource.org/licenses/MIT",
         "url": "https://mziqudhd92.github.io/honeypot-auditor/",
         "downloadUrl": "https://pypi.org/project/honeypot-auditor/",
@@ -165,8 +165,8 @@
   <div class="wrap">
     <div class="marquee" aria-hidden="true">
       <span>
-        *** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v0.7.0 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
-        &nbsp;&nbsp;&nbsp;*** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v0.7.0 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
+        *** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v0.7.3 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
+        &nbsp;&nbsp;&nbsp;*** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v0.7.3 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
       </span>
     </div>
 
@@ -175,7 +175,7 @@
       <h1>H0N3YP0T-AUD1T0R <span class="blink">█</span></h1>
       <p class="tagline">Multi-protocol decoy fingerprinter / lab util · Python 3.10+ · MIT · “dialing in…”</p>
       <pre class="nfo">.______________________________________________________________________________.
-|  :: RELEASE ........ v0.7.0                                                  |
+|  :: RELEASE ........ v0.7.3                                                  |
 |  :: TYPE ........... Multi-Protocol Decoy Fingerprinter                      |
 |  :: DISKS .......... 0 · pure electrons · no floppies harmed                 |
 |  :: PROTECTION ..... NONE · MIT · spread the sauce                           |
@@ -296,8 +296,10 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
         </p>
         <p>
           For analysis, use <code>-v</code> / <code>--verbose</code>. The default view is the score
-          panel only; verbose mode prints the strategy breakdown, per-protocol matrix, full indicator
-          table, why-this-score notes, and run metadata — the fastest way to understand what fired and why.
+          panel only (global + scoped when applicable). Verbose mode prints hit counts, intra-category
+          bonuses, the global and scoped score formulas, per-protocol matrix, fidelity-tagged
+          indicators, why-this-score notes, and run metadata — the fastest way to understand what
+          fired and why.
         </p>
         <details class="read-more">
           <summary>Read more</summary>
@@ -315,7 +317,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
               <tr><td><code>--preset</code></td><td><code>both</code> (default: IANA + lab), <code>iana</code>, or <code>docker-research</code></td></tr>
               <tr><td><code>-p</code>, <code>--port</code></td><td>Only these TCP ports (nmap-style; repeatable or <code>22,2222</code>). Omit for full preset</td></tr>
               <tr><td><code>--ports</code></td><td>Per-protocol override (<code>ssh=2222,ftp=9</code>); map unused faces to <code>=9</code> to skip</td></tr>
-              <tr><td><code>-v</code>, <code>--verbose</code></td><td>Strategy breakdown, per-protocol matrix, indicator table, why-this-score, run notes</td></tr>
+              <tr><td><code>-v</code>, <code>--verbose</code></td><td>Score/scoped formulas, hits &amp; intra-category, fidelity, matrix, indicators</td></tr>
               <tr><td><code>--deep</code></td><td>Shell semantics, OS coherence, HASSH/TCP stack, FSM fuzz, co-tenancy, temporal (incl. concurrent-load latency)/egress</td></tr>
               <tr><td><code>--safe-mode</code></td><td>Handshake-only; disables deep shell/path probes</td></tr>
               <tr><td><code>--profile</code></td><td><code>audit</code> (default), <code>blend</code> (browser mimesis), <code>safe</code></td></tr>
@@ -332,7 +334,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
               <tr><td><code>--format sarif</code></td><td>Export SARIF 2.1.0 for DevSecOps pipelines</td></tr>
               <tr><td><code>check-sig</code></td><td>Validate declarative signature pack offline</td></tr>
               <tr><td><code>-n</code>, <code>--with-nmap</code></td><td>Run Nmap <code>-sV</code> / NSE phase (slow; off by default)</td></tr>
-              <tr><td><code>--shodan-key</code></td><td>Shodan API key (or set <code>SHODAN_API_KEY</code>); skipped per-host on subnet scans</td></tr>
+              <tr><td><code>--shodan-key</code></td><td>Enable Shodan OSINT (or set <code>SHODAN_API_KEY</code>); opt-in — not queried otherwise; skipped on subnet scans</td></tr>
               <tr><td><code>--intel-provider</code></td><td>Explicitly select a named passive-intel plugin; repeatable</td></tr>
               <tr><td><code>--intel-key</code></td><td>Provider key as <code>NAME=KEY</code>; prefer the provider environment variable</td></tr>
               <tr><td><code>--scan-concurrency</code></td><td>Parallel hosts for CIDR scans (default 8)</td></tr>
@@ -350,7 +352,15 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
         <p>
           Honeyscore adds triggered <strong>category weights</strong> from the table below.
           <strong>Different categories stack</strong> — e.g. static signature (20%) plus
-          state non-persistence (25%) = 45%.
+          state non-persistence (25%) = 45%. Extra hits <strong>inside the same category</strong>
+          add <strong>+7.5%</strong> each (cap <strong>+15%</strong>).
+        </p>
+        <p>
+          Indicators carry a first-class <code>fidelity</code>
+          (<code>low</code> / <code>medium</code> / <code>high</code> / <code>decisive</code>).
+          Any triggered <code>high</code> or <code>decisive</code> tell awards a
+          <strong>+15%</strong> high-signal bonus (examples:
+          <code>ssh.kex_facade</code>, <code>pop3.auth_failed_blanket</code>).
         </p>
         <p>
           <strong>Multi-protocol corroboration</strong> is how deny-all buffets score without Shodan
@@ -359,9 +369,18 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           Example: telnet static tell + ftp state tell → 20 + 25 + 5 = <strong>50% Suspected</strong>.
         </p>
         <p>
-          Versioned JSON reports include a machine-readable <code>score_breakdown</code> with category
-          contributions, bonuses, cap handling, decisive overrides, and the final score. Indicators
-          distinguish clear, triggered, skipped, and suppressed states and record their provenance.
+          On a <strong>single-port</strong> audit (<code>-p</code>), reports also include a
+          <strong>Scoped / Normalized Honeyscore</strong>:
+          <code>(category_total + bonuses) / (in-scope weights × 100) × 100</code>.
+          Threat level uses <code>max(global, scoped)</code>. Fired tells below 30% never read as
+          <strong>Likely Real Host</strong> — they surface as
+          <strong>Inconclusive (Low-confidence anomalies detected)</strong>.
+        </p>
+        <p>
+          Versioned JSON includes <code>score_breakdown</code> (hit counts, intra-category bonuses,
+          scoped block, cap / override) plus indicator <code>fidelity</code>, status, and provenance.
+          Pass <code>-v</code> for the full console calculation.
+          Full reference: <a href="SCORING.md">SCORING.md</a>.
         </p>
         <p><strong>Basic mode</strong> category weights:</p>
         <div class="table-wrap">
@@ -409,10 +428,11 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           Deep co-tenancy probes (Modbus, SNMP, DNS, IPP, POP) count responsive IT lures but still
           require corroboration before they contribute to the co-tenancy category.
         </p>
-        <pre class="code">VERDICT BANDS:
-  [##########----------]  &lt; 30%   LIKELY REAL HOST
-  [################----]  30-59%  SUSPECTED HONEYPOT
-  [####################]  &gt;= 60%  CONFIRMED HONEYPOT</pre>
+        <pre class="code">VERDICT BANDS (effective = max(global, scoped) when scoped applies):
+  [##########----------]  &lt; 30% + hits   INCONCLUSIVE (anomalies)
+  [##########----------]  &lt; 30% + clean  LIKELY REAL HOST
+  [################----]  30-59%         SUSPECTED HONEYPOT
+  [####################]  &gt;= 60%         CONFIRMED HONEYPOT</pre>
           </div>
         </details>
       </section>
@@ -507,7 +527,7 @@ https://mziqudhd92.github.io/honeypot-auditor/agents.md</pre>
     </main>
 
     <footer class="footer panel">
-      <p>h0n3yp0t 4ud1t0r · v0.7.0 · spread headers not malware · <span class="blink">NO CARRIER</span></p>
+      <p>h0n3yp0t 4ud1t0r · v0.7.3 · spread headers not malware · <span class="blink">NO CARRIER</span></p>
       <p><a href="#top">↑ top</a> · <a href="https://github.com/mziqudhd92/honeypot-auditor">github</a> · <a href="https://pypi.org/project/honeypot-auditor/">pypi</a></p>
     </footer>
   </div>

@@ -86,6 +86,7 @@ def test_console_render_compact_by_default():
     out = buf.getvalue()
     assert "Honeypot Auditor" in out
     assert "Honeyscore" in out
+    assert "Scoped Honeyscore" in out  # single-port sample report
     assert "Strategy" not in out
     assert "Protocol strategies" not in out
     assert "Indicators" not in out
@@ -102,21 +103,58 @@ def test_console_render_verbose_includes_strategy_tables():
     )
     out = buf.getvalue()
     assert "Strategy" in out
+    assert "Hits" in out
+    assert "Intra" in out
     assert "Protocol strategies" in out
     assert "Score formula" in out
+    assert "Scoped formula" in out
+    assert "Fidelity" in out
 
 
 def test_console_render_verbose_includes_indicators():
     buf = StringIO()
-    render(
-        _sample_report(),
-        console=Console(file=buf, width=120, force_terminal=True),
-        verbose=True,
+    report = build_report(
+        target="127.0.0.1",
+        resolved_ip="127.0.0.1",
+        ports={"pop3": [110]},
+        indicators=[
+            Indicator(
+                id="pop3.auth_failed_blanket",
+                title="POP3 auth-failed blanket",
+                category="static_signature",
+                triggered=True,
+                protocol="pop3",
+                detail="identical auth-themed -ERR",
+                fidelity="high",
+            ),
+            Indicator(
+                id="pop3.stock_banner",
+                title="POP3 stock banner",
+                category="static_signature",
+                triggered=True,
+                protocol="pop3",
+                fidelity="medium",
+            ),
+            Indicator(
+                id="pop3.arbitrary_auth",
+                title="POP3 arbitrary auth",
+                category="arbitrary_auth",
+                triggered=False,
+                protocol="pop3",
+            ),
+        ],
+        notes=[],
+        started_at="",
+        finished_at="",
     )
+    render(report, console=Console(file=buf, width=140, force_terminal=True), verbose=True)
     out = buf.getvalue()
     assert "Indicators" in out
     assert "Why this score" in out
-    assert "test" in out
+    assert "high" in out
+    assert "Intra-category" in out
+    assert "Scoped formula" in out
+    assert "Effective score" in out
 
 
 def test_json_export_nmap_exclude_and_subnet(tmp_path: Path):

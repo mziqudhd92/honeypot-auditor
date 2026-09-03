@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import replace
 
 from honeypot_auditor.config import (
     BASIC_STRATEGIES,
@@ -12,7 +13,9 @@ from honeypot_auditor.config import (
     COTENANCY_CORROBORATION_CATEGORIES,
     DEEP_WEIGHTS,
     HIGH_SIGNAL_BONUS_PCT,
-    HIGH_SIGNAL_TELL_IDS,
+    HIGH_SIGNAL_FIDELITIES,
+    INTRA_CATEGORY_MAX_BONUS_PCT,
+    INTRA_CATEGORY_STEP_PCT,
     PROTOCOL_STRATEGIES,
     THREAT_CONFIRMED,
     THREAT_LEVELS,
@@ -24,12 +27,18 @@ from honeypot_auditor.models import AuditReport, Indicator
 
 
 def category_triggered(indicators: Iterable[Indicator], category: str) -> bool:
-    for ind in indicators:
-        if ind.skipped or ind.suppressed:
-            continue
-        if ind.category == category and ind.triggered:
-            return True
-    return False
+    return category_hit_count(indicators, category) > 0
+
+
+def category_hit_count(indicators: Iterable[Indicator], category: str) -> int:
+    return sum(
+        1
+        for ind in indicators
+        if ind.category == category
+        and ind.triggered
+        and not ind.skipped
+        and not ind.suppressed
+    )
 
 
 def category_attempted(indicators: Iterable[Indicator], category: str) -> bool:
@@ -37,6 +46,25 @@ def category_attempted(indicators: Iterable[Indicator], category: str) -> bool:
         if ind.category == category and not ind.skipped:
             return True
     return False
+
+
+def _intra_category_bonus(hit_count: int) -> float:
+    """Diminishing corroboration for extra hits in the same category."""
+    if hit_count <= 1:
+        return 0.0
+    return min(INTRA_CATEGORY_MAX_BONUS_PCT, (hit_count - 1) * INTRA_CATEGORY_STEP_PCT)
+
+
+def unique_ports(ports: dict) -> list[int]:
+    found: list[int] = []
+    for value in ports.values():
+        found.extend(as_port_list(value))
+    return sorted(set(found))
+
+
+def is_targeted_single_port(ports: dict) -> bool:
+    """True when the audit surface is a single TCP port (typical `-p` scan)."""
+    return len(unique_ports(ports)) == 1
 
 
 def _active_weights(deep: bool) -> dict[str, float]:
@@ -69,26 +97,18 @@ def apply_cotenancy_corroboration(indicators: list[Indicator]) -> list[Indicator
         should_trigger = count >= threshold
         if should_trigger and not has_corroboration:
             out.append(
-                Indicator(
-                    id=ind.id,
-                    title=ind.title,
-                    category=ind.category,
+                replace(
+                    ind,
                     triggered=False,
-                    protocol=ind.protocol,
                     detail=f"{ind.detail} (suppressed: no corroborating tell)",
-                    evidence=ind.evidence,
                 )
             )
         elif should_trigger:
             out.append(
-                Indicator(
-                    id=ind.id,
-                    title=ind.title,
-                    category=ind.category,
+                replace(
+                    ind,
                     triggered=True,
-                    protocol=ind.protocol,
                     detail=f"{ind.detail} (>={threshold} with corroboration)",
-                    evidence=ind.evidence,
                 )
             )
         else:
@@ -199,15 +219,16 @@ def protocol_corroboration_bonus(indicators: list[Indicator]) -> tuple[float, In
     )
 
 
+def _is_high_signal(ind: Indicator) -> bool:
+    return (ind.fidelity or "").lower() in HIGH_SIGNAL_FIDELITIES
+
+
 def high_signal_bonus(indicators: list[Indicator]) -> tuple[float, Indicator | None]:
-    """Bonus for pre-auth fingerprints that are highly specific (e.g. Cowrie KEX facade)."""
+    """Bonus for fidelity=high/decisive tells (e.g. Cowrie KEX, POP3 auth-failed blanket)."""
     hits = [
         ind
         for ind in indicators
-        if ind.triggered
-        and not ind.skipped
-        and not ind.suppressed
-        and ind.id in HIGH_SIGNAL_TELL_IDS
+        if ind.triggered and not ind.skipped and not ind.suppressed and _is_high_signal(ind)
     ]
     if not hits:
         return 0.0, None
@@ -218,7 +239,8 @@ def high_signal_bonus(indicators: list[Indicator]) -> tuple[float, Indicator | N
         category="corroboration",
         triggered=True,
         protocol="multi",
-        detail=f"+{HIGH_SIGNAL_BONUS_PCT:.0f}% for high-signal tell(s): {names}",
+        fidelity="high",
+        detail=f"+{HIGH_SIGNAL_BONUS_PCT:.0f}% for high-fidelity tell(s): {names}",
         evidence=names,
     )
 
@@ -238,16 +260,89 @@ def compute_score(indicators: list[Indicator], *, deep: bool = False) -> tuple[f
     hits = {}
     total = 0.0
     for category, weight in weights.items():
-        hit = category_triggered(indicators, category)
+        hit_count = category_hit_count(indicators, category)
+        hit = hit_count > 0
+        primary = (weight * 100.0) if hit else 0.0
+        intra = _intra_category_bonus(hit_count) if hit else 0.0
+        contribution = primary + intra
         hits[category] = {
             "weight": weight,
             "triggered": hit,
-            "contribution": (weight * 100.0) if hit else 0.0,
+            "hit_count": hit_count,
+            "intra_category_bonus": intra,
+            "contribution": contribution,
             "attempted": category_attempted(indicators, category),
         }
         if hit:
-            total += weight * 100.0
+            total += contribution
     return min(round(total, 2), 100.0), hits
+
+
+def compute_scoped_score(
+    category_hits: dict,
+    *,
+    bonus_total_pct: float,
+    ports: dict,
+    decisive_override: bool = False,
+    deep: bool = False,
+) -> tuple[float | None, dict]:
+    """Normalize global contributions against in-scope category weight for `-p` scans.
+
+    Scoped = (category_total + bonuses) / (Σ in_scope_weights × 100) × 100
+
+    In-scope categories are those the probed protocol(s) can exercise (basic strategies
+    with a playbook), plus any other category that was actually attempted. Auth-gated
+    skips (e.g. SSH state checks) stay in the denominator so single-port audits are
+    not over-normalized.
+    """
+    detail: dict = {
+        "applicable": False,
+        "reason": "full_or_multi_port_surface",
+        "attempted_weight": 0.0,
+        "denominator_pct": 0.0,
+        "numerator_pct": 0.0,
+        "score_pct": None,
+    }
+    if not is_targeted_single_port(ports):
+        return None, detail
+
+    weights = _active_weights(deep)
+    in_scope: set[str] = set()
+    for proto in ports:
+        catalog = PROTOCOL_STRATEGIES.get(proto) or {}
+        for strat in BASIC_STRATEGIES:
+            if catalog.get(strat):
+                in_scope.add(strat)
+
+    category_total = 0.0
+    for category, row in category_hits.items():
+        if row.get("dynamic"):
+            continue
+        category_total += float(row.get("contribution", 0.0))
+        if row.get("attempted"):
+            in_scope.add(category)
+
+    attempted_weight = sum(weights[c] for c in in_scope if c in weights)
+    detail["reason"] = "single_port_scan"
+    detail["attempted_weight"] = round(attempted_weight, 4)
+    detail["in_scope_categories"] = sorted(in_scope)
+    if attempted_weight <= 0:
+        detail["reason"] = "single_port_no_attempted_categories"
+        return None, detail
+
+    denominator = attempted_weight * 100.0
+    numerator = category_total + bonus_total_pct
+    scoped = 100.0 if decisive_override else min(100.0, round(numerator / denominator * 100.0, 2))
+    detail.update(
+        {
+            "applicable": True,
+            "denominator_pct": round(denominator, 2),
+            "numerator_pct": round(numerator, 2),
+            "score_pct": scoped,
+            "decisive_override": bool(decisive_override),
+        }
+    )
+    return scoped, detail
 
 
 def _protocol_name(protocol: str) -> str:
@@ -296,14 +391,23 @@ def protocol_strategy_matrix(
     return rows
 
 
-def threat_level(score: float, indicators: list[Indicator]) -> str:
+def threat_level(
+    score: float,
+    indicators: list[Indicator],
+    *,
+    scoped_score: float | None = None,
+) -> str:
     attempted = [i for i in indicators if not i.skipped]
     if not attempted:
         return THREAT_LEVELS["inconclusive"]
-    if score >= THREAT_CONFIRMED:
+    effective = score if scoped_score is None else max(score, scoped_score)
+    if effective >= THREAT_CONFIRMED:
         return THREAT_LEVELS["confirmed"]
-    if score >= THREAT_SUSPECTED:
+    if effective >= THREAT_SUSPECTED:
         return THREAT_LEVELS["suspected"]
+    triggered = [i for i in attempted if i.triggered and not i.suppressed]
+    if triggered:
+        return THREAT_LEVELS["anomalies"]
     return THREAT_LEVELS["likely_real"]
 
 
@@ -319,7 +423,7 @@ def compute_confidence(indicators: list[Indicator], *, deep: bool = False) -> st
     triggered = [i for i in attempted if i.triggered and not i.suppressed]
     protos = _protocol_hits(indicators)
     categories = {i.category for i in triggered}
-    high_signal = any(i.id in HIGH_SIGNAL_TELL_IDS for i in triggered)
+    high_signal = any(_is_high_signal(i) for i in triggered)
 
     if skipped_ratio > 0.5:
         level = "low"
@@ -334,7 +438,7 @@ def compute_confidence(indicators: list[Indicator], *, deep: bool = False) -> st
         else:
             level = "medium" if len(protos) >= 3 else "low"
 
-    # A high-signal pre-auth fingerprint (Cowrie KEX facade) is medium even alone.
+    # A high-fidelity pre-auth fingerprint (Cowrie KEX facade) is medium even alone.
     if high_signal and level == "low":
         return "medium"
     return level
@@ -391,21 +495,13 @@ def apply_proxy_suppression(indicators: list[Indicator], proxy_detected: bool) -
     for ind in indicators:
         if ind.tell_tier == "edge" and ind.triggered:
             out.append(
-                Indicator(
-                    id=ind.id,
-                    title=ind.title,
-                    category=ind.category,
+                replace(
+                    ind,
                     triggered=False,
-                    detail=f"{ind.detail} (suppressed: reverse proxy/CDN detected — origin tells still active)",
-                    protocol=ind.protocol,
-                    evidence=ind.evidence,
-                    skipped=ind.skipped,
-                    skip_reason=ind.skip_reason,
-                    error=ind.error,
-                    remediation=ind.remediation,
-                    fingerprint_type=ind.fingerprint_type,
-                    requires_corroboration=ind.requires_corroboration,
-                    tell_tier=ind.tell_tier,
+                    detail=(
+                        f"{ind.detail} (suppressed: reverse proxy/CDN detected — "
+                        "origin tells still active)"
+                    ),
                     suppressed=True,
                     suppression_reason="reverse_proxy_detected",
                 )
@@ -431,11 +527,19 @@ def compute_tactical_action(
         )
     relevant = [i for i in indicators if not _is_never_applicable_skip(i)]
     attempted = [i for i in relevant if not i.skipped]
-    if not attempted or threat_level == "Inconclusive":
+    triggered = [i for i in attempted if i.triggered and not i.suppressed]
+    if not attempted or threat_level == "Inconclusive" or threat_level.startswith(
+        "Inconclusive ("
+    ):
         denom = max(len(relevant), 1)
         skipped_ratio = sum(1 for i in relevant if i.skipped) / denom
         if skipped_ratio > 0.5 or threat_level == "Inconclusive":
             return "INCONCLUSIVE", "Insufficient probe coverage or inconclusive threat level."
+        if threat_level.startswith("Inconclusive (") and triggered:
+            return (
+                "PROCEED_CAUTION",
+                "Low-confidence anomalies — verify manually before pivoting.",
+            )
     if multi_user_arbitrary_auth(indicators) and score >= 60:
         return (
             "SKIP_TARGET",
@@ -448,10 +552,12 @@ def compute_tactical_action(
                 "High score from limited probe breadth — verify manually.",
             )
         return "SKIP_TARGET", "High-confidence decoy signature."
-    if score < 30 and confidence in ("medium", "high"):
+    if score < 30 and not triggered and confidence in ("medium", "high"):
         return "PIVOT_POSSIBLE", "Production-like behavior across protocols."
     if 30 <= score < 60:
         return "PROCEED_CAUTION", "Ambiguous — partial decoy signals."
+    if triggered:
+        return "PROCEED_CAUTION", "Low-confidence anomalies — verify manually."
     return "INCONCLUSIVE", "No clear tactical recommendation."
 
 
@@ -469,16 +575,10 @@ def apply_stack_corroboration(indicators: list[Indicator]) -> list[Indicator]:
     for ind in indicators:
         if ind.requires_corroboration and ind.triggered and not has_other:
             out.append(
-                Indicator(
-                    id=ind.id,
-                    title=ind.title,
-                    category=ind.category,
+                replace(
+                    ind,
                     triggered=False,
                     detail=f"{ind.detail} (suppressed: no corroborating tell)",
-                    protocol=ind.protocol,
-                    evidence=ind.evidence,
-                    requires_corroboration=ind.requires_corroboration,
-                    tell_tier=ind.tell_tier,
                 )
             )
         else:
@@ -495,26 +595,7 @@ def redact_indicators(indicators: list[Indicator]) -> list[Indicator]:
         ev, found = redact(ind.evidence)
         det, found2 = redact(ind.detail)
         honeytoken = honeytoken or found or found2
-        out.append(
-            Indicator(
-                id=ind.id,
-                title=ind.title,
-                category=ind.category,
-                triggered=ind.triggered,
-                detail=det,
-                protocol=ind.protocol,
-                evidence=ev,
-                skipped=ind.skipped,
-                skip_reason=ind.skip_reason,
-                error=ind.error,
-                remediation=ind.remediation,
-                fingerprint_type=ind.fingerprint_type,
-                requires_corroboration=ind.requires_corroboration,
-                suppressed=ind.suppressed,
-                suppression_reason=ind.suppression_reason,
-                tell_tier=ind.tell_tier,
-            )
-        )
+        out.append(replace(ind, evidence=ev, detail=det))
     if honeytoken:
         out.append(
             Indicator(
@@ -524,6 +605,7 @@ def redact_indicators(indicators: list[Indicator]) -> list[Indicator]:
                 triggered=True,
                 protocol="info",
                 detail="Honeytoken patterns were redacted before export",
+                fidelity="low",
             )
         )
     return out
@@ -560,9 +642,10 @@ def build_score_breakdown(
     protocol_bonus: float,
     high_signal_bonus_pct: float,
     decisive_override: bool,
+    scoped: dict | None = None,
 ) -> dict:
     """Build an additive, machine-readable explanation of the headline score."""
-    categories: list[dict[str, str | float | bool]] = []
+    categories: list[dict[str, str | float | bool | int]] = []
     for category, row in category_hits.items():
         if row.get("dynamic"):
             continue
@@ -572,6 +655,8 @@ def build_score_breakdown(
                 "weight_pct": round(float(row.get("weight", 0.0)) * 100.0, 2),
                 "attempted": bool(row.get("attempted")),
                 "triggered": bool(row.get("triggered")),
+                "hit_count": int(row.get("hit_count") or 0),
+                "intra_category_bonus_pct": round(float(row.get("intra_category_bonus") or 0.0), 2),
                 "contribution_pct": round(float(row.get("contribution", 0.0)), 2),
             }
         )
@@ -595,8 +680,12 @@ def build_score_breakdown(
     raw_score = round(category_total + bonus_total, 2)
     capped_score = min(raw_score, 100.0)
     final_score = 100.0 if decisive_override else capped_score
-    return {
-        "formula": "min(category_total + bonus_total, 100); repeated arbitrary auth overrides to 100",
+    payload: dict = {
+        "formula": (
+            "min(category_total + bonus_total, 100); "
+            "intra-category +7.5% per extra hit (cap +15%); "
+            "repeated arbitrary auth overrides to 100"
+        ),
         "categories": categories,
         "category_total_pct": category_total,
         "bonuses": bonuses,
@@ -607,6 +696,9 @@ def build_score_breakdown(
         "decisive_override": "multi_user_arbitrary_auth" if decisive_override else None,
         "final_score_pct": final_score,
     }
+    if scoped:
+        payload["scoped"] = scoped
+    return payload
 
 
 def build_report(
@@ -656,11 +748,19 @@ def build_report(
             "dynamic": True,
         }
     decisive_override = multi_user_arbitrary_auth(indicators)
+    scoped_score, scoped_detail = compute_scoped_score(
+        hits,
+        bonus_total_pct=total_bonus,
+        ports=ports,
+        decisive_override=decisive_override,
+        deep=deep,
+    )
     score_breakdown = build_score_breakdown(
         hits,
         protocol_bonus=bonus,
         high_signal_bonus_pct=signal_bonus,
         decisive_override=decisive_override,
+        scoped=scoped_detail,
     )
     score = score_breakdown["final_score_pct"]
     if decisive_override:
@@ -670,19 +770,25 @@ def build_report(
         hits["arbitrary_auth"]["triggered"] = True
         hits["arbitrary_auth"]["contribution"] = 100.0
         hits["arbitrary_auth"]["dynamic"] = True
+        if scoped_score is not None:
+            scoped_score = 100.0
+            scoped_detail["score_pct"] = 100.0
+            score_breakdown["scoped"] = scoped_detail
+    level = threat_level(score, indicators, scoped_score=scoped_score)
     confidence = compute_confidence(indicators, deep=deep)
+    effective = score if scoped_score is None else max(score, scoped_score)
     tactical_action, tactical_rationale = compute_tactical_action(
-        score,
+        effective,
         confidence,
         proxy_detected=proxy_detected,
-        threat_level=threat_level(score, indicators),
+        threat_level=level,
         indicators=indicators,
     )
     return AuditReport(
         target=target,
         resolved_ip=resolved_ip,
         score=score,
-        threat_level=threat_level(score, indicators),
+        threat_level=level,
         category_hits=hits,
         indicators=indicators,
         ports=ports,
@@ -700,4 +806,5 @@ def build_report(
         tactical_rationale=tactical_rationale,
         deception_leaks=build_deception_leaks(indicators),
         score_breakdown=score_breakdown,
+        scoped_score=scoped_score,
     )

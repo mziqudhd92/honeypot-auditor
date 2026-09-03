@@ -137,7 +137,7 @@ def test_passive_first_confirm_forces_safe_verify():
     args = argparse.Namespace(
         deep=True,
         safe_mode=False,
-        shodan_key="",
+        shodan_key="test-key",
         with_nmap=False,
         intel_key=[],
         intel_provider=[],
@@ -200,7 +200,7 @@ def test_passive_first_confirm_aligns_report_notes_and_deep_flag():
     args = argparse.Namespace(
         deep=True,
         safe_mode=False,
-        shodan_key="",
+        shodan_key="test-key",
         with_nmap=False,
         intel_key=[],
         intel_provider=[],
@@ -262,7 +262,7 @@ def test_passive_first_low_score_does_not_force_safe_on_confirm():
     args = argparse.Namespace(
         deep=True,
         safe_mode=False,
-        shodan_key="",
+        shodan_key="test-key",
         with_nmap=False,
         intel_key=[],
         intel_provider=[],
@@ -322,7 +322,7 @@ def test_passive_first_confirm_with_high_passive_score():
     args = argparse.Namespace(
         deep=True,
         safe_mode=False,
-        shodan_key="",
+        shodan_key="test-key",
         with_nmap=False,
         intel_key=[],
         intel_provider=[],
