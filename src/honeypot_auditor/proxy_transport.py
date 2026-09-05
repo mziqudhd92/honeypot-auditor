@@ -100,6 +100,31 @@ def create_connection(
     return sock
 
 
+def wrap_tls(sock: socket.socket, host: str) -> socket.socket:
+    """Wrap an already-connected socket in TLS (cert verify disabled for probes)."""
+    import ssl
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    tls = ctx.wrap_socket(sock, server_hostname=host or None)
+    tls.settimeout(sock.gettimeout())
+    return tls
+
+
+def create_tls_connection(host: str, port: int, timeout: float) -> socket.socket:
+    """TCP connect then TLS handshake (for IMAPS/MQTTS-style implicit TLS ports)."""
+    sock = create_connection(host, port, timeout)
+    try:
+        return wrap_tls(sock, host)
+    except Exception:
+        try:
+            sock.close()
+        except OSError:
+            pass
+        raise
+
+
 def paramiko_proxy_sock(host: str, port: int, timeout: float) -> socket.socket | None:
     """Socket for Paramiko when proxy configured."""
     if not settings.proxy_url:
