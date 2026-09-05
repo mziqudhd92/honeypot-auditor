@@ -14,6 +14,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   credential-lure NO/BAD including CAPABILITY), and corroboration-gated
   `imap.stock_banner` for stock Exchange lure greetings (pairs with POP3 for
   qeeqbox/OpenCanary-class mail stacks)
+- `docs/IMAP.md` probe guide (policy, indicators, PREAUTH/BYE/IMAPS, safe-mode)
 - `proxy_transport.create_tls_connection` / `wrap_tls` for implicit-TLS protocol ports
 
 ### Fixed

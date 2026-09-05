@@ -72,3 +72,4 @@ Always require authorization for non-private targets (`--confirm-authorized`). N
 - [Full LLM brief](https://mziqudhd92.github.io/honeypot-auditor/llms-full.txt)
 - [Demo recordings](https://mziqudhd92.github.io/honeypot-auditor/demo/)
 - [SECURITY.md](https://github.com/mziqudhd92/honeypot-auditor/blob/main/SECURITY.md)
+- IMAP probe guide: docs/IMAP.md

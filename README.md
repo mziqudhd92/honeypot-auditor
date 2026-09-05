@@ -286,11 +286,11 @@ Closed faces are skipped, not scored.
 | Git | 9418 · 9418 | 1 |
 | HTTP proxy | 3128 · 8080 | 1 |
 
-`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993` → IMAP, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
+`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993` → IMAP (TLS/IMAPS), `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
 The POP3 engine checks response framing, pre-authentication state boundaries (STAT), optional CAPA sampling, identical auth-failed `-ERR` blankets, stock lure banners, unknown-command handling, and repeated synthetic logins. It never lists, reads, retrieves, or deletes mail; see [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.html) and [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.html) (CAPA).
 
-The IMAP engine pairs with POP3 for Exchange/mail skins (qeeqbox, OpenCanary-class): greeting framing, pre-auth SELECT/LIST boundaries, identical auth-failed NO/BAD blankets (including CAPABILITY), stock Exchange lure greetings, unknown-command handling, and repeated synthetic LOGIN. It never reads, deletes, or modifies mailboxes; see [RFC 3501](https://www.rfc-editor.org/rfc/rfc3501.html).
+The IMAP engine pairs with POP3 for Exchange/mail skins (qeeqbox, OpenCanary-class): RFC 3501 greetings (`* OK` / `* PREAUTH` / `* BYE`), pre-auth `SELECT` bypass (LIST OK alone not scored), CAPABILITY-gated auth-failed NO/BAD blankets, stock Exchange lure greetings, unknown-command handling, and repeated synthetic `LOGIN` with `LOGOUT` cleanup. Port **993** uses implicit TLS (IMAPS). It never reads, deletes, or modifies mailboxes. See [`docs/IMAP.md`](docs/IMAP.md) and [RFC 3501](https://www.rfc-editor.org/rfc/rfc3501.html).
 
 `--deep` adds cross-protocol axes (shell semantics, HASSH/TCP stack, FSM fuzz, co-tenancy, serial + concurrent-load latency) on top of the basic strategies above. Passive-intel providers and Nmap NSE (`-n`) are optional layers, not protocol engines.
 

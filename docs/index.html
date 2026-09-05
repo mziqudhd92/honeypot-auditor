@@ -53,7 +53,7 @@
         "url": "https://mziqudhd92.github.io/honeypot-auditor/",
         "downloadUrl": "https://pypi.org/project/honeypot-auditor/",
         "codeRepository": "https://github.com/mziqudhd92/honeypot-auditor",
-        "description": "Multi-protocol honeypot fingerprinter CLI. Non-destructive probes across SSH, Telnet, FTP, POP3, HTTP, SMB, Redis, SMTP, VNC, SIP and more, plus explicitly selected passive intelligence and deep behavioral checks. Authorized targets only.",
+        "description": "Multi-protocol honeypot fingerprinter CLI. Non-destructive probes across SSH, Telnet, FTP, POP3, IMAP, HTTP, SMB, Redis, SMTP, VNC, SIP and more, plus explicitly selected passive intelligence and deep behavioral checks. Authorized targets only.",
         "offers": {
           "@type": "Offer",
           "price": "0",
@@ -110,7 +110,7 @@
             "name": "Which protocols does honeypot-auditor support?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Seventeen protocol engines: SSH, Telnet, FTP, SMTP, POP3, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, and MongoDB. Each uses 1–3 basic detection strategies in the current release (36 strategy slots total). By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, and so on). -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
+              "text": "Eighteen protocol engines: SSH, Telnet, FTP, SMTP, POP3, IMAP, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, and MongoDB. Each uses 1–3 basic detection strategies in the current release. By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, IMAP 143 and 1143, and so on). Port 993 is probed as IMAPS (implicit TLS). -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
             }
           },
           {
@@ -223,7 +223,7 @@
           <strong>non-destructive</strong> probes across the usual decoy faces.
           Outputs a weighted <strong>Honeyscore (0–100%)</strong>, Rich console table, and JSON report.
         </p>
-        <pre class="code">[ BASIC ]  passive intel · Nmap NSE · 17 protocol engines · up to 3 strategies each
+        <pre class="code">[ BASIC ]  passive intel · Nmap NSE · 18 protocol engines · up to 3 strategies each
 [ DEEP  ]  +6 cross-protocol behavioral axes (shell · OS · stack · FSM · co-tenancy · temporal)
            (flag: --deep · more intrusive · same authorization rules)</pre>
         <p class="quote">“elite? nah. just consistent timeouts and an honest --confirm-authorized.”</p>
@@ -440,11 +440,11 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
       <section class="panel" id="protocols">
         <h2>-=[ SUPPORTED PROTOCOLS / PORTS ]=-</h2>
         <p>
-          <strong>17</strong> protocol engines in the current version. Each uses up to <strong>3</strong>
+          <strong>18</strong> protocol engines in the current version. Each uses up to <strong>3</strong>
           probe strategies (arbitrary auth · state non-persistence · static signature). The
           <strong>Strategies</strong> column is how many of those three are active for that protocol
           in this release — not passive intel, co-tenancy, or individual indicator checks
-          (<strong>36</strong> active strategy slots across all protocols).
+          (<strong>39</strong> active strategy slots across all protocols).
         </p>
         <p>
           Default preset (<code>--preset both</code>) probes IANA well-known ports <strong>and</strong>
@@ -467,6 +467,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
               <tr><td>FTP</td><td>21 · 2121</td><td>3</td></tr>
               <tr><td>SMTP</td><td>25 · 2525</td><td>3</td></tr>
               <tr><td>POP3</td><td>110 · 1110</td><td>3</td></tr>
+              <tr><td>IMAP</td><td>143 · 1143</td><td>3</td></tr>
               <tr><td>Redis</td><td>6379 · 6379</td><td>3</td></tr>
               <tr><td>SMB</td><td>445 · 1445</td><td>2</td></tr>
               <tr><td>VNC</td><td>5900 · 5000</td><td>2</td></tr>
@@ -484,8 +485,12 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
         </div>
         <p style="margin-top:0.75rem">
           <code>-p</code> maps well-known extras the same way: <code>443</code>/<code>8443</code> → HTTP (TLS),
-          <code>8080</code>/<code>3128</code> → HTTP proxy, <code>139</code> → SMB, <code>5061</code> → SIP,
-          <code>5000</code>/<code>5901</code> → VNC. Unknown numbers are probed as SSH.
+          <code>8080</code>/<code>3128</code> → HTTP proxy, <code>139</code> → SMB, <code>993</code> → IMAP (IMAPS),
+          <code>5061</code> → SIP, <code>5000</code>/<code>5901</code> → VNC. Unknown numbers are probed as SSH.
+        </p>
+        <p>
+          IMAP pairs with POP3 for Exchange/mail skins. Port <code>993</code> uses implicit TLS (IMAPS).
+          Full probe guide: <a href="IMAP.md"><code>docs/IMAP.md</code></a>.
         </p>
         <p>
           <code>--deep</code> adds cross-protocol behavioral axes on top of the basic strategies above.
