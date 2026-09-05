@@ -18,6 +18,7 @@ def test_probe_registry_covers_all_basic_protocols():
         "sip",
         "mysql",
         "pop3",
+        "imap",
         "postgres",
         "git",
         "rdp",

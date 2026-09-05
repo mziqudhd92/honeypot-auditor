@@ -6,6 +6,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- IMAP engine on ports 143/1143 (993/1993 → IMAPS via implicit TLS): greeting framing
+  (`* OK` / `* PREAUTH` / `* BYE`), pre-auth SELECT state, unknown-command conformance,
+  repeated synthetic LOGIN with LOGOUT cleanup, `imap.auth_failed_blanket` (identical
+  credential-lure NO/BAD including CAPABILITY), and corroboration-gated
+  `imap.stock_banner` for stock Exchange lure greetings (pairs with POP3 for
+  qeeqbox/OpenCanary-class mail stacks)
+- `docs/IMAP.md` probe guide (policy, indicators, PREAUTH/BYE/IMAPS, safe-mode)
+- Lab IMAPS alias port `1993` (pairs with cleartext lab `1143`); STARTTLS on 143 out of scope
+- `proxy_transport.create_tls_connection` / `wrap_tls` for implicit-TLS protocol ports
+
+### Fixed
+
+- IMAP: PREAUTH greetings no longer false-trigger `imap.preauth_state`; PREAUTH path
+  still samples LIST for Exchange-style auth-failed blankets
+- IMAP: BYE greetings are valid rejects (not framing tells)
+- IMAP: auth-failed blanket requires CAPABILITY lure text (not “authenticate first”)
+- TLS: `create_tls_connection` closes the TCP socket if the handshake fails
+
 ## [0.7.3] - 2026-09-03
 
 CTI-aligned scoring redesign (roadmap items formerly labeled 0.7.1 / 0.7.2 / 0.8.0).

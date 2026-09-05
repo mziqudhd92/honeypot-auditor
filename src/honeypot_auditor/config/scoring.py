@@ -75,6 +75,14 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "auth-failed -ERR blanket (STAT/CAPA/HPAU) · stock lure banner"
         ),
     },
+    "imap": {
+        "arbitrary_auth": "two random LOGIN pairs",
+        "state_nonpersist": "SELECT/LIST before authentication",
+        "static_signature": (
+            "* OK greeting framing · unknown-command rejection · "
+            "auth-failed NO/BAD blanket (CAPABILITY/LIST/XZPQ) · stock Exchange lure"
+        ),
+    },
     "smb": {
         "arbitrary_auth": "",
         "state_nonpersist": "bogus pipe NTSTATUS · session FSM",

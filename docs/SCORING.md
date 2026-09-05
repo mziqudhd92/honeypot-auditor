@@ -32,11 +32,25 @@ indicator in the **same** category adds **+7.5%** (cap **+15%**). Example: two
 
 `deep.latency_under_load` is corroboration-gated and skipped in `--safe-mode`. It is a probe indicator (not a YAML signature primitive).
 
+### IMAP / POP3 mail skins (basic probe)
+
+IMAP and POP3 share the same three basic strategies for Exchange/qeeqbox-class lures.
+IMAP details:
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `imap.arbitrary_auth` | arbitrary_auth | Decisive when hit; skipped on `* PREAUTH` |
+| `imap.preauth_state` | state_nonpersist | `SELECT` OK before LOGIN; skipped on PREAUTH |
+| `imap.auth_failed_blanket` | static_signature | High fidelity; requires CAPABILITY lure text |
+| `imap.stock_banner` | static_signature | Corroboration-gated Exchange greeting |
+
+Full indicator list, PREAUTH/BYE/IMAPS behavior, and non-destructive policy: [`IMAP.md`](IMAP.md).
+
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
 **High-signal bonus**: +15% when any triggered indicator has `fidelity` of `high` or
 `decisive` (set on the `Indicator`, not a hardcoded ID list). Examples:
-`ssh.kex_facade`, `pop3.auth_failed_blanket`.
+`ssh.kex_facade`, `pop3.auth_failed_blanket`, `imap.auth_failed_blanket`.
 
 The calculation is additive and capped:
 

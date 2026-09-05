@@ -13,6 +13,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "smtp": 25,
     "http": 80,
     "pop3": 110,
+    "imap": 143,
     "smb": 445,
     "sip": 5060,
     "vnc": 5900,
@@ -33,6 +34,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "smtp": 2525,
     "http": 8081,
     "pop3": 1110,
+    "imap": 1143,
     "smb": 1445,
     "sip": 5060,
     "vnc": 5000,
@@ -57,6 +59,8 @@ PORT_PRESET_CHOICES = ("both", "iana", "docker-research")
 _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     139: "smb",
     443: "http",
+    993: "imap",
+    1993: "imap",  # lab IMAPS (implicit TLS), pairs with cleartext lab 1143
     8080: "httpproxy",
     8443: "http",
     5061: "sip",
