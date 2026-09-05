@@ -281,6 +281,46 @@ def test_imap_port_993_uses_tls_connection():
     assert not any(ind.triggered for ind in inds)
 
 
+def test_imap_lab_imaps_port_1993_uses_tls():
+    with patch.object(
+        imap, "create_tls_connection", return_value=ScriptedSocket("* OK ready")
+    ) as tls:
+        with patch.object(imap, "create_connection") as plain:
+            with patch.object(imap, "is_safe_mode", return_value=True):
+                imap.probe_imap("127.0.0.1", 1993)
+    tls.assert_called_once()
+    plain.assert_not_called()
+
+
+def test_create_tls_connection_closes_socket_on_handshake_failure():
+    from honeypot_auditor import proxy_transport as pt
+
+    class BoomSock:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def gettimeout(self):
+            return 3.0
+
+        def close(self) -> None:
+            self.closed = True
+
+    sock = BoomSock()
+
+    def boom_wrap(s, host):
+        raise OSError("handshake failed")
+
+    with patch.object(pt, "create_connection", return_value=sock):
+        with patch.object(pt, "wrap_tls", side_effect=boom_wrap):
+            try:
+                pt.create_tls_connection("127.0.0.1", 993, 3.0)
+            except OSError:
+                pass
+            else:
+                raise AssertionError("expected handshake failure")
+    assert sock.closed
+
+
 def test_imap_connection_error_skips_suite():
     with patch.object(imap, "create_connection", side_effect=OSError("refused")):
         inds = imap.probe_imap("127.0.0.1", 143)

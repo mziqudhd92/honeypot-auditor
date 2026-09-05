@@ -110,7 +110,7 @@
             "name": "Which protocols does honeypot-auditor support?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Eighteen protocol engines: SSH, Telnet, FTP, SMTP, POP3, IMAP, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, and MongoDB. Each uses 1–3 basic detection strategies in the current release. By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, IMAP 143 and 1143, and so on). Port 993 is probed as IMAPS (implicit TLS). -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
+              "text": "Eighteen protocol engines: SSH, Telnet, FTP, SMTP, POP3, IMAP, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, and MongoDB. Each uses 1–3 basic detection strategies in the current release. By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, IMAP 143 and 1143, and so on). Ports 993 and 1993 are probed as IMAPS (implicit TLS); STARTTLS on 143 is out of scope. -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
             }
           },
           {
@@ -485,11 +485,12 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
         </div>
         <p style="margin-top:0.75rem">
           <code>-p</code> maps well-known extras the same way: <code>443</code>/<code>8443</code> → HTTP (TLS),
-          <code>8080</code>/<code>3128</code> → HTTP proxy, <code>139</code> → SMB, <code>993</code> → IMAP (IMAPS),
+          <code>8080</code>/<code>3128</code> → HTTP proxy, <code>139</code> → SMB, <code>993</code>/<code>1993</code> → IMAP (IMAPS),
           <code>5061</code> → SIP, <code>5000</code>/<code>5901</code> → VNC. Unknown numbers are probed as SSH.
         </p>
         <p>
-          IMAP pairs with POP3 for Exchange/mail skins. Port <code>993</code> uses implicit TLS (IMAPS).
+          IMAP pairs with POP3 for Exchange/mail skins. Ports <code>993</code>/<code>1993</code> use implicit TLS (IMAPS);
+          STARTTLS on 143 is out of scope.
           Full probe guide: <a href="IMAP.md"><code>docs/IMAP.md</code></a>.
         </p>
         <p>

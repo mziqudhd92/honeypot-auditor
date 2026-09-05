@@ -21,9 +21,10 @@ greetings — not mailbox content inspection.
 | Port | Transport |
 |------|-----------|
 | 143, 1143 | Cleartext IMAP |
-| 993 | Implicit TLS via `create_tls_connection` (IMAPS) |
+| 993, 1993 | Implicit TLS via `create_tls_connection` (IMAPS) |
 
-STARTTLS upgrade on 143 is not required for the basic probe.
+STARTTLS upgrade on 143/1143 is **out of scope** for the basic probe (use IMAPS ports
+or a future STARTTLS path). Audits of `-p 993` / `-p 1993` always negotiate TLS first.
 
 ## Greetings (RFC 3501 §7.1)
 

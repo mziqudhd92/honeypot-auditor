@@ -60,6 +60,7 @@ _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     139: "smb",
     443: "http",
     993: "imap",
+    1993: "imap",  # lab IMAPS (implicit TLS), pairs with cleartext lab 1143
     8080: "httpproxy",
     8443: "http",
     5061: "sip",

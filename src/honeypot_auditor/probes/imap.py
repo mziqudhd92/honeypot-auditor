@@ -52,7 +52,7 @@ _IMAP_SKIP = (
 _MAX_RESPONSE_BYTES = 1024
 _RECV_CHUNK = 256
 _TAG = "A001"
-_TLS_PORTS = frozenset({993})
+_TLS_PORTS = frozenset({993, 1993})
 
 # Exact / near-exact lure strings (fingerprint, not RFC violations).
 _IMAP_STOCK_GREETINGS = (

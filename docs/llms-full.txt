@@ -109,7 +109,7 @@ Default (`--preset both`) probes IANA **and** docker/lab ports. Closed ports are
 | Telnet | 23 | 2323 | 23 + 2323 |
 | SMTP | 25 | 2525 | 25 + 2525 |
 | POP3 | 110 | 1110 | 110 + 1110 |
-| IMAP | 143 | 1143 | 143 + 1143 (+ 993 IMAPS) |
+| IMAP | 143 | 1143 | 143 + 1143 (+ 993/1993 IMAPS) |
 | SMB | 445 | 1445 | 445 + 1445 |
 | SIP | 5060 | 5060 | 5060 |
 | VNC | 5900 | 5000 | 5900 + 5000 |
