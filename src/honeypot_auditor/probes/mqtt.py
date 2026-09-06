@@ -635,13 +635,13 @@ def probe_mqtt(host: str, port: int) -> list[Indicator]:
 
     if is_safe_mode():
         reason = "safe-mode: handshake-only probe"
-        out: list[Indicator] = []
+        safe_out: list[Indicator] = []
         for spec in _MQTT_SKIP:
             if spec[0] == "mqtt.connack":
-                out.append(connack_ind)
+                safe_out.append(connack_ind)
             else:
-                out.append(skipped_indicator(*spec, reason, protocol="mqtt"))
-        return out
+                safe_out.append(skipped_indicator(*spec, reason, protocol="mqtt"))
+        return safe_out
 
     # --- empty clientId + clean_session=0 (MQTT 3.1.1 §3.1.3.1) ---
     empty_raw, empty_err = _transact(
