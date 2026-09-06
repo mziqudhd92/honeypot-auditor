@@ -103,6 +103,17 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "state_nonpersist": "FLUSHALL no-op · key vanishes after reconnect",
         "static_signature": "COMMAND stub · EVAL/CONFIG stub · AUTH-invalid+COMMAND NOAUTH wall · frozen INFO · missing ECHO/SELECT",
     },
+    "mqtt": {
+        "arbitrary_auth": "two random CONNECT username/password pairs (when anon rejected)",
+        "state_nonpersist": (
+            "SUBSCRIBE without CONNECT · two-client pub/sub bus canary · "
+            "hollow session_present resume · keep-alive zombie"
+        ),
+        "static_signature": (
+            "CONNACK framing · invalid protocol-name facade (MXTT) · "
+            "empty clientId+clean_session=0 · QoS1 PUBACK packet-id · PINGRESP stub"
+        ),
+    },
     "mysql": {
         "arbitrary_auth": "",
         "state_nonpersist": "drop after 1045 · wrong-seq ER 1156 · SSL-request silent drop",
