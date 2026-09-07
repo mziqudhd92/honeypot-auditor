@@ -46,6 +46,20 @@ IMAP details:
 
 Full indicator list, PREAUTH/BYE/IMAPS behavior, and non-destructive policy: [`IMAP.md`](IMAP.md).
 
+### MQTT behavioral tells (basic probe)
+
+MQTT uses the same three basic strategies. Prefer these over banner IOCs:
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `mqtt.arbitrary_auth` | arbitrary_auth | Decisive when hit; skipped if anonymous CONNECT already ok |
+| `mqtt.message_bus` | state_nonpersist | Two-client canary (granted SUBACK + poll) — high fidelity |
+| `mqtt.session_resume` | state_nonpersist | Hollow `session_present=1`; skipped on SUBACK deny |
+| `mqtt.keepalive_zombie` | state_nonpersist | PINGRESP after 1.5× Keep Alive (lab-oriented) |
+| `mqtt.empty_clientid` / `mqtt.protocol_facade` | static_signature | RFC conformance, high fidelity |
+
+Full indicator list and non-destructive policy: [`MQTT.md`](MQTT.md).
+
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
 **High-signal bonus**: +15% when any triggered indicator has `fidelity` of `high` or

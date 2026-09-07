@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-07
+
 ### Added
 
 - IMAP engine on ports 143/1143 (993/1993 → IMAPS via implicit TLS): greeting framing
@@ -16,6 +18,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   qeeqbox/OpenCanary-class mail stacks)
 - `docs/IMAP.md` probe guide (policy, indicators, PREAUTH/BYE/IMAPS, safe-mode)
 - Lab IMAPS alias port `1993` (pairs with cleartext lab `1143`); STARTTLS on 143 out of scope
+- MQTT 3.1.1 engine on ports 1883/11883 (8883 / lab 18883 → MQTTS via implicit TLS) with
+  behavioral (non-signature) detection:
+  - `mqtt.arbitrary_auth` (only when anonymous CONNECT was rejected)
+  - `mqtt.preconnect_subscribe`, `mqtt.message_bus` (two-client canary),
+    `mqtt.session_resume` (hollow `session_present`), `mqtt.keepalive_zombie`
+  - conformance: CONNACK framing, `mqtt.protocol_facade` (MXTT),
+    `mqtt.empty_clientid`, `mqtt.qos1_packet_id`, `mqtt.ping_stub`
+- `docs/MQTT.md` probe guide (policy, indicators, safe-mode, spec refs)
 - `proxy_transport.create_tls_connection` / `wrap_tls` for implicit-TLS protocol ports
 
 ### Fixed
@@ -24,6 +34,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   still samples LIST for Exchange-style auth-failed blankets
 - IMAP: BYE greetings are valid rejects (not framing tells)
 - IMAP: auth-failed blanket requires CAPABILITY lure text (not “authenticate first”)
+- MQTT: `mqtt.arbitrary_auth` skips when anonymous CONNECT already succeeded
+- MQTT: empty/timeout PINGREQ replies are skipped, not stub tells
+- MQTT: SUBACK failure (`0x80`) skips bus/resume tells instead of treating as subscribed
+- MQTT: message-bus / session-resume poll for canary delivery across the timeout window
+- MQTT: `keepalive_zombie` only triggers on PINGRESP after expiry; non-PINGRESP is skipped
 - TLS: `create_tls_connection` closes the TCP socket if the handshake fails
 
 ## [0.7.3] - 2026-09-03

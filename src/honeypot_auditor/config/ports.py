@@ -25,6 +25,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "httpproxy": 3128,
     "mssql": 1433,
     "mongodb": 27017,
+    "mqtt": 1883,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -46,6 +47,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "httpproxy": 8080,
     "mssql": 1433,
     "mongodb": 27017,
+    "mqtt": 11883,
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {
@@ -66,6 +68,8 @@ _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     5061: "sip",
     5000: "vnc",
     5901: "vnc",
+    8883: "mqtt",
+    18883: "mqtt",  # lab MQTTS (implicit TLS), pairs with cleartext lab 11883
 }
 
 
