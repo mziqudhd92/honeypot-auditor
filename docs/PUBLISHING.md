@@ -25,8 +25,8 @@ Repository: **https://github.com/mziqudhd92/honeypot-auditor**
 3. Tag and push (this is what publishes):
 
    ```bash
-   git tag -a v0.8.0 -m "v0.8.0"
-   git push origin v0.8.0
+   git tag -a v0.9.0 -m "v0.9.0"
+   git push origin v0.9.0
    ```
 
    Optionally create a GitHub Release from that tag for release notes — it will **not** re-upload to PyPI.

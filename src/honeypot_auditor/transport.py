@@ -20,8 +20,10 @@ class ProbeTransportManager:
     """Global semaphore limiting in-flight socket probes."""
 
     def __init__(self, max_concurrent_sockets: int = 32) -> None:
-        self._semaphore = asyncio.Semaphore(max(1, max_concurrent_sockets))
         self.max_concurrent = max(1, max_concurrent_sockets)
+        # Bind semaphore to the running loop so asyncio.run() re-entry is safe.
+        self._loop = asyncio.get_running_loop()
+        self._semaphore = asyncio.Semaphore(self.max_concurrent)
 
     async def execute_probe(
         self,
@@ -41,12 +43,26 @@ class ProbeTransportManager:
     ) -> T:
         if jitter:
             _apply_jitter()
-        return await self.execute_probe(asyncio.to_thread(fn), timeout=timeout)
+        # Create to_thread only after the semaphore is held so a failed acquire
+        # cannot leak an un-awaited coroutine (RuntimeWarning / GC noise).
+        async with self._semaphore:
+            return await asyncio.wait_for(asyncio.to_thread(fn), timeout=timeout)
+
+
+def reset_transport_manager() -> None:
+    """Drop the process singleton (tests / new event loop)."""
+    global _manager
+    _manager = None
 
 
 def get_transport_manager() -> ProbeTransportManager:
     global _manager
-    if _manager is None or _manager.max_concurrent != settings.max_concurrent:
+    loop = asyncio.get_running_loop()
+    if (
+        _manager is None
+        or _manager.max_concurrent != settings.max_concurrent
+        or _manager._loop is not loop
+    ):
         _manager = ProbeTransportManager(settings.max_concurrent)
     return _manager
 

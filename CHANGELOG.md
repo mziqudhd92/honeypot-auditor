@@ -6,6 +6,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-08
+
+### Added
+
+- SNMP (UDP/161, lab 1161/10161) RFC non-compliance engine: arbitrary community
+  acceptance, request-id echo, invalid version facade, noSuch success on missing OID,
+  BER/PDU framing, stock sysDescr lures, GetNext stub, wrong MIB ASN.1 types
+  (`sysObjectID` / `sysUpTime`), OID-name echo failures, bitwise-identical canned
+  replies (`docs/SNMP.md`)
+- Docs/site sync for SNMP + MQTT: protocol table / FAQ / JSON-LD on `docs/index.html`,
+  `llms.txt` / `llms-full.txt` / `sitemap.xml`, scoring strategy blurbs
+
+### Fixed
+
+- `ProbeTransportManager` rebinds its semaphore to the current event loop so successive
+  `asyncio.run()` calls (and the test suite) no longer skip deep probes after the first audit
+
 ## [0.8.0] - 2026-09-07
 
 ### Added
