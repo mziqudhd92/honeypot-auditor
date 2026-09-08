@@ -26,6 +26,7 @@ def test_probe_registry_covers_all_basic_protocols():
         "mssql",
         "mongodb",
         "mqtt",
+        "snmp",
     }
     assert PROBE_BY_PROTOCOL["ssh"] is probe_ssh
 

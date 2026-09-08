@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- SNMP (UDP/161, lab 1161/10161) RFC non-compliance engine: arbitrary community
+  acceptance, request-id echo, invalid version facade, noSuch success on missing OID,
+  BER/PDU framing, stock sysDescr lures (`docs/SNMP.md`)
+
 ## [0.8.0] - 2026-09-07
 
 ### Added

@@ -114,6 +114,14 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "empty clientId+clean_session=0 · QoS1 PUBACK packet-id · PINGRESP stub"
         ),
     },
+    "snmp": {
+        "arbitrary_auth": "two random community strings both get successful GetResponse",
+        "state_nonpersist": "",
+        "static_signature": (
+            "request-id echo · invalid version facade · noSuch success on missing OID · "
+            "BER/PDU framing · stock sysDescr lure"
+        ),
+    },
     "mysql": {
         "arbitrary_auth": "",
         "state_nonpersist": "drop after 1045 · wrong-seq ER 1156 · SSL-request silent drop",

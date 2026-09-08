@@ -26,6 +26,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "mssql": 1433,
     "mongodb": 27017,
     "mqtt": 1883,
+    "snmp": 161,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -48,6 +49,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "mssql": 1433,
     "mongodb": 27017,
     "mqtt": 11883,
+    "snmp": 1161,
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {
@@ -70,6 +72,7 @@ _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     5901: "vnc",
     8883: "mqtt",
     18883: "mqtt",  # lab MQTTS (implicit TLS), pairs with cleartext lab 11883
+    10161: "snmp",  # alternate lab SNMP (UDP), pairs with cleartext lab 1161
 }
 
 

@@ -60,6 +60,17 @@ MQTT uses the same three basic strategies. Prefer these over banner IOCs:
 
 Full indicator list and non-destructive policy: [`MQTT.md`](MQTT.md).
 
+
+### SNMP RFC non-compliance (basic probe)
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `snmp.arbitrary_community` | arbitrary_auth | Decisive when hit |
+| `snmp.request_id` / `snmp.version_facade` / `snmp.nosuch_success` | static_signature | High fidelity RFC tells |
+| `snmp.ber_framing` / `snmp.stock_sysdescr` | static_signature | Framing + lure banner (sysDescr may be corroboration-gated) |
+
+Full indicator list: [`SNMP.md`](SNMP.md).
+
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
 **High-signal bonus**: +15% when any triggered indicator has `fidelity` of `high` or
