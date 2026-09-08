@@ -18,6 +18,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Docs/site sync for SNMP + MQTT: protocol table / FAQ / JSON-LD on `docs/index.html`,
   `llms.txt` / `llms-full.txt` / `sitemap.xml`, scoring strategy blurbs
 
+### Fixed
+
+- `ProbeTransportManager` rebinds its semaphore to the current event loop so successive
+  `asyncio.run()` calls (and the test suite) no longer skip deep probes after the first audit
+
 ## [0.8.0] - 2026-09-07
 
 ### Added

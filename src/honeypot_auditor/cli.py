@@ -569,7 +569,7 @@ def _probe_jobs(
     for proto, fn in PROBE_BY_PROTOCOL.items():
         for port in ports.get(proto, []):
             jobs.append((f"{proto}:{port}", _port_probe_job(fn, ip, port, proto)))
-    if settings.deep and not settings.safe_mode:
+    if (settings.deep or bool(getattr(args, "deep", False))) and not settings.safe_mode:
         jobs.append(("deep", lambda: run_deep_probes(ip, ports)))
     return jobs
 

@@ -217,7 +217,7 @@ def test_parser_scan_concurrency():
     assert args.scan_concurrency == 4
 
 
-@patch("honeypot_auditor.cli.asyncio.to_thread", side_effect=RuntimeError("probe boom"))
+@patch("honeypot_auditor.transport.asyncio.to_thread", side_effect=RuntimeError("probe boom"))
 @patch("honeypot_auditor.cli.export")
 @patch("honeypot_auditor.cli.render")
 @patch("honeypot_auditor.cli.run_deep_probes", return_value=[])
@@ -238,6 +238,7 @@ def test_run_audit_probe_error_indicator(
     with _stub_cli_probes():
         code = asyncio.run(run_audit(args))
     assert code == 0
+    mock_to_thread.assert_called()
 
 
 @patch("honeypot_auditor.cli.export")
