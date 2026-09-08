@@ -1,13 +1,14 @@
 """SNMP fingerprint engine (RFC 1157 / RFC 3416 community-based).
 
-RFC non-compliance strategies (non-destructive GetRequest only — never Set):
+RFC non-compliance strategies (non-destructive Get/GetNext only — never Set):
   · arbitrary_auth — two random community strings both receive successful GetResponses
   · static_signature — request-id echo, invalid version facade, noSuch* handling,
-    BER/PDU framing, stock sysDescr lure banners
+    BER/PDU framing, stock sysDescr lure banners, GetNext stubs, wrong MIB ASN.1
+    types, OID-name echo failures, canned bitwise-identical replies
 
 UDP/161 (lab 1161). SNMPv1 and SNMPv2c message wrappers only.
 
-See docs/SNMP.md, RFC 1157 §4.1, RFC 3416 §4.2.1 / §4.2.3.
+See docs/SNMP.md, RFC 1157 §4.1, RFC 3416 §4.2.1 / §4.2.2 / §4.2.3.
 """
 
 from __future__ import annotations
@@ -50,6 +51,26 @@ _SNMP_SKIP = (
         "SNMP sysDescr matches a stock honeypot lure banner",
         "static_signature",
     ),
+    (
+        "snmp.getnext_stub",
+        "SNMP GetNext does not advance past the requested OID",
+        "static_signature",
+    ),
+    (
+        "snmp.type_facade",
+        "SNMP returns wrong ASN.1 types for standard MIB objects",
+        "static_signature",
+    ),
+    (
+        "snmp.oid_echo",
+        "SNMP GetResponse varbind name does not match the requested OID",
+        "static_signature",
+    ),
+    (
+        "snmp.response_clone",
+        "SNMP returns bitwise-identical replies for distinct requests",
+        "static_signature",
+    ),
 )
 
 # SNMPv1 INTEGER version=0, SNMPv2c version=1 (RFC 3416 / RFC 1901).
@@ -58,6 +79,7 @@ _VERSION_V2C = 1
 _VERSION_INVALID = 99
 
 _PDU_GET_REQUEST = 0xA0
+_PDU_GET_NEXT_REQUEST = 0xA1
 _PDU_GET_RESPONSE = 0xA2
 
 # RFC 1157 error-status
@@ -69,7 +91,14 @@ _EXC_NO_SUCH_OBJECT = 0x80
 _EXC_NO_SUCH_INSTANCE = 0x81
 _EXC_END_OF_MIB_VIEW = 0x82
 
+_TAG_OCTET_STRING = 0x04
+_TAG_NULL = 0x05
+_TAG_OID = 0x06
+_TAG_TIMETICKS = 0x43
+
 _OID_SYSDESCR = (1, 3, 6, 1, 2, 1, 1, 1, 0)
+_OID_SYSOBJECTID = (1, 3, 6, 1, 2, 1, 1, 2, 0)
+_OID_SYSUPTIME = (1, 3, 6, 1, 2, 1, 1, 3, 0)
 _OID_GARBAGE = (1, 3, 6, 1, 4, 1, 999999, 1, 0)  # enterprise OID that should not exist
 
 _STOCK_SYSDESCR = (
@@ -122,7 +151,7 @@ def _ber_integer(value: int, *, tag: int = 0x02) -> bytes:
     return _ber_encode(tag, raw)
 
 
-def _ber_octet_string(data: bytes | str, *, tag: int = 0x04) -> bytes:
+def _ber_octet_string(data: bytes | str, *, tag: int = _TAG_OCTET_STRING) -> bytes:
     raw = data.encode("utf-8") if isinstance(data, str) else data
     return _ber_encode(tag, raw)
 
@@ -150,7 +179,7 @@ def _ber_oid(oid: tuple[int, ...]) -> bytes:
             stack.append(0x80 | (n & 0x7F))
             n >>= 7
         body.extend(reversed(stack))
-    return _ber_encode(0x06, bytes(body))
+    return _ber_encode(_TAG_OID, bytes(body))
 
 
 def _ber_sequence(items: bytes, *, tag: int = 0x30) -> bytes:
@@ -203,14 +232,15 @@ def _decode_oid(content: bytes) -> tuple[int, ...] | None:
     return tuple(arcs)
 
 
-def build_get_request(
+def build_request(
     community: str,
     oid: tuple[int, ...],
     *,
     version: int = _VERSION_V2C,
     request_id: int | None = None,
+    pdu_type: int = _PDU_GET_REQUEST,
 ) -> bytes:
-    """Build a community-based SNMP GetRequest (v1 or v2c)."""
+    """Build a community-based SNMP GetRequest or GetNextRequest (v1 or v2c)."""
     rid = secrets.randbelow(0x7FFFFFFF) if request_id is None else int(request_id)
     varbind = _ber_sequence(_ber_oid(oid) + _ber_null())
     varbind_list = _ber_sequence(varbind)
@@ -219,29 +249,69 @@ def build_get_request(
         + _ber_integer(_ERR_NO_ERROR)
         + _ber_integer(0)
         + varbind_list,
-        tag=_PDU_GET_REQUEST,
+        tag=pdu_type,
     )
     return _ber_sequence(_ber_integer(version) + _ber_octet_string(community) + pdu)
+
+
+def build_get_request(
+    community: str,
+    oid: tuple[int, ...],
+    *,
+    version: int = _VERSION_V2C,
+    request_id: int | None = None,
+) -> bytes:
+    """Build a community-based SNMP GetRequest (v1 or v2c)."""
+    return build_request(
+        community, oid, version=version, request_id=request_id, pdu_type=_PDU_GET_REQUEST
+    )
+
+
+def build_getnext_request(
+    community: str,
+    oid: tuple[int, ...],
+    *,
+    version: int = _VERSION_V2C,
+    request_id: int | None = None,
+) -> bytes:
+    """Build a community-based SNMP GetNextRequest (v1 or v2c)."""
+    return build_request(
+        community,
+        oid,
+        version=version,
+        request_id=request_id,
+        pdu_type=_PDU_GET_NEXT_REQUEST,
+    )
 
 
 def build_get_response(
     community: str,
     oid: tuple[int, ...],
-    value: bytes | str,
+    value: bytes | str | int | tuple[int, ...] = b"",
     *,
     version: int = _VERSION_V2C,
     request_id: int = 1,
     error_status: int = _ERR_NO_ERROR,
     error_index: int = 0,
-    value_tag: int = 0x04,
+    value_tag: int = _TAG_OCTET_STRING,
     pdu_type: int = _PDU_GET_RESPONSE,
 ) -> bytes:
     """Build a community SNMP GetResponse (test / lab helper)."""
-    if value_tag == 0x05:
+    if value_tag == _TAG_NULL:
         val = _ber_null()
     elif value_tag in {_EXC_NO_SUCH_OBJECT, _EXC_NO_SUCH_INSTANCE, _EXC_END_OF_MIB_VIEW}:
         val = _ber_encode(value_tag, b"")
+    elif value_tag == _TAG_OID:
+        if not isinstance(value, tuple):
+            raise TypeError("OID value_tag requires a tuple OID value")
+        val = _ber_oid(value)
+    elif value_tag == _TAG_TIMETICKS:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError("TimeTicks value_tag requires an int")
+        val = _ber_integer(value, tag=_TAG_TIMETICKS)
     else:
+        if isinstance(value, (int, tuple)):
+            raise TypeError("octet-string value_tag requires bytes or str")
         val = _ber_octet_string(value, tag=value_tag)
     varbind = _ber_sequence(_ber_oid(oid) + val)
     varbind_list = _ber_sequence(varbind)
@@ -344,10 +414,10 @@ def parse_snmp_message(data: bytes) -> SnmpMessage | None:
 
 def _sysdescr_text(msg: SnmpMessage) -> str:
     for oid, value, tag in msg.varbinds:
-        if oid == _OID_SYSDESCR and tag == 0x04:
+        if oid == _OID_SYSDESCR and tag == _TAG_OCTET_STRING:
             return value.decode("utf-8", "replace")
     for _oid, value, tag in msg.varbinds:
-        if tag == 0x04:
+        if tag == _TAG_OCTET_STRING:
             return value.decode("utf-8", "replace")
     return ""
 
@@ -362,7 +432,7 @@ def _is_successful_get(msg: SnmpMessage) -> bool:
     for _oid, _value, tag in msg.varbinds:
         if tag in {_EXC_NO_SUCH_OBJECT, _EXC_NO_SUCH_INSTANCE, _EXC_END_OF_MIB_VIEW}:
             return False
-        if tag == 0x05:  # NULL — unanswered Get
+        if tag == _TAG_NULL:  # NULL — unanswered Get
             return False
     return True
 
@@ -378,9 +448,25 @@ def _is_nosuch_compliant(msg: SnmpMessage) -> bool:
     if not msg.varbinds:
         return False
     return all(
-        tag in {_EXC_NO_SUCH_OBJECT, _EXC_NO_SUCH_INSTANCE, _EXC_END_OF_MIB_VIEW, 0x05}
+        tag in {_EXC_NO_SUCH_OBJECT, _EXC_NO_SUCH_INSTANCE, _EXC_END_OF_MIB_VIEW, _TAG_NULL}
         for _oid, _value, tag in msg.varbinds
     )
+
+
+def _is_getnext_compliant(msg: SnmpMessage, requested: tuple[int, ...]) -> bool:
+    """GetNext advanced past ``requested``, ended the view, or signaled noSuch*."""
+    if msg.pdu_type != _PDU_GET_RESPONSE:
+        return False
+    if msg.error_status == _ERR_NO_SUCH_NAME:
+        return True
+    if msg.error_status != _ERR_NO_ERROR:
+        return True
+    if not msg.varbinds:
+        return False
+    oid, _value, tag = msg.varbinds[0]
+    if tag in {_EXC_NO_SUCH_OBJECT, _EXC_NO_SUCH_INSTANCE, _EXC_END_OF_MIB_VIEW}:
+        return True
+    return oid > requested
 
 
 def _stock_sysdescr_hit(text: str) -> str | None:
@@ -393,6 +479,13 @@ def _stock_sysdescr_hit(text: str) -> str | None:
     return None
 
 
+def _varbind_oid_mismatch(msg: SnmpMessage, requested: tuple[int, ...]) -> bool:
+    """True when a successful GetResponse names a different OID than requested."""
+    if not _is_successful_get(msg) or not msg.varbinds:
+        return False
+    return msg.varbinds[0][0] != requested
+
+
 def _query(
     host: str,
     port: int,
@@ -401,9 +494,12 @@ def _query(
     *,
     version: int = _VERSION_V2C,
     request_id: int | None = None,
+    pdu_type: int = _PDU_GET_REQUEST,
 ) -> tuple[bytes, SnmpMessage | None, str, int]:
     rid = secrets.randbelow(0x7FFFFFFF) if request_id is None else int(request_id)
-    packet = build_get_request(community, oid, version=version, request_id=rid)
+    packet = build_request(
+        community, oid, version=version, request_id=rid, pdu_type=pdu_type
+    )
     raw, err = udp_transact(host, port, packet)
     if err and not raw:
         return b"", None, closed_reason(err), rid
@@ -418,11 +514,13 @@ def probe_snmp(host: str, port: int) -> list[Indicator]:
     base_raw, base_msg, base_err, base_rid = _query(
         host, port, "public", _OID_SYSDESCR, version=_VERSION_V2C
     )
+    base_version = _VERSION_V2C
     if base_err and not base_raw:
         # Retry SNMPv1 once — some agents only speak version-1(0).
         base_raw, base_msg, base_err, base_rid = _query(
             host, port, "public", _OID_SYSDESCR, version=_VERSION_V1
         )
+        base_version = _VERSION_V1
     if base_err and not base_raw:
         return skip_suite(_SNMP_SKIP, base_err, protocol="snmp", error=base_err)
 
@@ -489,7 +587,9 @@ def probe_snmp(host: str, port: int) -> list[Indicator]:
     accepted: list[str] = []
     auth_evidence: list[str] = []
     for community in communities:
-        raw, msg, err, _rid = _query(host, port, community, _OID_SYSDESCR)
+        raw, msg, err, _rid = _query(
+            host, port, community, _OID_SYSDESCR, version=base_version
+        )
         if msg is not None and _is_successful_get(msg):
             accepted.append(community)
             auth_evidence.append(f"{community}: success GetResponse")
@@ -503,8 +603,7 @@ def probe_snmp(host: str, port: int) -> list[Indicator]:
         else:
             auth_evidence.append(f"{community}: unparseable {raw[:32]!r}")
     auth_hit = len(accepted) == len(communities)
-    auth_skipped = False
-    auth_skip_reason = ""
+
     # --- invalid version facade ---
     fac_raw, fac_msg, fac_err, _fac_rid = _query(
         host,
@@ -518,12 +617,8 @@ def probe_snmp(host: str, port: int) -> list[Indicator]:
 
     # --- nonexistent OID should not return success data ---
     ns_raw, ns_msg, ns_err, _ns_rid = _query(
-        host, port, "public", _OID_GARBAGE, version=_VERSION_V2C
+        host, port, "public", _OID_GARBAGE, version=base_version
     )
-    if ns_err and not ns_raw:
-        ns_raw, ns_msg, ns_err, _ns_rid = _query(
-            host, port, "public", _OID_GARBAGE, version=_VERSION_V1
-        )
     nosuch_skipped = not ns_raw and bool(ns_err)
     nosuch_hit = False
     nosuch_detail = "noSuch handling not evaluated"
@@ -561,15 +656,120 @@ def probe_snmp(host: str, port: int) -> list[Indicator]:
         "device description",
     }
 
+    # --- GetNext must advance (RFC 1157 §4.1.3 / RFC 3416 §4.2.2) ---
+    gn_raw, gn_msg, gn_err, _gn_rid = _query(
+        host,
+        port,
+        "public",
+        _OID_SYSDESCR,
+        version=base_version,
+        pdu_type=_PDU_GET_NEXT_REQUEST,
+    )
+    getnext_skipped = not gn_raw and bool(gn_err)
+    getnext_hit = False
+    getnext_detail = "GetNext not evaluated"
+    if gn_msg is not None:
+        if _is_getnext_compliant(gn_msg, _OID_SYSDESCR):
+            next_oid = gn_msg.varbinds[0][0] if gn_msg.varbinds else ()
+            getnext_detail = (
+                f"GetNext advanced (next_oid={'.'.join(map(str, next_oid)) or 'exception/end'})"
+            )
+        elif _is_successful_get(gn_msg) and gn_msg.varbinds:
+            ret_oid = gn_msg.varbinds[0][0]
+            getnext_hit = True
+            getnext_detail = (
+                "GetNext returned success without advancing past sysDescr.0 "
+                f"(returned {'.'.join(map(str, ret_oid))})"
+            )
+        else:
+            getnext_detail = (
+                f"GetNext non-success (error_status={gn_msg.error_status})"
+            )
+    elif gn_raw:
+        getnext_hit = True
+        getnext_detail = "unparseable reply to GetNextRequest"
+    else:
+        getnext_skipped = True
+        getnext_detail = gn_err or "no reply to GetNextRequest (inconclusive)"
+
+    # --- ASN.1 types for standard MIB objects ---
+    type_notes: list[str] = []
+    type_hit = False
+    type_evaluated = False
+    oid_echo_notes: list[str] = []
+    oid_echo_hit = _varbind_oid_mismatch(base_msg, _OID_SYSDESCR)
+    if oid_echo_hit:
+        oid_echo_notes.append("Get(sysDescr.0) varbind name mismatch")
+    oid_echo_evaluated = _is_successful_get(base_msg)
+
+    for label, oid, expected_tag in (
+        ("sysObjectID.0", _OID_SYSOBJECTID, _TAG_OID),
+        ("sysUpTime.0", _OID_SYSUPTIME, _TAG_TIMETICKS),
+    ):
+        raw, msg, err, _rid = _query(
+            host, port, "public", oid, version=base_version
+        )
+        if msg is None:
+            if raw or err:
+                type_notes.append(f"{label}: unanswered/unparseable")
+            continue
+        if _varbind_oid_mismatch(msg, oid):
+            oid_echo_hit = True
+            oid_echo_evaluated = True
+            oid_echo_notes.append(
+                f"Get({label}) returned OID {'.'.join(map(str, msg.varbinds[0][0]))}"
+            )
+        if _is_successful_get(msg):
+            type_evaluated = True
+            oid_echo_evaluated = True
+            got_tag = msg.varbinds[0][2]
+            if got_tag != expected_tag:
+                type_hit = True
+                type_notes.append(
+                    f"{label}: tag 0x{got_tag:02x} (expected 0x{expected_tag:02x})"
+                )
+            else:
+                type_notes.append(f"{label}: type ok (0x{expected_tag:02x})")
+        elif _is_nosuch_compliant(msg):
+            type_notes.append(f"{label}: missing (compliant)")
+        else:
+            type_notes.append(f"{label}: error_status={msg.error_status}")
+
+    type_skipped = not type_evaluated
+    oid_echo_skipped = not oid_echo_evaluated
+
+    # --- bitwise-identical canned replies across distinct request-ids ---
+    clone_rid = (base_rid + 1) % 0x7FFFFFFF or 1
+    clone_raw, _clone_msg, clone_err, clone_sent_rid = _query(
+        host,
+        port,
+        "public",
+        _OID_SYSDESCR,
+        version=base_version,
+        request_id=clone_rid,
+    )
+    clone_skipped = not clone_raw and bool(clone_err)
+    clone_hit = False
+    clone_detail = "response clone not evaluated"
+    if base_raw and clone_raw:
+        if clone_sent_rid != base_rid and clone_raw == base_raw:
+            clone_hit = True
+            clone_detail = (
+                "two Get(sysDescr.0) requests with distinct request-ids received "
+                "bitwise-identical UDP payloads"
+            )
+        else:
+            clone_detail = "distinct Get(sysDescr.0) replies differed (not a canned clone)"
+    elif clone_err:
+        clone_skipped = True
+        clone_detail = clone_err or "no second Get reply (inconclusive)"
+
     return [
         Indicator(
             id="snmp.arbitrary_community",
             title="SNMP accepts two random community strings",
             category="arbitrary_auth",
             triggered=auth_hit,
-            skipped=auth_skipped,
-            skip_reason=auth_skip_reason,
-            error="",
             protocol="snmp",
             detail=(
                 "two independent random community strings both received successful GetResponses"
@@ -656,12 +856,86 @@ def probe_snmp(host: str, port: int) -> list[Indicator]:
             requires_corroboration=stock_requires,
             fidelity="medium",
         ),
+        Indicator(
+            id="snmp.getnext_stub",
+            title="SNMP GetNext does not advance past the requested OID",
+            category="static_signature",
+            triggered=getnext_hit,
+            skipped=getnext_skipped,
+            skip_reason=getnext_detail if getnext_skipped else "",
+            error=gn_err,
+            protocol="snmp",
+            detail=getnext_detail,
+            evidence=(gn_raw[:256].hex() if gn_raw else ""),
+            remediation=(
+                "Implement GetNext lexicographic advance or endOfMibView "
+                "(RFC 1157 §4.1.3 / RFC 3416 §4.2.2)"
+            ),
+            fidelity="high" if getnext_hit else "medium",
+        ),
+        Indicator(
+            id="snmp.type_facade",
+            title="SNMP returns wrong ASN.1 types for standard MIB objects",
+            category="static_signature",
+            triggered=type_hit,
+            skipped=type_skipped,
+            skip_reason="sysObjectID/sysUpTime types not evaluated" if type_skipped else "",
+            protocol="snmp",
+            detail=(
+                "; ".join(type_notes)
+                if type_notes
+                else "standard MIB types not evaluated"
+            ),
+            evidence="; ".join(type_notes)[:300],
+            remediation=(
+                "Return OBJECT IDENTIFIER for sysObjectID and TimeTicks for sysUpTime "
+                "(RFC 1213)"
+            ),
+            fidelity="high" if type_hit else "medium",
+        ),
+        Indicator(
+            id="snmp.oid_echo",
+            title="SNMP GetResponse varbind name does not match the requested OID",
+            category="static_signature",
+            triggered=oid_echo_hit,
+            skipped=oid_echo_skipped,
+            skip_reason="OID echo not evaluated" if oid_echo_skipped else "",
+            protocol="snmp",
+            detail=(
+                "; ".join(oid_echo_notes)
+                if oid_echo_hit
+                else "GetResponse varbind names matched requested OIDs"
+            ),
+            evidence="; ".join(oid_echo_notes)[:300],
+            remediation="Echo the requested OID in GetResponse varbind names (RFC 1157 §4.1.2)",
+            fidelity="high" if oid_echo_hit else "medium",
+        ),
+        Indicator(
+            id="snmp.response_clone",
+            title="SNMP returns bitwise-identical replies for distinct requests",
+            category="static_signature",
+            triggered=clone_hit,
+            skipped=clone_skipped,
+            skip_reason=clone_detail if clone_skipped else "",
+            error=clone_err,
+            protocol="snmp",
+            detail=clone_detail,
+            evidence=(
+                f"base={base_raw[:64].hex()} clone={clone_raw[:64].hex()}"
+                if base_raw and clone_raw
+                else (clone_raw[:128].hex() if clone_raw else base_raw[:128].hex())
+            ),
+            remediation="Parse each request and build a distinct GetResponse (echo request-id)",
+            fidelity="decisive" if clone_hit else "medium",
+        ),
     ]
 
 
 __all__ = [
     "build_get_request",
+    "build_getnext_request",
     "build_get_response",
+    "build_request",
     "parse_snmp_message",
     "probe_snmp",
 ]

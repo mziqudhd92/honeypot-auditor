@@ -119,7 +119,8 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "state_nonpersist": "",
         "static_signature": (
             "request-id echo · invalid version facade · noSuch success on missing OID · "
-            "BER/PDU framing · stock sysDescr lure"
+            "BER/PDU framing · stock sysDescr lure · GetNext stub · wrong MIB ASN.1 types · "
+            "OID-name echo · bitwise-identical canned replies"
         ),
     },
     "mysql": {
