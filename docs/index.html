@@ -511,9 +511,11 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
         </p>
         <p>
           Elasticsearch speaks the HTTP JSON API on <code>9200</code>/<code>19200</code> and scores
-          API non-compliance (root framing, stock cluster metadata, missing-index 200,
-          path/method stubs, <code>X-Elastic-Product</code>). Never writes indices or searches data.
-          Guide: <a href="ELASTICSEARCH.md"><code>docs/ELASTICSEARCH.md</code></a>.
+          API non-compliance via <strong>static_signature</strong> only (root framing, stock
+          cluster metadata, missing-index 200, path/method stubs, <code>/_cluster/health</code>
+          and <code>/_cat/health</code> shape facades, Content-Type / product header). Never writes
+          indices or searches data.
+          Full strategies guide: <a href="ELASTICSEARCH.md"><code>docs/ELASTICSEARCH.md</code></a>.
         </p>
         <p>
           <code>--deep</code> adds cross-protocol behavioral axes on top of the basic strategies above.
