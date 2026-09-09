@@ -8,7 +8,7 @@ Each service lives in its own module so reviewers can read one playbook at a tim
     probes/mysql.py     probes/git.py        probes/rdp.py
     probes/httpproxy.py probes/mssql.py     probes/mongodb.py
     probes/pop3.py      probes/imap.py       probes/mqtt.py
-    probes/snmp.py
+    probes/snmp.py      probes/elasticsearch.py
 
 Every protocol uses the same three strategies: arbitrary auth, state non-persistence,
 static signature (see ``PROTOCOL_STRATEGIES`` in config).
@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from honeypot_auditor.models import Indicator
+from honeypot_auditor.probes.elasticsearch import probe_elasticsearch
 from honeypot_auditor.probes.ftp import probe_ftp
 from honeypot_auditor.probes.git import probe_git
 from honeypot_auditor.probes.http import probe_http
@@ -66,6 +67,7 @@ PROBE_BY_PROTOCOL: dict[str, ProbeFn] = {
     "mongodb": probe_mongodb,
     "mqtt": probe_mqtt,
     "snmp": probe_snmp,
+    "elasticsearch": probe_elasticsearch,
 }
 
 try:
@@ -81,6 +83,7 @@ except Exception as exc:
 
 __all__ = [
     "PROBE_BY_PROTOCOL",
+    "probe_elasticsearch",
     "probe_ftp",
     "probe_git",
     "probe_http",

@@ -76,6 +76,20 @@ Prefer RFC facade / MIB-stub tells over banner IOCs alone — see [`SNMP.md`](SN
 
 Full strategy narrative, probe flow, and non-destructive policy: [`SNMP.md`](SNMP.md).
 
+### Elasticsearch API non-compliance (basic probe)
+
+Elasticsearch uses **static_signature** only (read-only HTTP JSON API; no auth/state axis).
+Prefer API facade / stub tells over banner IOCs — see [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `elasticsearch.stock_cluster` | static_signature | Stock cluster_name / version / tagline (may be corroboration-gated) |
+| `elasticsearch.missing_index_ok` / `path_facade` / `method_stub` | static_signature | High-fidelity API non-compliance |
+| `elasticsearch.product_header` | static_signature | Modern version without `X-Elastic-Product` |
+| `elasticsearch.root_framing` | static_signature | Non-speaker / malformed root document |
+
+Full indicator list and non-destructive policy: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
 **High-signal bonus**: +15% when any triggered indicator has `fidelity` of `high` or

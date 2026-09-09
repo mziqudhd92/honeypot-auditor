@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
+  detection: root framing, stock cluster/version/tagline, missing-index 200,
+  unknown-path root facade, `DELETE /` method stub, `X-Elastic-Product` mismatch
+  (`docs/ELASTICSEARCH.md`)
+
 ## [0.9.0] - 2026-09-08
 
 ### Added
