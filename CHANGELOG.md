@@ -6,6 +6,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-09-09
+
+### Changed
+
+- Redis detection strengthened for OpenCanary / Beehive-class RESP stubs:
+  - Dual random `AUTH` (both `+OK` required; fidelity **decisive**)
+  - State: reconnect key persistence + `DBSIZE` coherence (`FLUSHALL` still omitted)
+  - Split static indicators: `ping_stub`, `command_stub`, `info_frozen`, `help_client`,
+    `core_missing`, `eval_stub`, `config_stub`, `auth_wall`, `echo_mismatch`,
+    `incr_stub`, `type_stub`, `arity_facade`, `quit_zombie`
+  - `--safe-mode` limited to `PING` speakership / `ping_stub`
+- New probe guide `docs/REDIS.md`; scoring blurbs, README, site/FAQ/JSON-LD,
+  `llms.txt` / `llms-full.txt` / `agents.md` / `sitemap.xml` synced
+- Expanded Redis unit tests (compliant path, dual-auth gate, matcher edge cases)
+
 ## [0.9.0] - 2026-09-08
 
 ### Added

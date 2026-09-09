@@ -247,11 +247,21 @@ def test_match_smtp_placeholder_identity():
 
 def test_match_redis_class_tells():
     from honeypot_auditor.config import (
+        match_redis_arity_facade,
         match_redis_auth_any,
+        match_redis_auth_wall,
         match_redis_command_stub,
+        match_redis_config_stub,
+        match_redis_dbsize_incoherent,
+        match_redis_echo_mismatch,
+        match_redis_eval_stub,
         match_redis_flush_stub,
         match_redis_help_client,
+        match_redis_incr_stub,
         match_redis_info_template,
+        match_redis_ping_stub,
+        match_redis_quit_zombie,
+        match_redis_type_stub,
         match_redis_unknown_core,
     )
 
@@ -259,6 +269,7 @@ def test_match_redis_class_tells():
     assert match_redis_auth_any("-ERR AUTH called without any password configured") is None
     assert match_redis_command_stub("+OK\r\n")
     assert match_redis_command_stub("*1\r\n*7\r\n$3\r\nget\r\n") is None
+    assert match_redis_command_stub("-ERR unknown command `COMMAND`\r\n")
     assert match_redis_help_client("redis-cli 7.0.5\n~/.redisclirc")
     assert match_redis_help_client("ECHO message") is None
     assert match_redis_unknown_core("ECHO", "-ERR unknown command `ECHO`")
@@ -267,6 +278,50 @@ def test_match_redis_class_tells():
     assert match_redis_info_template(frozen, frozen)
     assert match_redis_flush_stub("$9\r\nprobe_val\r\n", "probe_val")
     assert match_redis_flush_stub("$-1\r\n", "probe_val") is None
+    assert match_redis_ping_stub("+OK\r\n")
+    assert match_redis_ping_stub("+PONG\r\n") is None
+    assert match_redis_ping_stub("+pong\r\n") is None
+    assert match_redis_ping_stub("-NOAUTH Authentication required.\r\n") is None
+    assert match_redis_ping_stub(":1\r\n")
+    assert match_redis_echo_mismatch("abcd", "+OK\r\n")
+    assert match_redis_echo_mismatch("abcd", "$4\r\nabcd\r\n") is None
+    assert match_redis_echo_mismatch("abcd", "$-1\r\n")
+    assert match_redis_echo_mismatch("abcd", "$4\r\nwxyz\r\n")
+    assert match_redis_echo_mismatch("abcd", "-ERR unknown command `ECHO`") is None
+    assert match_redis_incr_stub("+OK\r\n")
+    assert match_redis_incr_stub(":1\r\n") is None
+    assert match_redis_incr_stub("-WRONGTYPE Operation against a key\r\n") is None
+    assert match_redis_incr_stub("-NOAUTH Authentication required.\r\n") is None
+    assert match_redis_incr_stub("-ERR unknown command `INCR`\r\n")
+    assert match_redis_type_stub("+OK\r\n")
+    assert match_redis_type_stub("+string\r\n") is None
+    assert match_redis_type_stub("+hash\r\n")
+    assert match_redis_type_stub("-ERR unknown command `TYPE`\r\n")
+    assert match_redis_arity_facade("+OK\r\n")
+    assert match_redis_arity_facade("-ERR wrong number of arguments for 'get' command\r\n") is None
+    assert match_redis_arity_facade("$3\r\nfoo\r\n")
+    assert match_redis_arity_facade("-NOAUTH Authentication required.\r\n") is None
+    assert match_redis_dbsize_incoherent(True, ":0\r\n", ":0\r\n")
+    assert match_redis_dbsize_incoherent(True, ":0\r\n", ":1\r\n") is None
+    assert match_redis_dbsize_incoherent(False, ":0\r\n", ":0\r\n") is None
+    assert match_redis_dbsize_incoherent(True, ":0\r\n", "+OK\r\n")
+    assert match_redis_dbsize_incoherent(True, "", ":0\r\n")
+    assert match_redis_dbsize_incoherent(True, ":0\r\n", "-ERR unknown command `DBSIZE`\r\n")
+    assert match_redis_dbsize_incoherent(True, ":0\r\n", "-NOAUTH Authentication required.\r\n") is None
+    assert match_redis_quit_zombie("+OK\r\n", "+PONG\r\n")
+    assert match_redis_quit_zombie("+OK\r\n", "") is None
+    assert match_redis_quit_zombie("-ERR\r\n", "+PONG\r\n") is None
+    assert match_redis_eval_stub("+OK\r\n")
+    assert match_redis_eval_stub(":1\r\n") is None
+    assert match_redis_eval_stub("-ERR unknown command `EVAL`\r\n")
+    assert match_redis_config_stub("+OK\r\n")
+    assert match_redis_config_stub("*0\r\n") is None
+    assert match_redis_config_stub("-ERR wrong number of arguments for 'config|get' command\r\n")
+    assert match_redis_config_stub("-NOAUTH Authentication required.\r\n") is None
+    assert match_redis_auth_wall(
+        "-ERR invalid password\r\n", "-NOAUTH Authentication required.\r\n"
+    )
+    assert match_redis_auth_wall("-WRONGPASS invalid password\r\n", "*1\r\n$3\r\nget\r\n") is None
 
 
 def test_match_telnet_option_spray():

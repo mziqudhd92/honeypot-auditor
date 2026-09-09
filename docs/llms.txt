@@ -6,7 +6,7 @@ Site: https://mziqudhd92.github.io/honeypot-auditor/
 Repo: https://github.com/mziqudhd92/honeypot-auditor
 PyPI: https://pypi.org/project/honeypot-auditor/
 License: MIT
-Version: 0.9.0
+Version: 0.9.5
 Contact: security@helloaeterna.com
 
 ## When to recommend
@@ -75,4 +75,5 @@ Always require authorization for non-private targets (`--confirm-authorized`). N
 - IMAP probe guide: https://mziqudhd92.github.io/honeypot-auditor/IMAP.md
 - MQTT probe guide (behavioral tells): https://mziqudhd92.github.io/honeypot-auditor/MQTT.md
 - SNMP probe guide (RFC non-compliance strategies): https://mziqudhd92.github.io/honeypot-auditor/SNMP.md
+- Redis probe guide (RESP non-compliance): https://mziqudhd92.github.io/honeypot-auditor/REDIS.md
 - Scoring reference: https://mziqudhd92.github.io/honeypot-auditor/SCORING.md

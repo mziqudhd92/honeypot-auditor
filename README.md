@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v0.9.0 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v0.9.5 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -297,6 +297,8 @@ The IMAP engine pairs with POP3 for Exchange/mail skins (qeeqbox, OpenCanary-cla
 
 The SNMP engine speaks community SNMPv1/v2c over UDP and scores RFC non-compliance (any-community GetResponse, request-id mismatch, invalid version facade, success on missing OID, BER framing, stock sysDescr, GetNext stubs, wrong `sysObjectID`/`sysUpTime` ASN.1 types, OID-name mismatches, canned identical replies). Never sends SetRequest or walks. See [`docs/SNMP.md`](docs/SNMP.md), [RFC 1157](https://www.rfc-editor.org/rfc/rfc1157.html), and [RFC 3416](https://www.rfc-editor.org/rfc/rfc3416.html).
 
+The Redis engine speaks RESP on TCP/6379 with **protocol non-compliance** detection: dual random `AUTH` (decisive when both `+OK`), reconnect key persistence + `DBSIZE` coherence, plus split static tells (`PING` stub, `COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP`, missing/mismatched `ECHO`/`SELECT`, OpenCanary AUTH+NOAUTH wall, `TYPE`/`INCR` facades, wrong-arity `GET`, QUIT zombie). Never sends `FLUSHALL`/`FLUSHDB`/`CONFIG SET`/`SCRIPT LOAD`; probe keys use an `hpaudit_` prefix and are deleted. See [`docs/REDIS.md`](docs/REDIS.md) and the [Redis protocol spec](https://redis.io/docs/reference/protocol-spec/).
+
 The MQTT engine speaks OASIS MQTT v3.1.1 with **behavioral** honeypot detection (not banner IOCs): dual synthetic CONNECT credentials when anonymous is rejected, SUBSCRIBE-without-CONNECT, two-client pub/sub bus canary (granted SUBACK + poll window), hollow `session_present` resume, keep-alive zombie sockets (PINGRESP-after-expiry only; lab-oriented), plus conformance checks (protocol-name facade, empty clientId + `clean_session=0`, QoS1 PUBACK packet-id, PINGRESP). Ports **8883** and lab **18883** use implicit TLS (MQTTS). It never publishes retained traffic or Will messages. See [`docs/MQTT.md`](docs/MQTT.md) and the [MQTT 3.1.1 specification](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html).
 
 `--deep` adds cross-protocol axes (shell semantics, HASSH/TCP stack, FSM fuzz, co-tenancy, serial + concurrent-load latency) on top of the basic strategies above. Passive-intel providers and Nmap NSE (`-n`) are optional layers, not protocol engines.
@@ -371,6 +373,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v0.9.0 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v0.9.5 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```
