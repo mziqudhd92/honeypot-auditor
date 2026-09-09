@@ -92,6 +92,22 @@ IOCs alone — see [`REDIS.md`](REDIS.md).
 
 Full indicator list, probe flow, safe-mode, and non-destructive policy: [`REDIS.md`](REDIS.md).
 
+### Elasticsearch API non-compliance (basic probe)
+
+Elasticsearch uses **static_signature** only (read-only HTTP JSON API; no auth/state
+axis). Prefer path/method/endpoint facade tells over banner IOCs alone — full
+strategy narrative and probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `elasticsearch.missing_index_ok` / `path_facade` / `method_stub` | static_signature | High-fidelity API non-compliance |
+| `elasticsearch.cluster_health_stub` / `cat_stub` | static_signature | Health/cat endpoints echo root instead of proper shapes |
+| `elasticsearch.content_type` / `product_header` | static_signature | Wrong Content-Type; modern version without `X-Elastic-Product` |
+| `elasticsearch.stock_cluster` | static_signature | Stock cluster_name / version / tagline / uuid (may be corroboration-gated) |
+| `elasticsearch.root_framing` | static_signature | Non-speaker / malformed root document |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
 **High-signal bonus**: +15% when any triggered indicator has `fidelity` of `high` or

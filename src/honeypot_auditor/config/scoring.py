@@ -127,6 +127,16 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "OID-name echo · bitwise-identical canned replies"
         ),
     },
+    "elasticsearch": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "root framing · stock cluster/version/tagline/uuid · missing-index 200 · "
+            "unknown-path root facade · DELETE/PUT/HEAD method stubs · "
+            "/_cluster/health and /_cat/health shape facades · non-JSON Content-Type · "
+            "X-Elastic-Product mismatch"
+        ),
+    },
     "mysql": {
         "arbitrary_auth": "",
         "state_nonpersist": "drop after 1045 · wrong-seq ER 1156 · SSL-request silent drop",

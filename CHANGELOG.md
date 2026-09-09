@@ -6,6 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
+  detection: root framing, stock cluster/version/tagline/uuid, missing-index 200,
+  unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and
+  `/_cat/health` shape facades, non-JSON Content-Type, `X-Elastic-Product` mismatch
+  (`docs/ELASTICSEARCH.md`)
+
 ## [0.9.5] - 2026-09-09
 
 ### Changed
