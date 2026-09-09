@@ -320,16 +320,15 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
     root = _as_dict(_parse_json(body))
     root_ok = _is_es_root(root)
     framing_hit = not root_ok
-    if framing_hit:
-        framing_detail = (
-            "GET / did not return an Elasticsearch root document "
-            f"(status={status}, json_keys={sorted(root)[:8] if root else []})"
-        )
-    else:
-        assert root is not None
+    if root is not None and root_ok:
         framing_detail = (
             f"root ok cluster_name={root.get('cluster_name')!r} "
             f"version={_version_number(root)!r}"
+        )
+    else:
+        framing_detail = (
+            "GET / did not return an Elasticsearch root document "
+            f"(status={status}, json_keys={sorted(root)[:8] if root else []})"
         )
 
     if framing_hit:
@@ -362,7 +361,14 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
                 )
         return out
 
-    assert root is not None  # for type-checkers; root_ok guarantees shape
+    if root is None:
+        # `_is_es_root` already implies a dict; keep an explicit guard for type narrowing.
+        return skip_suite(
+            _ES_SKIP,
+            "not an Elasticsearch HTTP speaker",
+            protocol="elasticsearch",
+            error=err,
+        )
 
     if is_safe_mode():
         reason = "safe-mode: handshake-only probe"
@@ -486,8 +492,7 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
     health_hit = False
     health_detail = "cluster health not evaluated"
     if not health_skipped:
-        if ch_status == 200 and _is_cluster_health(ch_doc):
-            assert ch_doc is not None
+        if ch_status == 200 and ch_doc is not None and _is_cluster_health(ch_doc):
             health_detail = (
                 f"cluster health ok status={ch_doc.get('status')!r} "
                 f"nodes={ch_doc.get('number_of_nodes')}"
