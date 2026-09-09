@@ -6,7 +6,7 @@ import time
 from unittest.mock import patch
 
 import honeypot_auditor.probes.redis as redis_probe
-from honeypot_auditor.config import REDIS_PROBE_VALUE, PROTOCOL_STRATEGIES
+from honeypot_auditor.config import PROTOCOL_STRATEGIES, REDIS_PROBE_VALUE
 
 _BEEHIVE_INFO = (
     "$180\r\n"
