@@ -83,9 +83,10 @@ Prefer API facade / stub tells over banner IOCs — see [`ELASTICSEARCH.md`](ELA
 
 | ID | Category | Notes |
 |----|----------|-------|
-| `elasticsearch.stock_cluster` | static_signature | Stock cluster_name / version / tagline (may be corroboration-gated) |
+| `elasticsearch.stock_cluster` | static_signature | Stock cluster_name / version / tagline / uuid (may be corroboration-gated) |
 | `elasticsearch.missing_index_ok` / `path_facade` / `method_stub` | static_signature | High-fidelity API non-compliance |
-| `elasticsearch.product_header` | static_signature | Modern version without `X-Elastic-Product` |
+| `elasticsearch.cluster_health_stub` / `cat_stub` | static_signature | Health/cat endpoints echo root instead of proper shapes |
+| `elasticsearch.content_type` / `product_header` | static_signature | Wrong Content-Type; modern version without `X-Elastic-Product` |
 | `elasticsearch.root_framing` | static_signature | Non-speaker / malformed root document |
 
 Full indicator list and non-destructive policy: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).

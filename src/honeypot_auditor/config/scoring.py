@@ -127,8 +127,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "arbitrary_auth": "",
         "state_nonpersist": "",
         "static_signature": (
-            "root framing · stock cluster/version/tagline · missing-index 200 · "
-            "unknown-path root facade · DELETE / method stub · X-Elastic-Product mismatch"
+            "root framing · stock cluster/version/tagline/uuid · missing-index 200 · "
+            "unknown-path root facade · DELETE/PUT/HEAD method stubs · "
+            "/_cluster/health and /_cat/health shape facades · non-JSON Content-Type · "
+            "X-Elastic-Product mismatch"
         ),
     },
     "mysql": {
