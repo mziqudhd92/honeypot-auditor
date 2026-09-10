@@ -26,6 +26,16 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/REDIS.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://mziqudhd92.github.io/honeypot-auditor/MQTT.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>

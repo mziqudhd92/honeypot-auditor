@@ -30,7 +30,7 @@ Review focused on OSS readiness, safety, and maintainability. Items marked **fix
 | Missing LICENSE / CONTRIBUTING / SECURITY | **Fixed** | MIT + policy files added |
 | Missing CI | **Fixed** | GitHub Actions pytest workflow |
 | Paramiko `AutoAddPolicy` | **Accepted** | Fingerprinting tool; document in SECURITY.md |
-| Redis fallback persistence logic heuristic | **Open** | May false-negative on non-standard RESP |
+| Redis fallback persistence logic heuristic | **Mitigated** | Split RESP indicators + `DBSIZE` / dual-AUTH; see `docs/REDIS.md` |
 
 ## Test coverage
 

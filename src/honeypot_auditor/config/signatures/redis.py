@@ -74,6 +74,143 @@ def match_redis_unknown_core(cmd: str, reply: str) -> str | None:
     return None
 
 
+def match_redis_ping_stub(reply: str) -> str | None:
+    """PING must return +PONG (or an error); stubs often answer +OK."""
+    text = (reply or "").lstrip()
+    if not text:
+        return None
+    if text.upper().startswith("+PONG"):
+        return None
+    if text.startswith("-"):
+        return None
+    if text.startswith("+OK"):
+        return "PING returned +OK instead of +PONG"
+    if text.startswith(("+", "$", "*", ":")):
+        return "PING did not return +PONG"
+    return None
+
+
+def match_redis_echo_mismatch(token: str, reply: str) -> str | None:
+    """ECHO must return the bulk token; +OK / wrong payload is a facade."""
+    if match_redis_unknown_core("ECHO", reply):
+        return None
+    text = (reply or "").lstrip()
+    if not text or not token:
+        return None
+    if text.startswith("-"):
+        return None
+    if text.startswith("+OK"):
+        return "ECHO returned +OK instead of bulk string"
+    if text.startswith("$-1"):
+        return "ECHO returned null bulk"
+    if token not in reply:
+        return "ECHO did not echo the probe token"
+    return None
+
+
+def match_redis_incr_stub(reply: str) -> str | None:
+    """INCR must return an integer reply; stubs often return +OK."""
+    text = (reply or "").lstrip()
+    if not text:
+        return None
+    if text.startswith(":"):
+        return None
+    if "noauth" in text.lower() or "wrongtype" in text.lower():
+        return None
+    if text.startswith("+OK"):
+        return "INCR returned +OK instead of an integer"
+    if "unknown command" in text.lower():
+        return "INCR unimplemented"
+    if text.startswith("+"):
+        return "INCR did not return an integer reply"
+    return None
+
+
+def match_redis_type_stub(reply: str) -> str | None:
+    """TYPE on a string key must return +string."""
+    text = (reply or "").lstrip()
+    if not text:
+        return None
+    if text.lower().startswith("+string"):
+        return None
+    if "noauth" in text.lower():
+        return None
+    if text.startswith("+OK"):
+        return "TYPE returned +OK instead of +string"
+    if "unknown command" in text.lower():
+        return "TYPE unimplemented"
+    if text.startswith("+"):
+        return f"TYPE returned {text.splitlines()[0][:40]!r} for a string key"
+    return None
+
+
+def match_redis_arity_facade(reply: str) -> str | None:
+    """GET with zero args must be wrong-arity; +OK means the parser is a facade."""
+    text = (reply or "").lstrip()
+    if not text:
+        return None
+    if "wrong number of arguments" in text.lower():
+        return None
+    if "noauth" in text.lower():
+        return None
+    if "unknown command" in text.lower():
+        return None
+    if text.startswith("+OK"):
+        return "GET with no arguments returned +OK"
+    if text.startswith(("$", "*", ":")) and not text.startswith("-"):
+        return "GET with no arguments returned a value instead of wrong-arity"
+    return None
+
+
+def match_redis_dbsize_incoherent(
+    set_ok: bool, before: str, after: str
+) -> str | None:
+    """Successful SET should increase DBSIZE; stubs often stay at 0 or return +OK."""
+    if not set_ok:
+        return None
+    after_text = (after or "").lstrip()
+    if not after_text:
+        return None
+    if after_text.startswith("+OK"):
+        return "DBSIZE returned +OK instead of an integer"
+    if "unknown command" in after_text.lower():
+        return "DBSIZE unimplemented"
+    if "noauth" in after_text.lower():
+        return None
+
+    def _parse_int(blob: str) -> int | None:
+        text = (blob or "").lstrip()
+        if text.startswith(":"):
+            try:
+                return int(text[1:].splitlines()[0].strip())
+            except ValueError:
+                return None
+        return None
+
+    n_after = _parse_int(after)
+    if n_after is None:
+        return None
+    n_before = _parse_int(before)
+    if n_before is not None and n_after < n_before + 1:
+        return f"DBSIZE did not increase after SET ({n_before} → {n_after})"
+    if n_before is None and n_after == 0:
+        return "DBSIZE is 0 after a successful SET"
+    return None
+
+
+def match_redis_quit_zombie(quit_reply: str, post_quit: str) -> str | None:
+    """After QUIT +OK, real Redis closes; stubs often keep answering."""
+    quit_text = (quit_reply or "").lstrip()
+    post = (post_quit or "").lstrip()
+    if not quit_text.startswith("+OK"):
+        return None
+    if not post:
+        return None
+    if post.startswith(("+", "-", ":", "$", "*")):
+        return "connection still answers after QUIT"
+    return None
+
+
 def _redis_info_field(blob: str, key: str) -> str | None:
     prefix = f"{key}:"
     for line in (blob or "").replace("\r\n", "\n").splitlines():

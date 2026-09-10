@@ -99,9 +99,13 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": "RFB 3.8 VNC-auth only · canned Authentication failure · type-0 still challenges",
     },
     "redis": {
-        "arbitrary_auth": "AUTH any-password",
-        "state_nonpersist": "FLUSHALL no-op · key vanishes after reconnect",
-        "static_signature": "COMMAND stub · EVAL/CONFIG stub · AUTH-invalid+COMMAND NOAUTH wall · frozen INFO · missing ECHO/SELECT",
+        "arbitrary_auth": "two random AUTH passwords both +OK",
+        "state_nonpersist": "key vanishes after reconnect · DBSIZE ignores SET",
+        "static_signature": (
+            "PING stub · COMMAND/EVAL/CONFIG stub · AUTH-invalid+COMMAND NOAUTH wall · "
+            "frozen INFO · HELP redis-cli · missing/mismatched ECHO/SELECT · "
+            "TYPE/INCR facade · GET arity facade · QUIT zombie"
+        ),
     },
     "mqtt": {
         "arbitrary_auth": "two random CONNECT username/password pairs (when anon rejected)",
@@ -121,6 +125,16 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "request-id echo · invalid version facade · noSuch success on missing OID · "
             "BER/PDU framing · stock sysDescr lure · GetNext stub · wrong MIB ASN.1 types · "
             "OID-name echo · bitwise-identical canned replies"
+        ),
+    },
+    "elasticsearch": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "root framing · stock cluster/version/tagline/uuid · missing-index 200 · "
+            "unknown-path root facade · DELETE/PUT/HEAD method stubs · "
+            "/_cluster/health and /_cat/health shape facades · non-JSON Content-Type · "
+            "X-Elastic-Product mismatch"
         ),
     },
     "mysql": {

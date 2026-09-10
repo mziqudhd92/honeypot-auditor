@@ -76,11 +76,44 @@ Prefer RFC facade / MIB-stub tells over banner IOCs alone — see [`SNMP.md`](SN
 
 Full strategy narrative, probe flow, and non-destructive policy: [`SNMP.md`](SNMP.md).
 
+### Redis RESP non-compliance (basic probe)
+
+Redis uses all three basic strategies. Prefer RESP facade / state tells over banner
+IOCs alone — see [`REDIS.md`](REDIS.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `redis.arbitrary_auth` | arbitrary_auth | Decisive when hit; two random `AUTH` passwords both `+OK` |
+| `redis.persist` / `redis.dbsize` | state_nonpersist | Key vanishes on reconnect; `DBSIZE` ignores successful `SET` |
+| `redis.auth_wall` | static_signature | OpenCanary-class: always-invalid `AUTH` + `COMMAND` `NOAUTH` |
+| `redis.command_stub` / `redis.info_frozen` / `redis.ping_stub` | static_signature | Catalog / clock / `PING` facades (high fidelity) |
+| `redis.quit_zombie` / `redis.arity_facade` / `redis.echo_mismatch` | static_signature | Session + parser fidelity |
+| `redis.eval_stub` / `redis.config_stub` / `redis.type_stub` / `redis.incr_stub` | static_signature | Command-shape stubs |
+
+Full indicator list, probe flow, safe-mode, and non-destructive policy: [`REDIS.md`](REDIS.md).
+
+### Elasticsearch API non-compliance (basic probe)
+
+Elasticsearch uses **static_signature** only (read-only HTTP JSON API; no auth/state
+axis). Prefer path/method/endpoint facade tells over banner IOCs alone — full
+strategy narrative and probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `elasticsearch.missing_index_ok` / `path_facade` / `method_stub` | static_signature | High-fidelity API non-compliance |
+| `elasticsearch.cluster_health_stub` / `cat_stub` | static_signature | Health/cat endpoints echo root instead of proper shapes |
+| `elasticsearch.content_type` / `product_header` | static_signature | Wrong Content-Type; modern version without `X-Elastic-Product` |
+| `elasticsearch.stock_cluster` | static_signature | Stock cluster_name / version / tagline / uuid (may be corroboration-gated) |
+| `elasticsearch.root_framing` | static_signature | Non-speaker / malformed root document |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
 **High-signal bonus**: +15% when any triggered indicator has `fidelity` of `high` or
 `decisive` (set on the `Indicator`, not a hardcoded ID list). Examples:
-`ssh.kex_facade`, `pop3.auth_failed_blanket`, `imap.auth_failed_blanket`.
+`ssh.kex_facade`, `pop3.auth_failed_blanket`, `imap.auth_failed_blanket`,
+`redis.arbitrary_auth`, `snmp.arbitrary_community`.
 
 The calculation is additive and capped:
 
