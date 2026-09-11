@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Silence Paramiko Transport-thread stderr spam (`Error reading SSH protocol banner`
+  / connection reset) during normal SSH fingerprinting; failures still map to
+  skipped/closed indicators
+
 ### Added
 
 - Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance

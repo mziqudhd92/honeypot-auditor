@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 import time
 from contextlib import suppress
@@ -9,6 +10,29 @@ from contextlib import suppress
 from honeypot_auditor.config import PROBE_PASSWORD_TEMPLATE, PROBE_USERNAME_TEMPLATE
 from honeypot_auditor.models import optional_import
 from honeypot_auditor.settings import settings
+
+_PARAMIKO_LOGGING_CONFIGURED = False
+
+
+def configure_paramiko_logging() -> None:
+    """Quiet Paramiko's background Transport thread during expected probe failures.
+
+    When a peer resets or closes during banner/KEX, Paramiko logs
+    ``SSHException: Error reading SSH protocol banner`` at ERROR with a full
+    traceback from its client thread. Fingerprinting treats that as a normal
+    skip/closed path; the noise is not actionable for operators. Idempotent.
+    """
+    global _PARAMIKO_LOGGING_CONFIGURED
+    if _PARAMIKO_LOGGING_CONFIGURED:
+        return
+    for name in ("paramiko", "paramiko.transport"):
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.CRITICAL)
+        # Keep records out of the root logger / Rich console.
+        logger.propagate = False
+        if not logger.handlers:
+            logger.addHandler(logging.NullHandler())
+    _PARAMIKO_LOGGING_CONFIGURED = True
 
 
 def random_creds() -> tuple[str, str]:
@@ -20,6 +44,7 @@ def try_ssh_auth(host: str, port: int, user: str, password: str):
     paramiko = optional_import("paramiko")
     if paramiko is None:
         return None, "paramiko not installed"
+    configure_paramiko_logging()
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
@@ -52,6 +77,7 @@ def probe_ssh_auth_methods(
     paramiko = optional_import("paramiko")
     if paramiko is None:
         return [], "", "paramiko not installed"
+    configure_paramiko_logging()
     from honeypot_auditor.proxy_transport import paramiko_proxy_sock
 
     transport = None

@@ -925,6 +925,11 @@ async def run_audit(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Paramiko Transport threads otherwise dump banner-reset tracebacks to stderr
+    # during normal SSH fingerprinting of closed/reset peers.
+    from honeypot_auditor.sshutil import configure_paramiko_logging
+
+    configure_paramiko_logging()
     argv = _normalize_argv(argv)
     if argv and argv[0] == "check-sig":
         return run_check_sig(argv[1:])
