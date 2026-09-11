@@ -73,26 +73,37 @@ _ES_SKIP = (
     ),
 )
 
-_STOCK_CLUSTER_NAMES = frozenset(
+# Decisive lure names — rare outside honeypots; score without corroboration.
+_STOCK_CLUSTER_NAMES_DECISIVE = frozenset(
     {
-        "elasticsearch",
-        "docker-cluster",
         "elastichoney",
         "honeypot",
         "elastic-honeypot",
         "es-honeypot",
+    }
+)
+# Generic / docker defaults — common on real clusters; corroboration-gated.
+_STOCK_CLUSTER_NAMES_GENERIC = frozenset(
+    {
+        "elasticsearch",
+        "docker-cluster",
         "test-cluster",
         "opensearch",
         "es-docker-cluster",
         "docker-compose",
     }
 )
+_STOCK_CLUSTER_NAMES = _STOCK_CLUSTER_NAMES_DECISIVE | _STOCK_CLUSTER_NAMES_GENERIC
 
-_STOCK_NODE_NAMES = frozenset(
+_STOCK_NODE_NAMES_DECISIVE = frozenset(
     {
         "elastichoney",
         "honeypot",
         "es-honeypot",
+    }
+)
+_STOCK_NODE_NAMES_GENERIC = frozenset(
+    {
         "node-1",
         "elasticsearch",
         "es01",
@@ -100,15 +111,19 @@ _STOCK_NODE_NAMES = frozenset(
         "docker-node",
     }
 )
+_STOCK_NODE_NAMES = _STOCK_NODE_NAMES_DECISIVE | _STOCK_NODE_NAMES_GENERIC
 
-_STOCK_TAGLINES = (
-    "the open search project",
+_STOCK_TAGLINES_DECISIVE = (
     "elastichoney",
     "fake elasticsearch",
     "honeypot search",
 )
+# OpenSearch default tagline appears on real OpenSearch deployments too.
+_STOCK_TAGLINES_GENERIC = ("the open search project",)
+_STOCK_TAGLINES = _STOCK_TAGLINES_DECISIVE + _STOCK_TAGLINES_GENERIC
 
-_STOCK_VERSIONS = frozenset(
+# Long-EOL / frozen lure versions — decisive.
+_STOCK_VERSIONS_FROZEN = frozenset(
     {
         "1.4.1",
         "1.4.2",
@@ -118,6 +133,11 @@ _STOCK_VERSIONS = frozenset(
         "2.4.6",
         "5.0.0",
         "5.6.16",
+    }
+)
+# Still widely deployed release numbers — match but require corroboration alone.
+_STOCK_VERSIONS_COMMON = frozenset(
+    {
         "6.8.0",
         "7.0.0",
         "7.10.0",
@@ -126,6 +146,7 @@ _STOCK_VERSIONS = frozenset(
         "8.0.0",
     }
 )
+_STOCK_VERSIONS = _STOCK_VERSIONS_FROZEN | _STOCK_VERSIONS_COMMON
 
 _STOCK_CLUSTER_UUIDS = frozenset(
     {
@@ -253,26 +274,53 @@ def _major_minor_patch(version: str) -> tuple[int, int, int] | None:
     return int(match.group(1)), int(match.group(2)), int(match.group(3))
 
 
-def _stock_cluster_hit(doc: dict[str, Any]) -> str | None:
+def _stock_cluster_assessment(doc: dict[str, Any]) -> tuple[str | None, bool]:
+    """Return ``(detail, requires_corroboration)`` for stock lure metadata.
+
+    Decisive tokens (honeypot names, frozen EOL versions, canned UUIDs) score
+    alone. Generic docker/default names and still-deployed release numbers only
+    contribute when another category hit corroborates them.
+    """
     cluster = str(doc.get("cluster_name") or "").strip().lower()
     name = str(doc.get("name") or "").strip().lower()
     tagline = str(doc.get("tagline") or "").strip().lower()
     version = _version_number(doc).strip()
     uuid = str(doc.get("cluster_uuid") or "").strip().lower()
     hits: list[str] = []
-    if cluster in _STOCK_CLUSTER_NAMES:
+    decisive = False
+    if cluster in _STOCK_CLUSTER_NAMES_DECISIVE:
         hits.append(f"cluster_name={cluster}")
-    if name in _STOCK_NODE_NAMES:
+        decisive = True
+    elif cluster in _STOCK_CLUSTER_NAMES_GENERIC:
+        hits.append(f"cluster_name={cluster}")
+    if name in _STOCK_NODE_NAMES_DECISIVE:
         hits.append(f"name={name}")
-    for tell in _STOCK_TAGLINES:
+        decisive = True
+    elif name in _STOCK_NODE_NAMES_GENERIC:
+        hits.append(f"name={name}")
+    for tell in _STOCK_TAGLINES_DECISIVE:
         if tell in tagline:
             hits.append(f"tagline~{tell}")
+            decisive = True
             break
-    if version in _STOCK_VERSIONS:
+    else:
+        for tell in _STOCK_TAGLINES_GENERIC:
+            if tell in tagline:
+                hits.append(f"tagline~{tell}")
+                break
+    if version in _STOCK_VERSIONS_FROZEN:
+        hits.append(f"version={version}")
+        decisive = True
+    elif version in _STOCK_VERSIONS_COMMON:
         hits.append(f"version={version}")
     if uuid in _STOCK_CLUSTER_UUIDS or (uuid and len(uuid) < 8):
         hits.append(f"cluster_uuid={uuid}")
-    return "; ".join(hits) if hits else None
+        decisive = True
+    if not hits:
+        return None, False
+    # Generic cluster names stay corroboration-gated even alongside decisive tokens.
+    requires = (not decisive) or cluster in _STOCK_CLUSTER_NAMES_GENERIC
+    return "; ".join(hits), requires
 
 
 def _looks_like_index_missing(status: int, doc: dict[str, Any] | None) -> bool:
@@ -392,16 +440,8 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
         return safe_out
 
     # --- stock cluster / version / tagline / uuid ---
-    stock_detail = _stock_cluster_hit(root)
+    stock_detail, stock_requires = _stock_cluster_assessment(root)
     stock_hit = bool(stock_detail)
-    cluster_l = str(root.get("cluster_name") or "").strip().lower()
-    stock_requires = cluster_l in {
-        "elasticsearch",
-        "opensearch",
-        "docker-cluster",
-        "test-cluster",
-        "es-docker-cluster",
-    }
 
     # --- Content-Type should advertise JSON for a JSON root ---
     ctype = headers.get("content-type", "")

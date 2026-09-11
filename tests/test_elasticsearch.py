@@ -122,11 +122,81 @@ def test_es_honeypot_tells_fire():
         inds = es.probe_elasticsearch("127.0.0.1", 9200)
     by_id = {ind.id: ind for ind in inds}
     assert by_id["elasticsearch.stock_cluster"].triggered
+    # Generic cluster_name=elasticsearch stays corroboration-gated.
+    assert by_id["elasticsearch.stock_cluster"].requires_corroboration
     assert by_id["elasticsearch.missing_index_ok"].triggered
     assert by_id["elasticsearch.path_facade"].triggered
     assert by_id["elasticsearch.method_stub"].triggered
     assert by_id["elasticsearch.cluster_health_stub"].triggered
     assert by_id["elasticsearch.cat_stub"].triggered
+
+
+def test_es_common_version_alone_requires_corroboration():
+    """Production-shaped cluster on a still-deployed release must not score alone."""
+    root = {
+        "name": "node-prod-1",
+        "cluster_name": "prod-logs-eu",
+        "cluster_uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "version": {"number": "7.17.0", "build_flavor": "default"},
+        "tagline": "You Know, for Search",
+    }
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET / HTTP/"):
+            return _http_bytes(200, root, headers={"X-Elastic-Product": "Elasticsearch"}), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with patch.object(es, "tcp_transact", side_effect=fake_tcp):
+        inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    stock = {i.id: i for i in inds}["elasticsearch.stock_cluster"]
+    assert stock.triggered
+    assert stock.requires_corroboration
+    assert "version=7.17.0" in stock.detail
+
+
+def test_es_frozen_version_on_unique_cluster_is_decisive():
+    root = {
+        "name": "node-prod-1",
+        "cluster_name": "prod-logs-eu",
+        "cluster_uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "version": {"number": "1.4.4", "build_flavor": "default"},
+        "tagline": "You Know, for Search",
+    }
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET / HTTP/"):
+            return _http_bytes(200, root), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with patch.object(es, "tcp_transact", side_effect=fake_tcp):
+        inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    stock = {i.id: i for i in inds}["elasticsearch.stock_cluster"]
+    assert stock.triggered
+    assert not stock.requires_corroboration
+    assert "version=1.4.4" in stock.detail
+
+
+def test_es_generic_node_name_alone_requires_corroboration():
+    root = dict(_ROOT)
+    root["name"] = "node-1"
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET / HTTP/"):
+            return _http_bytes(200, root, headers={"X-Elastic-Product": "Elasticsearch"}), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with patch.object(es, "tcp_transact", side_effect=fake_tcp):
+        inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    stock = {i.id: i for i in inds}["elasticsearch.stock_cluster"]
+    assert stock.triggered
+    assert stock.requires_corroboration
+    assert "name=node-1" in stock.detail
 
 
 def test_es_product_header_mismatch_on_modern_version():
