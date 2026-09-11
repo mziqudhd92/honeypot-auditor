@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 from honeypot_auditor import sshutil
+
+
+def test_configure_paramiko_logging_is_idempotent_and_critical():
+    sshutil._PARAMIKO_LOGGING_CONFIGURED = False
+    sshutil.configure_paramiko_logging()
+    sshutil.configure_paramiko_logging()
+    for name in ("paramiko", "paramiko.transport"):
+        logger = logging.getLogger(name)
+        assert logger.level == logging.CRITICAL
+        assert logger.propagate is False
+    assert sshutil._PARAMIKO_LOGGING_CONFIGURED is True
 
 
 def test_random_creds_format():

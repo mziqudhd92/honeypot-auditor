@@ -23,7 +23,11 @@ from honeypot_auditor.probes.shell_cti import (
 )
 from honeypot_auditor.proxy_transport import paramiko_proxy_sock
 from honeypot_auditor.settings import settings
-from honeypot_auditor.sshutil import probe_ssh_auth_methods, try_ssh_auth
+from honeypot_auditor.sshutil import (
+    configure_paramiko_logging,
+    probe_ssh_auth_methods,
+    try_ssh_auth,
+)
 
 _SSH_SKIP = (
     ("ssh.banner", "SSH static banner signature", "static_signature"),
@@ -130,6 +134,7 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
     paramiko = optional_import("paramiko")
     if paramiko is None:
         return skip_suite(_SSH_SKIP, "paramiko not installed", protocol="ssh")
+    configure_paramiko_logging()
 
     # Pre-auth KEX facade (password-gated Cowrie still leaks Twisted suite shape).
     hs_banner, hs_kex, hs_raw, hs_err = _capture_ssh_handshake(host, port)
