@@ -90,6 +90,8 @@ made Cowrie sweat in `'09 and still catches clones in `'26.
 |---------|---------|
 | `pip install honeypot-auditor` | Core probes (Paramiko + Requests + Rich + figlet header) |
 | `pip install "honeypot-auditor[full]"` | + Nmap integration · SMB/Impacket · Shodan SDK · Scapy · deep telnet |
+| `sudo snap install honeypot-auditor` | Snap Store (strict); see [docs/PUBLISHING.md](docs/PUBLISHING.md) |
+| `sudo apt install honeypot-auditor` | Ubuntu via `ppa:ls1911/honeypot-auditor` (Noble) |
 
 `SHODAN_API_KEY` or `--shodan-key` enables Shodan OSINT (opt-in — not queried otherwise). `[full]` only installs the client lib.
 The Nmap executable is a separate trusted system installation.

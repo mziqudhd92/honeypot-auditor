@@ -1,0 +1,56 @@
+name: honeypot-auditor
+base: core24
+# Overridden from pyproject.toml in override-pull.
+version: "0.9.5"
+summary: Multi-protocol honeypot fingerprinter for authorized targets
+description: |
+  honeypot-auditor fingerprints whether an authorized target behaves like a
+  low-interaction honeypot. It runs banner and protocol-state probes across
+  SSH, HTTP, Redis, MQTT, SNMP, Elasticsearch, and other common services,
+  then scores the result without sending exploits.
+
+  Authorized targets only. Public IPs require --confirm-authorized.
+
+  Optional nmap-backed recon (-n) is limited under strict confinement; use
+  the .deb/PPA or pip install for full nmap integration.
+
+  Website: https://mziqudhd92.github.io/honeypot-auditor/
+  Source: https://github.com/mziqudhd92/honeypot-auditor
+
+grade: stable
+confinement: strict
+license: MIT
+issues: https://github.com/mziqudhd92/honeypot-auditor/issues
+website: https://mziqudhd92.github.io/honeypot-auditor/
+source-code: https://github.com/mziqudhd92/honeypot-auditor
+contact: security@helloaeterna.com
+
+apps:
+  honeypot-auditor:
+    command: bin/honeypot-auditor
+    plugs:
+      - network
+      - network-bind
+      - home
+      - removable-media
+
+parts:
+  honeypot-auditor:
+    plugin: python
+    source: .
+    source-type: local
+    python-requirements:
+      - requirements-snap.txt
+    build-packages:
+      - python3-venv
+      - python3-pip
+      - python3-setuptools
+      - python3-wheel
+      - libffi-dev
+      - libssl-dev
+      - gcc
+      - g++
+    override-pull: |
+      craftctl default
+      VERSION="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+      craftctl set version="$VERSION"

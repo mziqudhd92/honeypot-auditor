@@ -1,0 +1,120 @@
+name: Publish PPA
+
+# Builds a signed Debian source package and uploads to Launchpad
+# (ppa:ls1911/honeypot-auditor, Noble). Requires Launchpad GPG secrets.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and sign but do not dput
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-ppa-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DEBFULLNAME: Moran Zavdi
+  DEBEMAIL: security@helloaeterna.com
+  PPA_TARGET: ppa:ls1911/honeypot-auditor
+  UBUNTU_SERIES: noble
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment: ppa
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential debhelper dh-python devscripts dput \
+            python3-all python3-setuptools python3-wheel \
+            python3-rich python3-paramiko python3-requests python3-pyfiglet \
+            gnupg
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            PKG=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+            test "$TAG" = "$PKG" || { echo "Tag v$TAG != pyproject version $PKG"; exit 1; }
+            echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          else
+            PKG=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+            echo "version=$PKG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync debian/changelog for series
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          # Native package: version == upstream version (no -1 revision).
+          export DEBFULLNAME DEBEMAIL
+          if head -1 debian/changelog | grep -q "^honeypot-auditor (${VERSION})"; then
+            # Ensure distribution is the PPA series.
+            sed -i "1s/).*; urgency=/) ${UBUNTU_SERIES}; urgency=/" debian/changelog
+          else
+            dch --create --package honeypot-auditor --newversion "${VERSION}" \
+              --distribution "${UBUNTU_SERIES}" \
+              "Release ${VERSION} to ${PPA_TARGET}."
+          fi
+          head -5 debian/changelog
+
+      - name: Import Launchpad signing key
+        env:
+          LAUNCHPAD_GPG_PRIVATE_KEY: ${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}
+          LAUNCHPAD_GPG_PASSPHRASE: ${{ secrets.LAUNCHPAD_GPG_PASSPHRASE }}
+        run: |
+          test -n "$LAUNCHPAD_GPG_PRIVATE_KEY" || { echo "Missing LAUNCHPAD_GPG_PRIVATE_KEY"; exit 1; }
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          printf '%s\n' "$LAUNCHPAD_GPG_PRIVATE_KEY" | gpg --batch --import
+          # Cache passphrase for debsign when set.
+          if [[ -n "${LAUNCHPAD_GPG_PASSPHRASE}" ]]; then
+            echo "allow-preset-passphrase" >> ~/.gnupg/gpg-agent.conf
+            gpgconf --reload gpg-agent || true
+            KEYGRIP=$(gpg --list-secret-keys --with-keygrip --with-colons | awk -F: '/^grp:/ {print $10; exit}')
+            if [[ -n "$KEYGRIP" ]]; then
+              printf '%s' "$LAUNCHPAD_GPG_PASSPHRASE" | \
+                /usr/lib/gnupg/gpg-preset-passphrase --preset "$KEYGRIP" || true
+            fi
+          fi
+          gpg --list-secret-keys --keyid-format long
+
+      - name: Build signed source package
+        env:
+          LAUNCHPAD_GPG_PASSPHRASE: ${{ secrets.LAUNCHPAD_GPG_PASSPHRASE }}
+        run: |
+          if [[ -n "${LAUNCHPAD_GPG_PASSPHRASE}" ]]; then
+            # Native package (debian/ in upstream): source-only, no separate .orig.
+            debuild -S -d -us -uc
+            KEYID=$(gpg --list-secret-keys --keyid-format long --with-colons | awk -F: '/^sec:/ {print $5; exit}')
+            printf '%s\n' "$LAUNCHPAD_GPG_PASSPHRASE" | \
+              debsign -p"--pinentry-mode loopback --passphrase-fd 0" -k"$KEYID" ../*.changes
+          else
+            debuild -S -d
+          fi
+          ls -la ../*.dsc ../*.changes ../*.tar.* || ls -la ../*
+
+      - name: Upload to Launchpad PPA
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: |
+          dput --unchecked "${PPA_TARGET}" ../*_source.changes
+
+      - name: Dry-run summary
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          echo "Dry run — would upload:"
+          ls -la ../*_source.changes ../*.dsc
+          echo "Target: ${PPA_TARGET} (${UBUNTU_SERIES})"
