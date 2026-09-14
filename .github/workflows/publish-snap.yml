@@ -1,0 +1,53 @@
+name: Publish Snap
+
+# Builds and publishes to the Snap Store on version tags (edge→candidate
+# channel set via SNAP_RELEASE env; default candidate for tagged releases).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Snap Store channel to release to
+        required: true
+        default: candidate
+        type: choice
+        options:
+          - edge
+          - beta
+          - candidate
+          - stable
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-snap-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    environment: snap
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          test "$TAG" = "$PKG" || { echo "Tag v$TAG != pyproject version $PKG"; exit 1; }
+
+      - name: Build snap
+        uses: snapcore/action-build@3bdaa03e1ba6bf59a65f84a751d943d549a54e79 # v1.3.0
+        id: build
+
+      - name: Publish snap
+        uses: snapcore/action-publish@214b86e5ca036ead1668c79afb81e550e6c54d40 # v1.2.0
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'candidate' }}

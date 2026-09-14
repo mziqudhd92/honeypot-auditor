@@ -6,19 +6,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Snap Store packaging (`snap/snapcraft.yaml`, strict / `core24`) and tag workflow
+  `publish-snap.yml` (releases to `candidate`)
+- Ubuntu PPA packaging (`debian/`) for `ppa:ls1911/honeypot-auditor` (Noble) and
+  tag workflow `publish-ppa.yml` (signed source upload via Launchpad GPG secrets)
+- Publishing guide expanded for Snap + PPA one-time setup (`docs/PUBLISHING.md`)
+
 ### Fixed
 
+- Gate common Elasticsearch stock versions (`7.17.0`, `8.0.0`, …) and generic
+  node names behind corroboration for `elasticsearch.stock_cluster`
 - Silence Paramiko Transport-thread stderr spam (`Error reading SSH protocol banner`
   / connection reset) during normal SSH fingerprinting; failures still map to
   skipped/closed indicators
-
-### Added
-
-- Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
-  detection: root framing, stock cluster/version/tagline/uuid, missing-index 200,
-  unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and
-  `/_cat/health` shape facades, non-JSON Content-Type, `X-Elastic-Product` mismatch
-  (`docs/ELASTICSEARCH.md`)
 
 ## [0.9.5] - 2026-09-09
 

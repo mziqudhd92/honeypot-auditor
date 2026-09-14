@@ -1,0 +1,15 @@
+# Runtime deps bundled into the Snap (core + [full] extras).
+# Keep in sync with pyproject.toml [project.dependencies] and [project.optional-dependencies].full
+rich>=13.0
+rich-argparse>=1.5
+pyfiglet>=1.0
+paramiko>=3.0
+requests>=2.31
+python-nmap>=0.7.1
+impacket>=0.11
+telnetlib3>=2.0
+redis>=5.0
+shodan>=1.31
+scapy>=2.5
+PySocks>=1.7.1
+pyyaml>=6.0

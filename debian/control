@@ -1,0 +1,47 @@
+Source: honeypot-auditor
+Section: net
+Priority: optional
+Maintainer: Moran Zavdi <security@helloaeterna.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-python,
+ python3-all,
+ python3-setuptools,
+ python3-wheel,
+ python3-rich,
+ python3-paramiko,
+ python3-requests,
+ python3-pyfiglet
+Standards-Version: 4.7.0
+Homepage: https://github.com/mziqudhd92/honeypot-auditor
+Vcs-Git: https://github.com/mziqudhd92/honeypot-auditor.git
+Vcs-Browser: https://github.com/mziqudhd92/honeypot-auditor
+Rules-Requires-Root: no
+
+Package: honeypot-auditor
+Architecture: all
+Depends:
+ ${python3:Depends},
+ ${misc:Depends},
+ python3-rich,
+ python3-paramiko,
+ python3-requests,
+ python3-pyfiglet
+Recommends:
+ nmap
+Suggests:
+ python3-redis,
+ python3-yaml,
+ python3-socks,
+ python3-scapy
+Description: Multi-protocol honeypot fingerprinter CLI
+ honeypot-auditor fingerprints whether an authorized target behaves like a
+ low-interaction honeypot. It probes banners and protocol state across common
+ services (SSH, HTTP, Redis, MQTT, SNMP, Elasticsearch, and others) and
+ produces a weighted score without sending exploits.
+ .
+ Public targets require an explicit --confirm-authorized flag. Probe only
+ systems you own or have permission to test.
+ .
+ Optional features (nmap version scans, Redis client helpers, SOCKS, Scapy)
+ are available via Recommends/Suggests or pip install "honeypot-auditor[full]".

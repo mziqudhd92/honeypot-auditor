@@ -1,0 +1,5 @@
+honeypot-auditor (0.9.5) noble; urgency=medium
+
+  * Initial Ubuntu packaging for ppa:ls1911/honeypot-auditor (Noble).
+
+ -- Moran Zavdi <security@helloaeterna.com>  Mon, 14 Sep 2026 09:00:00 +0000

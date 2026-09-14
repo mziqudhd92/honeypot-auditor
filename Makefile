@@ -1,4 +1,4 @@
-.PHONY: install test test-cov lint security build clean
+.PHONY: install test test-cov lint security build clean snap deb-src
 
 install:
 	pip install -e ".[full,dev,security]"
@@ -27,6 +27,14 @@ security:
 build:
 	python -m build
 
+snap:
+	snapcraft pack
+
+deb-src:
+	debuild -S -d
+
 clean:
 	rm -rf .pytest_cache .ruff_cache htmlcov coverage.xml .coverage .coverage.* dist build *.egg-info
+	rm -rf parts prime stage *.snap
+	rm -rf debian/.debhelper debian/honeypot-auditor debian/files debian/*.substvars debian/*.debhelper.log
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

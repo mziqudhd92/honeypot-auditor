@@ -32,3 +32,23 @@ docs/demo/*.raw.cast
 pyvenv.cfg
 /bin/
 /lib/
+
+# Snapcraft
+*.snap
+parts/
+prime/
+stage/
+snap/.snapcraft/
+.snapcraft/
+
+# Debian package build artifacts
+debian/.debhelper/
+debian/honeypot-auditor/
+debian/files
+debian/*.substvars
+debian/*.debhelper.log
+debian/*.debhelper
+../honeypot-auditor_*.dsc
+../honeypot-auditor_*.tar.*
+../honeypot-auditor_*.changes
+../honeypot-auditor_*.build*
