@@ -277,9 +277,11 @@ def _major_minor_patch(version: str) -> tuple[int, int, int] | None:
 def _stock_cluster_assessment(doc: dict[str, Any]) -> tuple[str | None, bool]:
     """Return ``(detail, requires_corroboration)`` for stock lure metadata.
 
-    Decisive tokens (honeypot names, frozen EOL versions, canned UUIDs) score
-    alone. Generic docker/default names and still-deployed release numbers only
-    contribute when another category hit corroborates them.
+    Decisive tokens (honeypot names, frozen EOL versions, canned UUIDs in
+    ``_STOCK_CLUSTER_UUIDS``) score alone. Generic docker/default names,
+    still-deployed release numbers, and short/truncated UUIDs only contribute
+    when another category hit corroborates them — or when mixed with a
+    decisive token on the same root document.
     """
     cluster = str(doc.get("cluster_name") or "").strip().lower()
     name = str(doc.get("name") or "").strip().lower()
@@ -313,13 +315,15 @@ def _stock_cluster_assessment(doc: dict[str, Any]) -> tuple[str | None, bool]:
         decisive = True
     elif version in _STOCK_VERSIONS_COMMON:
         hits.append(f"version={version}")
-    if uuid in _STOCK_CLUSTER_UUIDS or (uuid and len(uuid) < 8):
+    if uuid in _STOCK_CLUSTER_UUIDS:
         hits.append(f"cluster_uuid={uuid}")
         decisive = True
+    elif uuid and len(uuid) < 8:
+        # Truncated/placeholder UUIDs are a weak tell alone (not decisive).
+        hits.append(f"cluster_uuid={uuid}")
     if not hits:
         return None, False
-    # Generic cluster names stay corroboration-gated even alongside decisive tokens.
-    requires = (not decisive) or cluster in _STOCK_CLUSTER_NAMES_GENERIC
+    requires = not decisive
     return "; ".join(hits), requires
 
 

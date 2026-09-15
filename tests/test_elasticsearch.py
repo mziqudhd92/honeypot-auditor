@@ -6,6 +6,8 @@ import json
 from unittest.mock import patch
 
 import honeypot_auditor.probes.elasticsearch as es
+from honeypot_auditor.analyzer import build_report
+from honeypot_auditor.models import Indicator
 from honeypot_auditor.settings import settings
 
 
@@ -122,8 +124,8 @@ def test_es_honeypot_tells_fire():
         inds = es.probe_elasticsearch("127.0.0.1", 9200)
     by_id = {ind.id: ind for ind in inds}
     assert by_id["elasticsearch.stock_cluster"].triggered
-    # Generic cluster_name=elasticsearch stays corroboration-gated.
-    assert by_id["elasticsearch.stock_cluster"].requires_corroboration
+    # Decisive name/version/UUID combinations should score without corroboration.
+    assert not by_id["elasticsearch.stock_cluster"].requires_corroboration
     assert by_id["elasticsearch.missing_index_ok"].triggered
     assert by_id["elasticsearch.path_facade"].triggered
     assert by_id["elasticsearch.method_stub"].triggered
@@ -197,6 +199,100 @@ def test_es_generic_node_name_alone_requires_corroboration():
     assert stock.triggered
     assert stock.requires_corroboration
     assert "name=node-1" in stock.detail
+
+
+def test_es_common_version_is_suppressed_in_default_report():
+    inds = [
+        Indicator(
+            id="elasticsearch.stock_cluster",
+            title="Elasticsearch cluster metadata matches a stock honeypot lure",
+            category="static_signature",
+            triggered=True,
+            protocol="elasticsearch",
+            detail="version=7.17.0",
+            requires_corroboration=True,
+        )
+    ]
+
+    report = build_report(
+        target="203.0.113.10",
+        resolved_ip="203.0.113.10",
+        ports={"elasticsearch": [9200]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+    )
+
+    stock = {ind.id: ind for ind in report.indicators}["elasticsearch.stock_cluster"]
+    assert not stock.triggered
+    assert report.score == 0.0
+    assert "suppressed: no corroborating tell" in stock.detail
+
+
+def test_es_gated_stock_kept_with_ungated_tell():
+    """Common-version stock stays live when another ES tell corroborates."""
+    inds = [
+        Indicator(
+            id="elasticsearch.stock_cluster",
+            title="Elasticsearch cluster metadata matches a stock honeypot lure",
+            category="static_signature",
+            triggered=True,
+            protocol="elasticsearch",
+            detail="version=7.17.0",
+            requires_corroboration=True,
+        ),
+        Indicator(
+            id="elasticsearch.missing_index_ok",
+            title="Elasticsearch returns success for a nonexistent index",
+            category="static_signature",
+            triggered=True,
+            protocol="elasticsearch",
+            detail="GET /hpa-audit-x returned 200",
+            fidelity="high",
+        ),
+    ]
+
+    report = build_report(
+        target="203.0.113.10",
+        resolved_ip="203.0.113.10",
+        ports={"elasticsearch": [9200]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+        deep=False,
+    )
+
+    by_id = {ind.id: ind for ind in report.indicators}
+    assert by_id["elasticsearch.stock_cluster"].triggered
+    assert "suppressed" not in by_id["elasticsearch.stock_cluster"].detail
+    assert report.score > 0
+
+
+def test_es_short_uuid_with_generic_cluster_requires_corroboration():
+    """Short UUID must not lift the gate when only generic cluster_name is present."""
+    root = {
+        "name": "node-prod-1",
+        "cluster_name": "elasticsearch",
+        "cluster_uuid": "abc",
+        "version": {"number": "8.12.2", "build_flavor": "default"},
+        "tagline": "You Know, for Search",
+    }
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET / HTTP/"):
+            return _http_bytes(200, root, headers={"X-Elastic-Product": "Elasticsearch"}), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with patch.object(es, "tcp_transact", side_effect=fake_tcp):
+        inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    stock = {i.id: i for i in inds}["elasticsearch.stock_cluster"]
+    assert stock.triggered
+    assert stock.requires_corroboration
+    assert "cluster_uuid=abc" in stock.detail
 
 
 def test_es_product_header_mismatch_on_modern_version():

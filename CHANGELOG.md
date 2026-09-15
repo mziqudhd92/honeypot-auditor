@@ -8,6 +8,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Apply `requires_corroboration` suppression in **default** reports (not only
+  `--deep`), so common-version Elasticsearch stock hits and lone IMAP/POP3/SNMP
+  stock banners no longer inflate Honeyscore without another ungated tell
+- Elasticsearch stock assessment: decisive lure tokens score alone; short/truncated
+  `cluster_uuid` values stay corroboration-gated (canned UUIDs remain decisive)
 - Silence Paramiko Transport-thread stderr spam (`Error reading SSH protocol banner`
   / connection reset) during normal SSH fingerprinting; failures still map to
   skipped/closed indicators
