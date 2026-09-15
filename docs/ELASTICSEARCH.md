@@ -32,10 +32,12 @@ Detection philosophy:
    a JSON **array** (or plain cat text), not the root object.
 4. **Transport headers** — JSON bodies should advertise a JSON `Content-Type`;
    versions ≥ 7.14 should send `X-Elastic-Product: Elasticsearch`.
-5. **Lure metadata last** — stock `cluster_name` / node name / uuid / frozen
-   EOL version strings corroborate. Generic names (`elasticsearch`,
-   `docker-cluster`, …) and still-deployed release numbers (`7.17.0`, `8.0.0`, …)
-   need another hit (`requires_corroboration`).
+5. **Lure metadata last** — decisive lure tokens (honeypot names, frozen EOL
+   versions, canned UUIDs like `deadbeef`) score alone. Generic names
+   (`elasticsearch`, `docker-cluster`, …), still-deployed release numbers
+   (`7.17.0`, `8.0.0`, …), and short/truncated UUIDs set
+   `requires_corroboration` unless mixed with a decisive token on the same
+   root document (then another category hit is not required).
 
 ## Non-destructive policy
 
@@ -87,7 +89,7 @@ All indicators are category **`static_signature`**.
 
 | ID | Strategy role | Trigger |
 |----|---------------|---------|
-| `elasticsearch.stock_cluster` | Lure banner | `cluster_name` / node `name` / `tagline` / `version.number` / `cluster_uuid` match stock lure tokens (`elastichoney`, `deadbeef`, frozen EOL versions, …). Generic names (`elasticsearch`, `docker-cluster`, …) and common still-deployed versions (`7.17.0`, `8.0.0`, …) are **corroboration-gated**. |
+| `elasticsearch.stock_cluster` | Lure banner | `cluster_name` / node `name` / `tagline` / `version.number` / `cluster_uuid` match stock lure tokens. **Decisive** alone: honeypot names, frozen EOL versions, canned UUIDs (`deadbeef`, …). **Corroboration-gated** alone: generic names (`elasticsearch`, `docker-cluster`, …), common still-deployed versions (`7.17.0`, `8.0.0`, …), short/truncated UUIDs. A decisive token on the same root lifts the gate. |
 
 ### Path / method / endpoint facades
 

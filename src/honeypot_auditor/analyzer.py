@@ -721,6 +721,8 @@ def build_report(
     indicators = apply_proxy_suppression(indicators, proxy_detected)
     if deep:
         indicators = apply_cotenancy_corroboration(indicators)
+    # Apply to all reports: basic probes (IMAP/POP3/SNMP/ES stock, …) set
+    # requires_corroboration and must be suppressed without another ungated hit.
     indicators = apply_stack_corroboration(indicators)
     if not any(i.id == "cotenancy.silent_accept_cluster" for i in indicators):
         cluster = silent_accept_cluster_indicator(indicators)

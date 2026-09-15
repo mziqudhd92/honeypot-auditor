@@ -221,6 +221,35 @@ def test_pop3_auth_failed_blanket_is_high_signal_suspected():
     assert report.score_breakdown["scoped"]["applicable"] is True
 
 
+def test_lone_stock_banner_suppressed_without_deep():
+    """requires_corroboration applies in default reports (not only --deep)."""
+    inds = [
+        Indicator(
+            id="imap.stock_banner",
+            title="IMAP stock banner",
+            category="static_signature",
+            triggered=True,
+            protocol="imap",
+            detail="exchange lure greeting",
+            requires_corroboration=True,
+        )
+    ]
+    report = build_report(
+        target="203.0.113.51",
+        resolved_ip="203.0.113.51",
+        ports={"imap": [143]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+        deep=False,
+    )
+    stock = {i.id: i for i in report.indicators}["imap.stock_banner"]
+    assert not stock.triggered
+    assert "suppressed: no corroborating tell" in stock.detail
+    assert report.score == 0.0
+
+
 def test_intra_category_bonus_caps_at_15():
     inds = [
         Indicator(
