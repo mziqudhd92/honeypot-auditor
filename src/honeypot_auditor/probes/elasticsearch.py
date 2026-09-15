@@ -318,8 +318,7 @@ def _stock_cluster_assessment(doc: dict[str, Any]) -> tuple[str | None, bool]:
         decisive = True
     if not hits:
         return None, False
-    # Generic cluster names stay corroboration-gated even alongside decisive tokens.
-    requires = (not decisive) or cluster in _STOCK_CLUSTER_NAMES_GENERIC
+    requires = not decisive
     return "; ".join(hits), requires
 
 

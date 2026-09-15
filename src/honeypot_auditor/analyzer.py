@@ -721,7 +721,7 @@ def build_report(
     indicators = apply_proxy_suppression(indicators, proxy_detected)
     if deep:
         indicators = apply_cotenancy_corroboration(indicators)
-        indicators = apply_stack_corroboration(indicators)
+    indicators = apply_stack_corroboration(indicators)
     if not any(i.id == "cotenancy.silent_accept_cluster" for i in indicators):
         cluster = silent_accept_cluster_indicator(indicators)
         if cluster is not None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
+from honeypot_auditor.analyzer import build_report
 import honeypot_auditor.probes.elasticsearch as es
 from honeypot_auditor.settings import settings
 
@@ -122,8 +123,8 @@ def test_es_honeypot_tells_fire():
         inds = es.probe_elasticsearch("127.0.0.1", 9200)
     by_id = {ind.id: ind for ind in inds}
     assert by_id["elasticsearch.stock_cluster"].triggered
-    # Generic cluster_name=elasticsearch stays corroboration-gated.
-    assert by_id["elasticsearch.stock_cluster"].requires_corroboration
+    # Decisive name/version/UUID combinations should score without corroboration.
+    assert not by_id["elasticsearch.stock_cluster"].requires_corroboration
     assert by_id["elasticsearch.missing_index_ok"].triggered
     assert by_id["elasticsearch.path_facade"].triggered
     assert by_id["elasticsearch.method_stub"].triggered
@@ -197,6 +198,35 @@ def test_es_generic_node_name_alone_requires_corroboration():
     assert stock.triggered
     assert stock.requires_corroboration
     assert "name=node-1" in stock.detail
+
+
+def test_es_common_version_is_suppressed_in_default_report():
+    inds = [
+        es.Indicator(
+            id="elasticsearch.stock_cluster",
+            title="Elasticsearch cluster metadata matches a stock honeypot lure",
+            category="static_signature",
+            triggered=True,
+            protocol="elasticsearch",
+            detail="version=7.17.0",
+            requires_corroboration=True,
+        )
+    ]
+
+    report = build_report(
+        target="203.0.113.10",
+        resolved_ip="203.0.113.10",
+        ports={"elasticsearch": [9200]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+    )
+
+    stock = {ind.id: ind for ind in report.indicators}["elasticsearch.stock_cluster"]
+    assert not stock.triggered
+    assert report.score == 0.0
+    assert "suppressed: no corroborating tell" in stock.detail
 
 
 def test_es_product_header_mismatch_on_modern_version():
