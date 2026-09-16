@@ -203,6 +203,8 @@ def closed_reason(err: str) -> str:
         return "connection refused (closed port or filtered)"
     if "timed out" in low or "timeout" in low:
         return "timeout"
-    if "reset" in low:
+    # Winsock WSAECONNRESET (10054) / "forcibly closed" — common for connected UDP
+    # against a closed port on Windows (no ICMP port-unreachable).
+    if "reset" in low or "10054" in low or "forcibly closed" in low:
         return "connection reset"
     return err

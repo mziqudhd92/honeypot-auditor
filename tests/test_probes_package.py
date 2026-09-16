@@ -5,7 +5,6 @@ from honeypot_auditor.probes.core import probe_ssh as core_probe_ssh
 from honeypot_auditor.probes.extended import probe_http
 from honeypot_auditor.probes.udp import discover_udp_engines
 
-
 # Built-in TCP/legacy engines that must always be present (UDP engines are
 # discovered dynamically from probes.udp.* and must not hard-fail this set).
 _REQUIRED_CORE = frozenset(
