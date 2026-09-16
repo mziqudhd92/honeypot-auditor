@@ -19,6 +19,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- SSDP / UPnP discovery UDP engine on ports 1900/11900: unicast `M-SEARCH`
+  framing, header facade, ST echo, response clone, corroboration-gated stock
+  `SERVER`, `LOCATION` loopback, method stub (`docs/udp/SSDP.md`)
 - UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
   `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
   empty `probes/udp/` package with `UDPEngine` discovery merged into

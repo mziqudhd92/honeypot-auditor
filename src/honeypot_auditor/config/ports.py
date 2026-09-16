@@ -28,6 +28,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "mqtt": 1883,
     "snmp": 161,
     "elasticsearch": 9200,
+    "ssdp": 1900,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -52,6 +53,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "mqtt": 11883,
     "snmp": 1161,
     "elasticsearch": 19200,
+    "ssdp": 11900,
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {
