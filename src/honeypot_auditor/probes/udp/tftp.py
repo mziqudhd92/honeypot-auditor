@@ -333,16 +333,16 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
     stock_hit = bool(stock_token)
 
     # --- mode facade: illegal mode should not serve DATA ---
+    # Silent drop/timeout is inconclusive-but-clean (not a skip); only DATA is a hit.
     mode_ex = udp_exchange(host, port, build_rrq(filename, "hpaudit"), connected=False)
     mode_pkt = parse_tftp(mode_ex.data) if mode_ex.data else None
-    mode_skipped = bool(mode_ex.error and not mode_ex.data)
     mode_hit = mode_pkt is not None and mode_pkt.opcode == OP_DATA
     mode_detail = (
         "illegal mode served DATA"
         if mode_hit
         else (
-            mode_ex.error
-            if mode_skipped
+            f"illegal mode unanswered ({closed_reason(mode_ex.error)}; ok)"
+            if mode_ex.error and not mode_ex.data
             else f"illegal mode reply opcode={mode_pkt.opcode if mode_pkt else 'unparseable'}"
         )
     )
@@ -439,21 +439,12 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
             evidence=baseline.data[:256].hex(),
             fidelity="high",
         ),
-        (
-            skipped_indicator(
-                *_spec("tftp.mode_facade"),
-                mode_detail,
-                protocol="tftp",
-                error=mode_ex.error,
-            )
-            if mode_skipped
-            else _ind(
-                _spec("tftp.mode_facade"),
-                triggered=mode_hit,
-                detail=mode_detail,
-                evidence=(mode_ex.data[:256].hex() if mode_ex.data else ""),
-                fidelity="high",
-            )
+        _ind(
+            _spec("tftp.mode_facade"),
+            triggered=mode_hit,
+            detail=mode_detail,
+            evidence=(mode_ex.data[:256].hex() if mode_ex.data else ""),
+            fidelity="high",
         ),
         (
             skipped_indicator(

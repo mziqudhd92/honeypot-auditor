@@ -15,10 +15,9 @@ def test_import_probes_package_with_udp_is_safe():
     assert isinstance(PROBE_BY_PROTOCOL, dict)
     assert "ssh" in PROBE_BY_PROTOCOL
     assert "snmp" in PROBE_BY_PROTOCOL
-    # This PR adds TFTP only; DNS/NTP arrive on sibling branches.
-    assert "tftp" in PROBE_BY_PROTOCOL
-    assert "dns" not in PROBE_BY_PROTOCOL
-    assert "ntp" not in PROBE_BY_PROTOCOL
+    discovered = {e.name for e in discover_udp_engines()}
+    assert discovered <= set(PROBE_BY_PROTOCOL)
+    assert "tftp" in discovered
 
 
 def test_discover_udp_engines_skips_underscore_modules():
@@ -68,8 +67,7 @@ def test_discover_udp_engines_includes_tftp():
     engines = discover_udp_engines()
     names = {e.name for e in engines}
     assert "tftp" in names
-    assert "dns" not in names
-    assert "ntp" not in names
+    assert names <= set(PROBE_BY_PROTOCOL)
 
 
 def test_udp_engine_dataclass_shape():

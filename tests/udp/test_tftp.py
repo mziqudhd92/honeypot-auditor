@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import honeypot_auditor.probes.udp.tftp as tftp
 from honeypot_auditor.config import PROTOCOL_STRATEGIES
 from honeypot_auditor.probes import PROBE_BY_PROTOCOL
 from honeypot_auditor.settings import settings
-from tests.udp.conftest import MockUDPTransceiver, ScriptedReply
+from tests.udp.harness import MockUDPTransceiver, ScriptedReply
 
 _DST = 69
 _TID = 49152  # ephemeral Transfer ID (≠ dst)
@@ -82,6 +80,7 @@ def test_tftp_conformant_agent_is_clean():
     assert not by_id["tftp.opcode_facade"].triggered
     assert not by_id["tftp.error_stub"].triggered
     assert not by_id["tftp.mode_facade"].triggered
+    assert by_id["tftp.mode_facade"].skipped is False
     assert not by_id["tftp.wrq_stub"].triggered
     assert not by_id["tftp.option_blindness"].triggered
     assert not by_id["tftp.stock_payload"].triggered
@@ -266,7 +265,11 @@ def test_tftp_uses_udp_exchange_to_for_oack_ack():
 
 
 def test_tftp_ports_in_presets():
-    from honeypot_auditor.config import PORT_PRESET_DOCKER_RESEARCH, PORT_PRESET_IANA, probe_port_map
+    from honeypot_auditor.config import (
+        PORT_PRESET_DOCKER_RESEARCH,
+        PORT_PRESET_IANA,
+        probe_port_map,
+    )
 
     assert PORT_PRESET_IANA["tftp"] == 69
     assert PORT_PRESET_DOCKER_RESEARCH["tftp"] == 1069
