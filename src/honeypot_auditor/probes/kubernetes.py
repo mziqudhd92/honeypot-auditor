@@ -471,7 +471,7 @@ def probe_kubernetes(host: str, port: int) -> list[Indicator]:
     api_hit = False
     api_detail = "API discovery not evaluated"
     if not api_skipped:
-        if api_status == 200 and _is_api_versions(api_doc):
+        if api_status == 200 and api_doc is not None and _is_api_versions(api_doc):
             api_detail = f"/api ok versions={api_doc.get('versions')!r}"
         elif _looks_like_api_not_found(api_status, api_doc) and api_status in {401, 403}:
             api_skipped = True
@@ -526,7 +526,7 @@ def probe_kubernetes(host: str, port: int) -> list[Indicator]:
             unauth_detail = f"/api/v1 correctly denied (status={v1_status})"
         elif v1_status == 200 and _is_api_resource_list(v1_doc):
             unauth_detail = "/api/v1 returned APIResourceList (expected discovery shape)"
-        elif v1_status == 200 and _looks_like_object_list(v1_doc):
+        elif v1_status == 200 and v1_doc is not None and _looks_like_object_list(v1_doc):
             unauth_hit = True
             unauth_detail = (
                 f"GET /api/v1 returned status=200 kind={v1_doc.get('kind')!r} "
