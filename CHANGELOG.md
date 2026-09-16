@@ -19,6 +19,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- TFTP UDP engine on ports 69/1069: TID `fixed_source_port`, opcode/error/mode/WRQ
+  facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`
+  (`docs/udp/TFTP.md`)
 - UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
   `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
   empty `probes/udp/` package with `UDPEngine` discovery merged into
