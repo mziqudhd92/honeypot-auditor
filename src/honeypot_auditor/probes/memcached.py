@@ -63,13 +63,18 @@ _MC_SKIP = (
 
 _SAFE_ONLY = frozenset({"memcached.version_framing"})
 
+# Memcached ASCII reply tokens (not credentials — Bandit B105 false positive on "ERROR").
+_MC_ERROR = "ERROR"
+_MC_CLIENT_ERROR = "CLIENT_ERROR"
+_MC_SERVER_ERROR = "SERVER_ERROR"
+
 _ASCII_PREFIXES = (
     "VERSION",
     "STAT",
     "END",
-    "ERROR",
-    "CLIENT_ERROR",
-    "SERVER_ERROR",
+    _MC_ERROR,
+    _MC_CLIENT_ERROR,
+    _MC_SERVER_ERROR,
     "OK",
     "VALUE",
     "STORED",
@@ -144,7 +149,7 @@ def _looks_like_memcached(raw: bytes) -> bool:
 
 
 def _is_error(raw: bytes) -> bool:
-    return _first_token(_decode(raw)) == "ERROR"
+    return _first_token(_decode(raw)) == _MC_ERROR
 
 
 def _is_version_framed(raw: bytes) -> bool:
@@ -166,10 +171,10 @@ def _is_stats_framed(raw: bytes) -> bool:
     if not text.strip():
         return False
     # Real stats: zero-or-more STAT lines, then END. Reject VERSION/OK-only façades.
-    token = _first_token(text)
-    if token in {"VERSION", "OK", "VALUE", "STORED"}:
+    lead = _first_token(text)
+    if lead in {"VERSION", "OK", "VALUE", "STORED"}:
         return False
-    if token == "ERROR":
+    if lead == _MC_ERROR:
         # stats should not ERROR on a healthy speaker
         return False
     has_end = bool(re.search(r"(?im)^END\s*$", text))
