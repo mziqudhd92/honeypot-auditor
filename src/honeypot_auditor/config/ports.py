@@ -28,6 +28,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "mqtt": 1883,
     "snmp": 161,
     "elasticsearch": 9200,
+    "docker": 2375,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -52,6 +53,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "mqtt": 11883,
     "snmp": 1161,
     "elasticsearch": 19200,
+    "docker": 12375,
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {
@@ -77,6 +79,8 @@ _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     10161: "snmp",  # alternate lab SNMP (UDP), pairs with cleartext lab 1161
     9200: "elasticsearch",
     19200: "elasticsearch",  # lab Elasticsearch HTTP API
+    2375: "docker",
+    12375: "docker",  # lab Docker Engine API (plain HTTP)
 }
 
 

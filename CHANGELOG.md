@@ -19,6 +19,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Docker Engine HTTP API engine on ports 2375/12375 with protocol non-compliance
+  detection: ping/version framing, stock ApiVersion/Version/GitCommit, unknown-path
+  version/info facade, DELETE/PUT `/_ping` method stubs, `/info` missing fields or
+  version echo; TLS 2376 out of scope (`docs/DOCKER.md`)
 - Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
   detection: root framing, stock cluster/version/tagline/uuid, missing-index 200,
   unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and
