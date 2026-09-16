@@ -127,6 +127,14 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "OID-name echo · bitwise-identical canned replies"
         ),
     },
+    "ntp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "framing · mode/VN facade · originate echo · stratum facade · "
+            "bitwise-identical canned replies · zeroed clock metrics · epoch-zero · stock refid"
+        ),
+    },
     "elasticsearch": {
         "arbitrary_auth": "",
         "state_nonpersist": "",
@@ -187,6 +195,7 @@ EXTENDED_PROBE_PORTS: dict[str, int] = {
     "snmp": 161,
     "dns": 15353,
     "ipp": 631,
+    "ntp": 1123,
 }
 
 COTENANCY_CORROBORATION_CATEGORIES = frozenset(

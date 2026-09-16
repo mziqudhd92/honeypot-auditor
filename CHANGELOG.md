@@ -19,6 +19,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- NTP UDP engine on ports 123/1123: framing, mode/VN facade, originate echo,
+  stratum facade, response clone, and corroboration-gated zeroed clock metrics /
+  epoch-zero / stock refid (`docs/udp/NTP.md`; never monlist/mode-7)
 - UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
   `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
   empty `probes/udp/` package with `UDPEngine` discovery merged into
