@@ -10,13 +10,13 @@ from honeypot_auditor.probes.udp import discover_udp_engines
 from honeypot_auditor.probes.udp._engine import UDPEngine
 
 
-def test_import_probes_package_with_empty_udp_is_safe():
-    """Scaffold has no protocol modules yet; registry import must not raise."""
+def test_import_probes_package_with_udp_is_safe():
+    """UDP package discovery merges engines without breaking the registry."""
     assert isinstance(PROBE_BY_PROTOCOL, dict)
     assert "ssh" in PROBE_BY_PROTOCOL
     assert "snmp" in PROBE_BY_PROTOCOL
-    # DNS/NTP/TFTP arrive in later PRs — must not be present from empty udp/.
-    assert "dns" not in PROBE_BY_PROTOCOL
+    # This PR adds DNS only; NTP/TFTP arrive on sibling branches.
+    assert "dns" in PROBE_BY_PROTOCOL
     assert "ntp" not in PROBE_BY_PROTOCOL
     assert "tftp" not in PROBE_BY_PROTOCOL
 
@@ -64,10 +64,12 @@ def test_discover_udp_engines_skips_underscore_modules():
     assert "fake_private" not in names
 
 
-def test_discover_udp_engines_empty_package_returns_no_engines():
+def test_discover_udp_engines_includes_dns():
     engines = discover_udp_engines()
-    # Only _engine / __init__ exist in scaffold — no protocol engines yet.
-    assert engines == []
+    names = {e.name for e in engines}
+    assert "dns" in names
+    assert "ntp" not in names
+    assert "tftp" not in names
 
 
 def test_udp_engine_dataclass_shape():

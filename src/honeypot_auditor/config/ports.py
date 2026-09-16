@@ -27,6 +27,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "mongodb": 27017,
     "mqtt": 1883,
     "snmp": 161,
+    "dns": 53,
     "elasticsearch": 9200,
 }
 
@@ -51,6 +52,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "mongodb": 27017,
     "mqtt": 11883,
     "snmp": 1161,
+    "dns": 15353,
     "elasticsearch": 19200,
 }
 
@@ -75,6 +77,7 @@ _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     8883: "mqtt",
     18883: "mqtt",  # lab MQTTS (implicit TLS), pairs with cleartext lab 11883
     10161: "snmp",  # alternate lab SNMP (UDP), pairs with cleartext lab 1161
+    15353: "dns",  # lab DNS (UDP), pairs with IANA 53
     9200: "elasticsearch",
     19200: "elasticsearch",  # lab Elasticsearch HTTP API
 }

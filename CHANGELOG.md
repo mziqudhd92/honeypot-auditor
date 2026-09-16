@@ -19,6 +19,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- DNS (UDP/53, lab 15353) RFC non-compliance engine under `probes/udp/`: header
+  framing, txid echo, illegal OPCODE facade, question echo, RCODE stub on
+  `.invalid`, response clone, corroboration-gated 0x20 case mismatch, EDNS OPT
+  facade, stock TXT/SOA lure (`docs/udp/DNS.md`)
 - UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
   `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
   empty `probes/udp/` package with `UDPEngine` discovery merged into
