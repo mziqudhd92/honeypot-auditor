@@ -16,9 +16,9 @@ import secrets
 import struct
 from dataclasses import dataclass
 
+from honeypot_auditor import netutil
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason
-from honeypot_auditor import netutil
 from honeypot_auditor.probes.common import is_safe_mode, skip_suite
 from honeypot_auditor.probes.udp._engine import UDPEngine
 
@@ -250,7 +250,8 @@ def probe_ntp(host: str, port: int) -> list[Indicator]:
     # 1) Baseline NTPv4 client mode-3
     base_req = build_client_request()
     base_xmt = parse_ntp_packet(base_req)
-    assert base_xmt is not None
+    if base_xmt is None:
+        raise RuntimeError("build_client_request produced an unparseable NTP packet")
     client_xmt = base_xmt.transmit_timestamp
 
     base_ex, base_msg, base_err = _exchange(host, port, base_req)

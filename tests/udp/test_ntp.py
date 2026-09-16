@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
+
+import honeypot_auditor.probes.udp.ntp as ntp
 from honeypot_auditor.config import PROTOCOL_STRATEGIES
 from honeypot_auditor.netutil import UdpExchange
 from honeypot_auditor.probes import PROBE_BY_PROTOCOL
 from honeypot_auditor.settings import settings
-from tests.udp.conftest import MockUDPTransceiver, ScriptedReply
-
-import honeypot_auditor.probes.udp.ntp as ntp
 
 _NTP_IDS = (
     "ntp.framing",
@@ -20,6 +22,20 @@ _NTP_IDS = (
     "ntp.epoch_zero",
     "ntp.stock_refid",
 )
+
+# Bound by autouse fixtures from conftest (avoid importing conftest as a package).
+MockUDPTransceiver: Any = None
+ScriptedReply: Any = None
+
+
+@pytest.fixture(autouse=True)
+def _bind_udp_harness(mock_udp_cls: type, scripted_reply_cls: type):
+    global MockUDPTransceiver, ScriptedReply
+    MockUDPTransceiver = mock_udp_cls
+    ScriptedReply = scripted_reply_cls
+    yield
+    MockUDPTransceiver = None
+    ScriptedReply = None
 
 
 def _ts(seconds: int, fraction: int = 0) -> int:

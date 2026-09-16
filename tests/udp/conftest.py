@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from honeypot_auditor.netutil import UdpExchange
 
 
@@ -98,9 +100,25 @@ class MockUDPTransceiver:
 
     @contextmanager
     def patch(self, target: str = "honeypot_auditor.netutil") -> Iterator[MockUDPTransceiver]:
-        """Patch ``udp_exchange`` / ``udp_exchange_to`` on ``target`` (module path)."""
+        """Patch ``udp_exchange`` / ``udp_exchange_to`` on ``target`` (module path).
+
+        Uses ``create=True`` so protocol modules that only import ``udp_exchange``
+        still patch cleanly.
+        """
         with (
-            patch(f"{target}.udp_exchange", side_effect=self.udp_exchange),
-            patch(f"{target}.udp_exchange_to", side_effect=self.udp_exchange_to),
+            patch(f"{target}.udp_exchange", side_effect=self.udp_exchange, create=True),
+            patch(f"{target}.udp_exchange_to", side_effect=self.udp_exchange_to, create=True),
         ):
             yield self
+
+
+@pytest.fixture
+def mock_udp_cls() -> type[MockUDPTransceiver]:
+    """Expose ``MockUDPTransceiver`` to tests without package imports."""
+    return MockUDPTransceiver
+
+
+@pytest.fixture
+def scripted_reply_cls() -> type[ScriptedReply]:
+    """Expose ``ScriptedReply`` to tests without package imports."""
+    return ScriptedReply
