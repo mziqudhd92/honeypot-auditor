@@ -19,6 +19,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Memcached ASCII engine on ports 11211/21211 with protocol non-compliance
+  detection: VERSION/stats framing, unknown-command ERROR fidelity, get-miss END,
+  bitwise-identical canned stats, stock VERSION lures (corroboration-gated for
+  generic), bare-verbosity flush-stub stand-in, noreply façade
+  (`docs/MEMCACHED.md`)
 - Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
   detection: root framing, stock cluster/version/tagline/uuid, missing-index 200,
   unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and
