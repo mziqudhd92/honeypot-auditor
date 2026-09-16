@@ -137,6 +137,14 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "X-Elastic-Product mismatch"
         ),
     },
+    "ssdp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "M-SEARCH framing · header facade · ST echo · response clone · "
+            "stock SERVER lure · LOCATION loopback · method stub"
+        ),
+    },
     "mysql": {
         "arbitrary_auth": "",
         "state_nonpersist": "drop after 1045 · wrong-seq ER 1156 · SSL-request silent drop",
