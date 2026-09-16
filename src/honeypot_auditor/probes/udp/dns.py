@@ -565,24 +565,25 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
         rcode_detail = f"rcode={base_msg.rcode} ancount={base_msg.ancount} (not stub-scored)"
 
     # --- stock lure in answers ---
-    stock_token = ""
+    lure_match = ""
     for rr in base_msg.answers:
-        stock_token = _stock_hit(_rr_text(rr))
-        if stock_token:
+        lure_match = _stock_hit(_rr_text(rr))
+        if lure_match:
             break
-    stock_hit = bool(stock_token)
+    stock_hit = bool(lure_match)
 
     # --- illegal OPCODE facade ---
+    # Conformant resolvers typically *drop* reserved OPCODEs (surfaces as UDP
+    # timeout). That is a clean non-hit — not a skipped probe. Only score when
+    # the peer answers as a normal QUERY (or FORMERR, which we treat as ok).
     fac_txid = (base_txid + 1) % 0x10000 or 1
     fac_payload = build_query(qname, txid=fac_txid, rd=True, opcode=OPCODE_ILLEGAL)
     fac_ex = _exchange(host, port, fac_payload)
-    facade_skipped = bool(fac_ex.error) and not fac_ex.data
     facade_hit = False
     facade_detail = "illegal OPCODE unanswered (ok)"
     if fac_ex.data:
         fac_msg = parse_dns_message(fac_ex.data)
         if fac_msg is not None and fac_msg.qr == 1 and fac_msg.rcode != RCODE_FORMERR:
-            # Answered as a usable response rather than drop/FORMERR.
             facade_hit = True
             facade_detail = (
                 f"illegal OPCODE={OPCODE_ILLEGAL} answered "
@@ -592,8 +593,8 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
             facade_detail = "FORMERR for illegal OPCODE (ok)"
         elif fac_msg is None:
             facade_detail = "unparseable reply to illegal OPCODE (inconclusive)"
-    elif not facade_skipped:
-        facade_skipped = True
+    elif fac_ex.error:
+        facade_detail = f"illegal OPCODE unanswered ({closed_reason(fac_ex.error)}; ok)"
 
     # --- response clone (distinct txid) ---
     clone_txid = (base_txid + 2) % 0x10000 or 2
@@ -670,27 +671,16 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
             remediation="Echo the query transaction ID (RFC 1035 §4.1.1)",
             fidelity="high",
         ),
-        (
-            skipped_indicator(
-                "dns.header_facade",
-                "DNS answers an illegal OPCODE as a normal QUERY response",
-                "static_signature",
-                facade_detail,
-                protocol="dns",
-                error=fac_ex.error,
-            )
-            if facade_skipped
-            else Indicator(
-                id="dns.header_facade",
-                title="DNS answers an illegal OPCODE as a normal QUERY response",
-                category="static_signature",
-                triggered=facade_hit,
-                protocol="dns",
-                detail=facade_detail,
-                evidence=fac_ex.data[:128].hex() if fac_ex.data else "",
-                remediation="Drop or FORMERR reserved/illegal OPCODEs",
-                fidelity="high",
-            )
+        Indicator(
+            id="dns.header_facade",
+            title="DNS answers an illegal OPCODE as a normal QUERY response",
+            category="static_signature",
+            triggered=facade_hit,
+            protocol="dns",
+            detail=facade_detail,
+            evidence=fac_ex.data[:128].hex() if fac_ex.data else "",
+            remediation="Drop or FORMERR reserved/illegal OPCODEs",
+            fidelity="high",
         ),
         Indicator(
             id="dns.question_echo",
@@ -780,8 +770,8 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
             category="static_signature",
             triggered=stock_hit,
             protocol="dns",
-            detail=f"matched token {stock_token!r}" if stock_hit else "no stock lure token",
-            evidence=stock_token,
+            detail=f"matched lure {lure_match!r}" if stock_hit else "no stock lure token",
+            evidence=lure_match,
             remediation="Avoid canned honeypot lure strings in DNS rdata",
             fidelity="medium",
             requires_corroboration=stock_requires if stock_hit else False,

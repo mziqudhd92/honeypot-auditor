@@ -107,6 +107,8 @@ def test_dns_conformant_resolver_is_clean():
     assert not any(i.triggered for i in inds)
     by_id = {i.id: i for i in inds}
     assert by_id["dns.header_framing"].skipped is False
+    assert by_id["dns.header_facade"].skipped is False
+    assert not by_id["dns.header_facade"].triggered
     assert by_id["dns.case_encoding_mismatch"].skipped is False
     assert not by_id["dns.case_encoding_mismatch"].triggered
     assert not by_id["dns.response_clone"].triggered

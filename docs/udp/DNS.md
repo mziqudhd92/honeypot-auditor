@@ -26,7 +26,7 @@ Detection philosophy:
 
 1. **Baseline speakership** — A QUERY for a synthetic mixed-case `hpaudit-<nonce>.invalid` name. No parseable QR=1 header → framing tell or suite skip.
 2. **Request fidelity** — response ID, question section (including 0x20 casing), and RCODE for `.invalid` must match the RFCs; canned identical UDP payloads are decisive.
-3. **Facade probes** — reserved/illegal OPCODE should be dropped (or FORMERR), not answered as a normal QUERY; a *valid* EDNS OPT must not produce FORMERR/garbage (timeout → skip; OPT *absence* alone is not a hit).
+3. **Facade probes** — reserved/illegal OPCODE should be dropped (or FORMERR), not answered as a normal QUERY (UDP timeout on drop is a clean non-hit); a *valid* EDNS OPT must not produce FORMERR/garbage (timeout → skip; OPT *absence* alone is not a hit).
 4. **Lure text last** — stock TXT/SOA tokens corroborate; weak strings need another hit.
 
 ## Non-destructive policy
@@ -72,7 +72,7 @@ A QUERY hPaUdIt-<n>.iNvAlId  ──►  header framing (QR=1 speaker)
 |----|----------|----------|---------------|---------|
 | `dns.header_framing` | static_signature | high | no | UDP reply is not a parseable DNS header, or QR≠1 on a QUERY response. |
 | `dns.txid` | static_signature | high | no | Response transaction ID ≠ request (RFC 1035 §4.1.1). |
-| `dns.header_facade` | static_signature | high | no | Illegal/reserved OPCODE is answered as a normal QUERY response (should drop or FORMERR). |
+| `dns.header_facade` | static_signature | high | no | Illegal/reserved OPCODE is answered as a normal QUERY response (should drop or FORMERR). Silent drop/timeout is **not** a hit. |
 | `dns.question_echo` | static_signature | high | no | Response QDCOUNT=0 or question QNAME/QTYPE/QCLASS does not match the request. |
 | `dns.rcode_stub` | static_signature | high | no | Synthetic `.invalid` name returns NOERROR with answer RRs (RFC 2606 expects NXDOMAIN). |
 | `dns.response_clone` | static_signature | decisive | no | Two QUERYs with distinct IDs receive **bitwise-identical** UDP payloads. |
