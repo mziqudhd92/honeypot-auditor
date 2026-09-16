@@ -28,6 +28,7 @@ def test_probe_registry_covers_all_basic_protocols():
         "mqtt",
         "snmp",
         "elasticsearch",
+        "kubernetes",
     }
     assert PROBE_BY_PROTOCOL["ssh"] is probe_ssh
 

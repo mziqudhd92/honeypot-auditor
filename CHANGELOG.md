@@ -19,6 +19,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Kubernetes API server engine on ports 6443/16443 (TLS preferred) with protocol
+  non-compliance detection: livez/healthz framing, `/version` framing, `/api`
+  APIVersions shape, unknown-path version facade, DELETE `/version` method stub,
+  stock gitVersion/platform (corroboration-gated), unauthenticated `/api/v1`
+  object-list dump (`docs/KUBERNETES.md`)
 - Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
   detection: root framing, stock cluster/version/tagline/uuid, missing-index 200,
   unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and
