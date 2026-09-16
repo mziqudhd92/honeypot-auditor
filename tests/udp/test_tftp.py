@@ -2,14 +2,29 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
+
 import honeypot_auditor.probes.udp.tftp as tftp
 from honeypot_auditor.config import PROTOCOL_STRATEGIES
 from honeypot_auditor.probes import PROBE_BY_PROTOCOL
 from honeypot_auditor.settings import settings
-from tests.udp.harness import MockUDPTransceiver, ScriptedReply
 
 _DST = 69
 _TID = 49152  # ephemeral Transfer ID (≠ dst)
+
+# Bound by autouse fixture from conftest ``mock_udp_cls`` (avoid importing conftest).
+_MockUDP: Any = None
+Reply = tuple[bytes, int, float, str]
+
+
+@pytest.fixture(autouse=True)
+def _bind_mock_udp(mock_udp_cls: type):
+    global _MockUDP
+    _MockUDP = mock_udp_cls
+    yield
+    _MockUDP = None
 
 
 def _error(
@@ -31,15 +46,15 @@ def _oack(options: dict[str, str] | None = None) -> bytes:
     return tftp.build_oack(options or {"blksize": "512"})
 
 
-def _reply(data: bytes, *, peer_port: int = _TID, rtt_ms: float = 2.0) -> ScriptedReply:
-    return ScriptedReply(data=data, peer_port=peer_port, rtt_ms=rtt_ms, error="")
+def _reply(data: bytes, *, peer_port: int = _TID, rtt_ms: float = 2.0) -> Reply:
+    return (data, peer_port, rtt_ms, "")
 
 
-def _timeout() -> ScriptedReply:
-    return ScriptedReply(data=b"", peer_port=0, rtt_ms=0.0, error="timed out")
+def _timeout() -> Reply:
+    return (b"", 0, 0.0, "timed out")
 
 
-def _conformant_replies() -> list[ScriptedReply]:
+def _conformant_replies() -> list[Reply]:
     """Real tftpd shape: ERROR from ephemeral TID; reject bad mode; ACK WRQ; OACK options."""
     return [
         _reply(_error()),  # baseline RRQ missing file
@@ -49,8 +64,8 @@ def _conformant_replies() -> list[ScriptedReply]:
     ]
 
 
-def _run(replies: list[ScriptedReply], *, port: int = _DST):
-    mock = MockUDPTransceiver(replies)
+def _run(replies: list[Reply], *, port: int = _DST):
+    mock = _MockUDP(replies)
     with mock.patch("honeypot_auditor.probes.udp.tftp"):
         return tftp.probe_tftp("127.0.0.1", port), mock
 
