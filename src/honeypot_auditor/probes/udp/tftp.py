@@ -254,14 +254,10 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
         return skip_suite(_TFTP_SKIP, closed_reason(baseline.error), protocol="tftp", error=baseline.error)
 
     base_pkt = parse_tftp(baseline.data)
-    framing_hit = base_pkt is None
-    framing_detail = (
-        f"UDP reply was not a parseable TFTP packet ({len(baseline.data)} bytes)"
-        if framing_hit
-        else f"TFTP opcode={base_pkt.opcode} peer_port={baseline.peer_port}"
-    )
-
-    if framing_hit:
+    if base_pkt is None:
+        framing_detail = (
+            f"UDP reply was not a parseable TFTP packet ({len(baseline.data)} bytes)"
+        )
         out: list[Indicator] = []
         reason = "not a TFTP speaker"
         for spec in _TFTP_SKIP:
@@ -278,6 +274,8 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
             else:
                 out.append(skipped_indicator(*spec, reason, protocol="tftp"))
         return out
+
+    framing_detail = f"TFTP opcode={base_pkt.opcode} peer_port={baseline.peer_port}"
 
     if is_safe_mode():
         reason = "safe-mode: handshake-only probe"
