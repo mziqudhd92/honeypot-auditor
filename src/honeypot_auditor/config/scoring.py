@@ -137,6 +137,15 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "X-Elastic-Product mismatch"
         ),
     },
+    "ipp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "CUPS root framing · stock Server header · unknown-path root facade · "
+            "DELETE method stub · /printers stub · IPP Content-Type framing · "
+            "bitwise-identical IPP replies · stock HTML body lure"
+        ),
+    },
     "mysql": {
         "arbitrary_auth": "",
         "state_nonpersist": "drop after 1045 · wrong-seq ER 1156 · SSL-request silent drop",
@@ -186,7 +195,6 @@ EXTENDED_PROBE_PORTS: dict[str, int] = {
     "modbus": 1502,
     "snmp": 161,
     "dns": 15353,
-    "ipp": 631,
 }
 
 COTENANCY_CORROBORATION_CATEGORIES = frozenset(
