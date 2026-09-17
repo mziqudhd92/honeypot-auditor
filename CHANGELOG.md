@@ -21,8 +21,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 - IPP/CUPS engine on ports 631/1631 with protocol non-compliance detection: CUPS
   root framing, stock Server header, unknown-path facade, DELETE method stub,
-  `/printers` stub, IPP Content-Type framing, bitwise-identical IPP replies,
-  stock HTML body lure (`docs/IPP.md`)
+  `/printers` stub, open `/admin`, frozen Date, IPP Content-Type framing,
+  ghost-printer `successful-ok`, request-id echo, bitwise-identical IPP replies,
+  illegal operation-id façade, stock HTML body lure; TLS fallback when cleartext
+  yields a TLS record layer (`docs/IPP.md`)
 - Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
   detection: root framing, stock cluster/version/tagline/uuid, missing-index 200,
   unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and

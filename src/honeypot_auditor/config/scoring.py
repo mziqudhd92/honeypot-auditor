@@ -142,8 +142,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "state_nonpersist": "",
         "static_signature": (
             "CUPS root framing · stock Server header · unknown-path root facade · "
-            "DELETE method stub · /printers stub · IPP Content-Type framing · "
-            "bitwise-identical IPP replies · stock HTML body lure"
+            "DELETE method stub · /printers stub · open /admin · frozen Date · "
+            "IPP Content-Type framing · ghost-printer successful-ok · request-id "
+            "echo · bitwise-identical IPP replies · illegal operation · stock HTML "
+            "body lure"
         ),
     },
     "mysql": {
