@@ -127,6 +127,15 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "OID-name echo · bitwise-identical canned replies"
         ),
     },
+    "dns": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "header framing · txid echo · illegal OPCODE facade · question echo · "
+            "RCODE stub on .invalid · response clone · 0x20 case mismatch · "
+            "EDNS OPT facade · stock TXT/SOA lure"
+        ),
+    },
     "elasticsearch": {
         "arbitrary_auth": "",
         "state_nonpersist": "",
@@ -196,7 +205,6 @@ DEEP_WEIGHTS: dict[str, float] = {
 EXTENDED_PROBE_PORTS: dict[str, int] = {
     "modbus": 1502,
     "snmp": 161,
-    "dns": 15353,
 }
 
 COTENANCY_CORROBORATION_CATEGORIES = frozenset(

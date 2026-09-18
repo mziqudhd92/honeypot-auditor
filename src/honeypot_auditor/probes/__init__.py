@@ -74,6 +74,17 @@ PROBE_BY_PROTOCOL: dict[str, ProbeFn] = {
 }
 
 try:
+    from honeypot_auditor.probes.udp import discover_udp_engines
+
+    for _engine in discover_udp_engines():
+        if _engine.name not in PROBE_BY_PROTOCOL:
+            PROBE_BY_PROTOCOL[_engine.name] = _engine.probe
+except Exception as exc:
+    import logging
+
+    logging.getLogger(__name__).warning("udp probe discovery failed: %s", exc)
+
+try:
     from honeypot_auditor.plugins.api import get_registered_probes
 
     for _name, _fn in get_registered_probes().items():

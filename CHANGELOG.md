@@ -25,6 +25,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   ghost-printer `successful-ok`, request-id echo, bitwise-identical IPP replies,
   illegal operation-id façade, stock HTML body lure; TLS fallback when cleartext
   yields a TLS record layer (`docs/IPP.md`)
+- DNS (UDP/53, lab 15353) RFC non-compliance engine under `probes/udp/`: header
+  framing, txid echo, illegal OPCODE facade, question echo, RCODE stub on
+  `.invalid`, response clone, corroboration-gated 0x20 case mismatch, EDNS OPT
+  facade, stock TXT/SOA lure (`docs/udp/DNS.md`)
+- UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
+  `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
+  `probes/udp/` package with `UDPEngine` discovery merged into
+  `PROBE_BY_PROTOCOL`, and `docs/udp/README.md` (NTP/TFTP engines follow)
 - Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
   detection: root framing, stock cluster/version/tagline/uuid, missing-index 200,
   unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and
