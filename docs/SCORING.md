@@ -90,6 +90,19 @@ tells over banner IOCs alone — see [`udp/DNS.md`](udp/DNS.md).
 
 Full strategy narrative, probe flow, and non-destructive policy: [`udp/DNS.md`](udp/DNS.md).
 
+### NTP RFC 5905 non-compliance (basic probe)
+
+NTP uses **static_signature** only (UDP/123; no auth/state axis). Prefer RFC facade
+tells over banner IOCs alone — see [`udp/NTP.md`](udp/NTP.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `ntp.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across distinct xmt) |
+| `ntp.framing` / `ntp.mode_facade` / `ntp.org_echo` / `ntp.stratum_facade` | static_signature | High fidelity RFC tells |
+| `ntp.zeroed_clock_metrics` / `ntp.epoch_zero` / `ntp.stock_refid` | static_signature | Corroboration-gated (sparse metrics · epoch stamps · lure refid) |
+
+Full strategy narrative, probe flow, and non-destructive policy: [`udp/NTP.md`](udp/NTP.md).
+
 ### Memcached ASCII non-compliance (basic probe)
 
 Memcached uses **static_signature** only (TCP ASCII; no auth/state axis). Prefer

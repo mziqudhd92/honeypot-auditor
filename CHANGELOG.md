@@ -19,6 +19,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Docs sync: surface NTP in README/BASIC banner, ports table, site index,
+  agents/llms briefs, SCORING, and `docs/udp/README.md` (guide already at
+  `docs/udp/NTP.md`)
 - NTP UDP engine on ports 123/1123: framing, mode/VN facade, originate echo,
   stratum facade, response clone, and corroboration-gated zeroed clock metrics /
   epoch-zero / stock refid (`docs/udp/NTP.md`; never monlist/mode-7)

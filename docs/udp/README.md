@@ -1,8 +1,8 @@
 # UDP probe package
 
-Layout and transport scaffold for UDP protocol engines. **DNS** ships here;
-**NTP / TFTP** follow in later PRs. Existing **SNMP** and **SIP** probes stay in
-flat `probes/` until an optional relocate PR.
+Layout and transport scaffold for UDP protocol engines. **DNS** and **NTP**
+ship here; **TFTP** follows in a later PR. Existing **SNMP** and **SIP** probes
+stay in flat `probes/` until an optional relocate PR.
 
 ## Layout
 
@@ -11,17 +11,20 @@ src/honeypot_auditor/probes/udp/
   __init__.py      # re-exports discovery
   _engine.py       # UDPEngine + discover_udp_engines()
   dns.py           # DNS RFC non-compliance engine
+  ntp.py           # NTP RFC 5905 non-compliance engine
 
 docs/udp/
   README.md        # this file
   DNS.md           # DNS probe guide
-  NTP.md TFTP.md   # later PRs
+  NTP.md           # NTP probe guide
+  TFTP.md          # later PR
 
 tests/udp/
   conftest.py      # MockUDPTransceiver
   test_netutil_udp.py
   test_discovery.py
   test_dns.py
+  test_ntp.py
 ```
 
 ## Discovery rules
