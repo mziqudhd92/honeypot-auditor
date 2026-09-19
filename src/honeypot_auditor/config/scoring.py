@@ -63,8 +63,8 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": "loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone",
     },
     "http": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": "two entropy-varied Basic/login pairs both 200 on protected path",
+        "state_nonpersist": "session cookie / POST body not retained across reconnect",
         "static_signature": "empty PUT 405 · GET / → index.html login skin · 407 Via localhost",
     },
     "pop3": {
@@ -89,8 +89,11 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": "SMB1/EOL native_os · static NTLM challenge",
     },
     "sip": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "two entropy-varied Digest REGISTER both 200 without valid response · "
+            "or static nonce/realm across sessions"
+        ),
+        "state_nonpersist": "CSeq / Call-ID binding not monotonic after re-REGISTER",
         "static_signature": "default User-Agent template",
     },
     "vnc": {
@@ -128,8 +131,11 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "dns": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "two entropy-varied private-label / bogus-TLD queries both NOERROR "
+            "(open-resolver / static SOA façade)"
+        ),
+        "state_nonpersist": "frozen SOA serial · bitwise-identical answer · AA/TTL contradiction",
         "static_signature": (
             "header framing · txid echo · illegal OPCODE facade · question echo · "
             "RCODE stub on .invalid · response clone · 0x20 case mismatch · "
@@ -137,16 +143,18 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "ntp": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "mode-3 burst still served with uniform mode-4 (missing KoD RATE/DENY)"
+        ),
+        "state_nonpersist": "transmit/receive/reference timestamps fail monotonicity across exchanges",
         "static_signature": (
             "framing · mode/VN facade · originate echo · stratum facade · "
             "bitwise-identical canned replies · zeroed clock metrics · epoch-zero · stock refid"
         ),
     },
     "elasticsearch": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": "two entropy-varied Basic/API-key headers both 200 on GET /",
+        "state_nonpersist": "GET / cluster UUID/version mismatches /_nodes or /_cluster/health",
         "static_signature": (
             "root framing · stock cluster/version/tagline/uuid · missing-index 200 · "
             "unknown-path root facade · DELETE/PUT/HEAD method stubs · "
@@ -155,8 +163,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "ipp": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": "two entropy-varied Basic credentials both unlock /admin",
+        "state_nonpersist": (
+            "unsupported IPP opcode still successful-ok · ghost printer identity fails across reconnect"
+        ),
         "static_signature": (
             "CUPS root framing · stock Server header · unknown-path root facade · "
             "DELETE method stub · /printers stub · open /admin · frozen Date · "
@@ -166,8 +176,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "memcached": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "two entropy-varied ASCII set/auth accepted · binary/SASL frame mishandled"
+        ),
+        "state_nonpersist": "probe-key set then reconnect get miss / stats ignore write",
         "static_signature": (
             "VERSION framing · STAT/END framing · unknown-command ERROR · "
             "get-miss END · canned stats clone · stock VERSION lure · "
@@ -180,8 +192,8 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": "EOL 5.5.x ubuntu greeting · stock handshake caps",
     },
     "git": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": "two entropy-varied HTTP Basic / pkt-line auth both accepted",
+        "state_nonpersist": "advertised upload-pack capabilities fail on follow-up negotiation",
         "static_signature": "git-upload-pack always ERR no such repository",
     },
     "rdp": {
@@ -190,8 +202,8 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": "canned NLA cookie 0x1234",
     },
     "httpproxy": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": "two entropy-varied Proxy-Authorization Basic pairs both allow CONNECT/GET",
+        "state_nonpersist": "prior proxy success becomes identical canned 407 on reconnect",
         "static_signature": "407 Via localhost · frozen squid 3.3.8 · ISA deny phrase",
     },
     "mssql": {

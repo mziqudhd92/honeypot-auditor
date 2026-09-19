@@ -12,6 +12,8 @@ from honeypot_auditor.probes.udp import discover_udp_engines
 from honeypot_auditor.settings import settings
 
 _DNS_IDS = (
+    "dns.arbitrary_auth",
+    "dns.state_nonpersist",
     "dns.header_framing",
     "dns.txid",
     "dns.header_facade",
@@ -423,11 +425,46 @@ def test_dns_registry_and_discovery():
     assert PROBE_BY_PROTOCOL["dns"] is dns.probe_dns
     assert "dns" in PROTOCOL_STRATEGIES
     row = PROTOCOL_STRATEGIES["dns"]
-    assert row["arbitrary_auth"] == ""
-    assert row["state_nonpersist"] == ""
+    assert "NOERROR" in row["arbitrary_auth"] or "private-label" in row["arbitrary_auth"]
+    assert "SOA" in row["state_nonpersist"] or "TTL" in row["state_nonpersist"]
     assert "txid" in row["static_signature"].lower() or "header" in row["static_signature"].lower()
     engines = discover_udp_engines()
     names = {e.name for e in engines}
     assert "dns" in names
     assert dns.UDP_ENGINE.name == "dns"
     assert dns.UDP_ENGINE.probe is dns.probe_dns
+
+
+def test_dns_arbitrary_auth_and_state_hits():
+    """Private-label NOERROR façade + frozen identical answers across re-query."""
+
+    def side_effect(host, port, payload, *, connected=False, **kwargs):
+        del host, connected, kwargs
+        msg = dns.parse_dns_message(payload)
+        assert msg is not None
+        if msg.opcode != dns.OPCODE_QUERY:
+            return _err()
+        q = (msg.question_name or "").lower()
+        # Auth probes use .invalid / .test private labels — serve static A.
+        if q.endswith(".test") or (q.endswith(".invalid") and "hpa-" in q):
+            body = _noerror_a_reply(msg, rdata=b"\x0a\x00\x00\x01")
+            return _ok(body, port=port, rtt=1.0)
+        # Baseline / clone / state: also serve identical NOERROR A (frozen façade).
+        body = _noerror_a_reply(msg, rdata=b"\x0a\x00\x00\x01")
+        if msg.has_opt:
+            body = dns.attach_additional(body, (dns.build_opt_rr(udp_payload=1232),))
+        return _ok(body, port=port, rtt=1.0)
+
+    with (
+        patch.object(dns, "udp_exchange", side_effect=side_effect),
+        patch.object(dns, "jittered_reconnect_pause", return_value=0.0),
+        patch.object(
+            dns,
+            "entropy_varied_creds",
+            return_value=(("user_low", "pass_low"), ("user_HIGH_entropy_xx", "pass_HIGH_entropy_yy")),
+        ),
+    ):
+        inds = dns.probe_dns("127.0.0.1", 53)
+    by_id = {i.id: i for i in inds}
+    assert by_id["dns.arbitrary_auth"].triggered
+    assert by_id["dns.state_nonpersist"].triggered

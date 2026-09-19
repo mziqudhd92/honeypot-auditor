@@ -49,11 +49,49 @@ _HEALTH = {
     "active_shards": 20,
 }
 
+_NODES = {
+    "cluster_name": "prod-logs-eu",
+    "nodes": {
+        "n1": {"name": "node-prod-1", "version": "8.12.2"},
+    },
+}
+
+_ES_IDS = {
+    "elasticsearch.arbitrary_auth",
+    "elasticsearch.state_nonpersist",
+    "elasticsearch.root_framing",
+    "elasticsearch.stock_cluster",
+    "elasticsearch.missing_index_ok",
+    "elasticsearch.path_facade",
+    "elasticsearch.method_stub",
+    "elasticsearch.cluster_health_stub",
+    "elasticsearch.cat_stub",
+    "elasticsearch.content_type",
+    "elasticsearch.product_header",
+}
+
+_FIXED_CREDS = (("probeuser10", "probepass79"), ("hpa_highentropyuser0001", "HighEntropyPassw0rd!!!!!!!!"))
+
 
 def _conformant_tcp(host, port, payload=b"", **kwargs):
     text = payload.decode("latin-1", "replace")
     first = text.split("\r\n", 1)[0]
+    has_auth = "authorization:" in text.lower()
     if first.startswith("GET / HTTP/") or first.startswith("HEAD / HTTP/"):
+        if has_auth and first.startswith("GET /"):
+            return (
+                _http_bytes(
+                    401,
+                    {
+                        "error": {
+                            "type": "security_exception",
+                            "reason": "unable to authenticate user",
+                        },
+                        "status": 401,
+                    },
+                ),
+                "",
+            )
         body = b"" if first.startswith("HEAD ") else None
         raw = _http_bytes(
             200,
@@ -87,6 +125,8 @@ def _conformant_tcp(host, port, payload=b"", **kwargs):
             ),
             "",
         )
+    if first.startswith("GET /_nodes"):
+        return _http_bytes(200, _NODES), ""
     if first.startswith("GET /_cluster/health"):
         return _http_bytes(200, _HEALTH), ""
     if first.startswith("GET /_cat/health"):
@@ -110,10 +150,15 @@ def test_es_root_shape_helper():
 
 
 def test_es_conformant_cluster_is_clean():
-    with patch.object(es, "tcp_transact", side_effect=_conformant_tcp):
+    with (
+        patch.object(es, "tcp_transact", side_effect=_conformant_tcp),
+        patch.object(es, "entropy_varied_creds", return_value=_FIXED_CREDS),
+        patch.object(es, "jittered_reconnect_pause", return_value=0.0),
+    ):
         inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    assert {i.id for i in inds} == _ES_IDS
     assert not any(ind.triggered for ind in inds)
-    assert len(inds) == 9
+    assert len(inds) == 11
 
 
 def test_es_honeypot_tells_fire():
@@ -369,7 +414,8 @@ def test_es_head_body_is_method_stub():
 def test_es_connection_error_skips_suite():
     with patch.object(es, "tcp_transact", return_value=(b"", "Connection refused")):
         inds = es.probe_elasticsearch("127.0.0.1", 9200)
-    assert len(inds) == 9
+    assert len(inds) == 11
+    assert {i.id for i in inds} == _ES_IDS
     assert all(ind.skipped for ind in inds)
 
 
@@ -383,7 +429,7 @@ def test_es_non_speaker_triggers_framing():
     by_id = {ind.id: ind for ind in inds}
     assert by_id["elasticsearch.root_framing"].triggered
     assert all(i.skipped or i.id == "elasticsearch.root_framing" for i in inds)
-    assert len(inds) == 9
+    assert len(inds) == 11
 
 
 def test_es_safe_mode_handshake_only():
@@ -402,7 +448,56 @@ def test_es_safe_mode_handshake_only():
     finally:
         settings.safe_mode = old
     by_id = {ind.id: ind for ind in inds}
-    assert len(inds) == 9
+    assert len(inds) == 11
+    assert {i.id for i in inds} == _ES_IDS
     assert not by_id["elasticsearch.root_framing"].triggered
+    assert by_id["elasticsearch.arbitrary_auth"].skipped
+    assert by_id["elasticsearch.state_nonpersist"].skipped
     assert by_id["elasticsearch.missing_index_ok"].skipped
     assert by_id["elasticsearch.cluster_health_stub"].skipped
+
+
+def test_es_arbitrary_auth_dual_basic():
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        has_auth = "authorization:" in text.lower()
+        if first.startswith("GET / HTTP/") and has_auth:
+            return _http_bytes(200, _ROOT, headers={"X-Elastic-Product": "Elasticsearch"}), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with (
+        patch.object(es, "tcp_transact", side_effect=fake_tcp),
+        patch.object(es, "entropy_varied_creds", return_value=_FIXED_CREDS),
+        patch.object(es, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    auth = {i.id: i for i in inds}["elasticsearch.arbitrary_auth"]
+    assert auth.triggered
+    assert auth.fidelity == "decisive"
+    assert auth.category == "arbitrary_auth"
+
+
+def test_es_state_nonpersist_version_mismatch():
+    bad_nodes = {
+        "cluster_name": "prod-logs-eu",
+        "nodes": {"n1": {"name": "node-prod-1", "version": "1.4.4"}},
+    }
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET /_nodes"):
+            return _http_bytes(200, bad_nodes), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with (
+        patch.object(es, "tcp_transact", side_effect=fake_tcp),
+        patch.object(es, "entropy_varied_creds", return_value=_FIXED_CREDS),
+        patch.object(es, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    state = {i.id: i for i in inds}["elasticsearch.state_nonpersist"]
+    assert state.triggered
+    assert state.category == "state_nonpersist"
+    assert "version" in state.detail

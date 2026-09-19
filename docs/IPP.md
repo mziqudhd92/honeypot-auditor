@@ -8,14 +8,14 @@ print jobs or changes queues.
 
 ## Strategies
 
-IPP activates **one** of the three basic scoring strategies
+IPP activates **all three** basic scoring strategies
 (`PROTOCOL_STRATEGIES["ipp"]`):
 
 | Strategy | Why it applies to IPP/CUPS |
 |----------|----------------------------|
-| **static_signature** | Primary axis. Decoy CUPS faces are usually canned HTTP/IPP handlers: wrong root framing, stock `Server` strings, unknown paths that echo `/`, DELETE ignored, `/printers` stub/root echo, open `/admin`, frozen `Date`, IPP POSTs that return HTML, successful-ok for missing printers, non-echoed request-ids, bitwise-identical IPP replies, illegal ops accepted, or honeypot phrases in the body. |
-| **arbitrary_auth** | **Not used** on the basic read-only path (no password spraying against `/admin`). |
-| **state_nonpersist** | **Not used.** No job queue resume to contradict. |
+| **arbitrary_auth** | Two entropy-varied Basic credentials both unlock `/admin` (status **200**). Indicator: `ipp.arbitrary_auth`. Dual synthetic pairs only — no password dictionary spray. |
+| **static_signature** | Decoy CUPS faces are usually canned HTTP/IPP handlers: wrong root framing, stock `Server` strings, unknown paths that echo `/`, DELETE ignored, `/printers` stub/root echo, open `/admin`, frozen `Date`, IPP POSTs that return HTML, successful-ok for missing printers, non-echoed request-ids, bitwise-identical IPP replies, illegal ops accepted, or honeypot phrases in the body. |
+| **state_nonpersist** | Unsupported IPP opcode still `successful-ok` and/or ghost-printer identity/status drifts across reconnect. Indicator: `ipp.state_nonpersist`. |
 
 Detection philosophy:
 
@@ -23,13 +23,13 @@ Detection philosophy:
 2. **TLS fallback** — cleartext first; if the peer returns a TLS record layer (or cleartext fails), retry the suite over TLS on the same port.
 3. **Path and method fidelity** — unknown paths should 404/401; `DELETE /` should not **echo the GET `/` body** (status-alone 200 is not a hit).
 4. **Printers listing** — `/printers` should not echo root or advertise honeypot empty-queue copy. A bare empty 200 is **not** a stub (fresh CUPS).
-5. **Admin surface** — unauthenticated `GET /admin` 200 with a CUPS admin face is a decoy tell; 401/403 is clean.
+5. **Admin surface** — unauthenticated `GET /admin` 200 with a CUPS admin face is a decoy tell; 401/403 is clean. Dual entropy-varied Basic both unlocking `/admin` scores `ipp.arbitrary_auth`.
 6. **Frozen Date** — identical `Date` across two GETs is a hit; missing `Date` on both is corroboration-gated.
 7. **IPP framing** — `POST` with `Content-Type: application/ipp` should return parseable IPP, not the HTML root.
 8. **Ghost printer** — `Get-Printer-Attributes` for a nonexistent `printer-uri` must not return `successful-ok`.
 9. **Request-id echo** — IPP response request-id must match the request.
 10. **Clone** — distinct IPP request-ids must not return bitwise-identical bodies (decisive).
-11. **Illegal operation** — operation-id `0x7FFF` must not return `successful-ok` or HTML.
+11. **Illegal operation / state** — operation-id `0x7FFF` must not return `successful-ok` or HTML; ghost identity/status drift across reconnect scores `ipp.state_nonpersist`.
 12. **Lure metadata** — decisive Server/body tokens score alone; frozen generic CUPS versions and product-named tokens are corroboration-gated.
 
 ## Non-destructive policy
@@ -38,10 +38,11 @@ Detection philosophy:
 |---------|------------|
 | `GET /` | Print-job create / send-document |
 | `GET /printers`, `GET /admin` | Pause/resume/cancel printers |
-| `GET /_hpa_nonexistent_*` | Admin password spray |
-| `DELETE /` (expect reject) | Queue configuration writes |
-| `POST` Get-Printer-Attributes | CUPS-Add-Modify-* operations |
-| `POST` illegal operation-id | Any mutating IPP op |
+| `GET /admin` with two entropy-varied Basic headers | Admin password dictionary spray |
+| `GET /_hpa_nonexistent_*` | Queue configuration writes |
+| `DELETE /` (expect reject) | CUPS-Add-Modify-* operations |
+| `POST` Get-Printer-Attributes | Any mutating IPP op |
+| `POST` illegal operation-id | |
 
 ## Ports
 
@@ -70,12 +71,26 @@ GET /  ──►  cleartext; TLS retry if record-layer / empty
         ├─ frozen Date across GETs → frozen_date
         ├─ POST Get-Printer-Attributes → ipp_framing / ghost_printer / request_id
         ├─ second IPP request-id → ipp_clone
-        └─ POST illegal op 0x7FFF → illegal_op
+        ├─ POST illegal op 0x7FFF → illegal_op
+        ├─ dual entropy-varied Basic on /admin → arbitrary_auth
+        └─ illegal-ok / ghost drift across reconnect → state_nonpersist
 ```
 
 ## Indicators
 
-All indicators are category **`static_signature`**.
+### Arbitrary auth / Basic façade
+
+| ID | Category | Fidelity | Corroboration | Trigger |
+|----|----------|----------|---------------|---------|
+| `ipp.arbitrary_auth` | arbitrary_auth | decisive when hit | no | Two entropy-varied Basic credentials both unlock `/admin` (status 200). |
+
+### State non-persistence
+
+| ID | Category | Fidelity | Corroboration | Trigger |
+|----|----------|----------|---------------|---------|
+| `ipp.state_nonpersist` | state_nonpersist | high when hit | no | Unsupported IPP opcode still `successful-ok` (or HTML echo) and/or ghost-printer status/identity drifts across reconnect. |
+
+### Static / HTTP+IPP conformance
 
 | ID | Fidelity | Corroboration | Trigger |
 |----|----------|---------------|---------|
@@ -95,12 +110,14 @@ All indicators are category **`static_signature`**.
 
 ## Safe mode
 
-`--safe-mode` / `safe_mode`: root framing only (including TLS fallback); all other IPP indicators are skipped.
+`--safe-mode` / `safe_mode`: root framing only (including TLS fallback); all other IPP indicators (including auth and state) are skipped.
 
 ## Scoring notes
 
-See [`docs/SCORING.md`](SCORING.md). `ipp.ipp_clone` is decisive when hit. Generic
-`Server: CUPS/1.4.x` and product-named Server tokens alone are corroboration-gated.
+See [`docs/SCORING.md`](SCORING.md). `PROTOCOL_STRATEGIES["ipp"]` activates **all three**
+basic strategies. `ipp.arbitrary_auth` and `ipp.ipp_clone` are decisive when hit.
+Generic `Server: CUPS/1.4.x` and product-named Server tokens alone are
+corroboration-gated.
 
 ## False-positive notes
 

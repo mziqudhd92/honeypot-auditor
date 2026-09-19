@@ -78,11 +78,13 @@ Full strategy narrative, probe flow, and non-destructive policy: [`SNMP.md`](SNM
 
 ### DNS RFC non-compliance (basic probe)
 
-DNS uses **static_signature** only (UDP/53; no auth/state axis). Prefer RFC facade
+DNS uses **all three** basic strategies (UDP/53). Prefer RFC facade / auth / state
 tells over banner IOCs alone — see [`udp/DNS.md`](udp/DNS.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
+| `dns.arbitrary_auth` | arbitrary_auth | Decisive when hit; two entropy-varied private-label queries both NOERROR |
+| `dns.state_nonpersist` | state_nonpersist | Frozen SOA serial · identical answer · AA/TTL contradiction |
 | `dns.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across txids) |
 | `dns.header_framing` / `dns.txid` / `dns.header_facade` / `dns.question_echo` | static_signature | High fidelity RFC tells |
 | `dns.rcode_stub` / `dns.edns_facade` | static_signature | NXDOMAIN / EDNS OPT facade |
@@ -92,11 +94,13 @@ Full strategy narrative, probe flow, and non-destructive policy: [`udp/DNS.md`](
 
 ### NTP RFC 5905 non-compliance (basic probe)
 
-NTP uses **static_signature** only (UDP/123; no auth/state axis). Prefer RFC facade
+NTP uses **all three** basic strategies (UDP/123). Prefer RFC facade / KoD / state
 tells over banner IOCs alone — see [`udp/NTP.md`](udp/NTP.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
+| `ntp.kod_absent` | arbitrary_auth | High when hit; mode-3 burst served without KoD `RATE`/`DENY` |
+| `ntp.state_nonpersist` | state_nonpersist | Transmit/receive/reference timestamps fail monotonicity |
 | `ntp.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across distinct xmt) |
 | `ntp.framing` / `ntp.mode_facade` / `ntp.org_echo` / `ntp.stratum_facade` | static_signature | High fidelity RFC tells |
 | `ntp.zeroed_clock_metrics` / `ntp.epoch_zero` / `ntp.stock_refid` | static_signature | Corroboration-gated (sparse metrics · epoch stamps · lure refid) |
@@ -105,18 +109,20 @@ Full strategy narrative, probe flow, and non-destructive policy: [`udp/NTP.md`](
 
 ### Memcached ASCII non-compliance (basic probe)
 
-Memcached uses **static_signature** only (TCP ASCII; no auth/state axis). Prefer
-framing / ERROR / canned-stats tells over banner IOCs alone — see
-[`MEMCACHED.md`](MEMCACHED.md).
+Memcached uses **all three** basic strategies (TCP ASCII). Prefer framing / ERROR /
+auth / state tells over banner IOCs alone — see [`MEMCACHED.md`](MEMCACHED.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
+| `memcached.arbitrary_auth` | arbitrary_auth | Decisive when hit; two entropy-varied probe-key `set` both `STORED` |
+| `memcached.state_nonpersist` | state_nonpersist | Probe-key set then reconnect get miss / stats ignore write |
 | `memcached.stats_clone` | static_signature | Decisive when hit (bitwise-identical `stats` replies) |
 | `memcached.version_framing` / `memcached.stats_framing` / `memcached.unknown_command` | static_signature | High fidelity ASCII tells |
 | `memcached.get_miss` / `memcached.flush_stub` / `memcached.noreply_facade` | static_signature | Miss END · bare verbosity · noreply quiet |
 | `memcached.stock_version` | static_signature | Stock VERSION lure (generic tokens corroboration-gated) |
 
-Full strategy narrative, probe flow, and non-destructive policy: [`MEMCACHED.md`](MEMCACHED.md).
+Probe-key `set`/`delete` allowed; **never** `flush_all`. Full strategy narrative,
+probe flow, and non-destructive policy: [`MEMCACHED.md`](MEMCACHED.md).
 
 ### Redis RESP non-compliance (basic probe)
 
@@ -136,12 +142,15 @@ Full indicator list, probe flow, safe-mode, and non-destructive policy: [`REDIS.
 
 ### Elasticsearch API non-compliance (basic probe)
 
-Elasticsearch uses **static_signature** only (read-only HTTP JSON API; no auth/state
-axis). Prefer path/method/endpoint facade tells over banner IOCs alone — full
-strategy narrative and probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+Elasticsearch uses **all three** basic strategies (read-only HTTP JSON API plus dual
+synthetic Basic and cluster-identity state checks). Prefer path/method/endpoint
+facade and auth/state tells over banner IOCs alone — full strategy narrative and
+probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
+| `elasticsearch.arbitrary_auth` | arbitrary_auth | Decisive when hit; two entropy-varied Basic both 200 ES root on `GET /` |
+| `elasticsearch.state_nonpersist` | state_nonpersist | Root UUID/version mismatches `/_nodes` or `/_cluster/health` |
 | `elasticsearch.missing_index_ok` / `path_facade` / `method_stub` | static_signature | High-fidelity API non-compliance |
 | `elasticsearch.cluster_health_stub` / `cat_stub` | static_signature | Health/cat endpoints echo root instead of proper shapes |
 | `elasticsearch.content_type` / `product_header` | static_signature | Wrong Content-Type; modern version without `X-Elastic-Product` |
@@ -149,6 +158,22 @@ strategy narrative and probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
 | `elasticsearch.root_framing` | static_signature | Non-speaker / malformed root document |
 
 Full indicator list, ports, safe-mode, and non-destructive policy: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+
+### IPP / CUPS non-compliance (basic probe)
+
+IPP uses **all three** basic strategies (HTTP+IPP with TLS fallback). Prefer
+CUPS/IPP facade and auth/state tells over banner IOCs alone — see [`IPP.md`](IPP.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `ipp.arbitrary_auth` | arbitrary_auth | Decisive when hit; two entropy-varied Basic both unlock `/admin` |
+| `ipp.state_nonpersist` | state_nonpersist | Illegal-op still successful-ok · ghost printer drifts across reconnect |
+| `ipp.ipp_clone` | static_signature | Decisive when hit (bitwise-identical IPP bodies) |
+| `ipp.root_framing` / `ipp_framing` / `ghost_printer` / `request_id` / `illegal_op` | static_signature | High fidelity HTTP/IPP tells |
+| `ipp.path_facade` / `method_stub` / `printers_stub` / `admin_open` | static_signature | Path/method/admin façades |
+| `ipp.server_header` / `frozen_date` / `stock_body` | static_signature | Lure / clock (often corroboration-gated) |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`IPP.md`](IPP.md).
 
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 

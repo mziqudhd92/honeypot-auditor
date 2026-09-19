@@ -1,6 +1,9 @@
 """NTP fingerprint engine (RFC 5905 client/server modes).
 
 RFC non-compliance strategies (non-destructive mode-3 only — never monlist / mode-7):
+  · arbitrary_auth / kod_absent — mode-3 burst still served with uniform mode-4
+    (missing KoD RATE/DENY)
+  · state_nonpersist — transmit/receive/reference timestamps fail monotonicity
   · static_signature — framing, mode/VN facade, originate echo, stratum facade,
     canned bitwise-identical replies, zeroed clock metrics, epoch-zero timestamps,
     stock lure refids
@@ -19,10 +22,25 @@ from dataclasses import dataclass
 from honeypot_auditor import netutil
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    is_safe_mode,
+    jittered_reconnect_pause,
+    rtt_evidence,
+    skip_suite,
+)
 from honeypot_auditor.probes.udp._engine import UDPEngine
 
 _NTP_SKIP = (
+    (
+        "ntp.kod_absent",
+        "NTP mode-3 burst is served without KoD RATE/DENY",
+        "arbitrary_auth",
+    ),
+    (
+        "ntp.state_nonpersist",
+        "NTP timestamps fail monotonicity across exchanges",
+        "state_nonpersist",
+    ),
     (
         "ntp.framing",
         "NTP response framing is invalid",
@@ -246,6 +264,35 @@ def _exchange(host: str, port: int, payload: bytes):
     return ex, parsed, ""
 
 
+def _is_rate_deny_kod(msg: NtpPacket) -> bool:
+    return (
+        msg.stratum == 0
+        and msg.mode == _MODE_SERVER
+        and msg.reference_id in (b"RATE", b"DENY")
+    )
+
+
+def _timestamps_non_monotonic(msgs: list[NtpPacket]) -> tuple[bool, str]:
+    """Hit when transmit/receive/reference are frozen or go backwards across exchanges."""
+    if len(msgs) < 2:
+        return False, "insufficient exchanges for monotonicity check"
+    for field, label in (
+        ("transmit_timestamp", "transmit"),
+        ("receive_timestamp", "receive"),
+        ("reference_timestamp", "reference"),
+    ):
+        vals = [getattr(m, field) for m in msgs]
+        if len(set(vals)) == 1 and vals[0] != 0:
+            return True, f"{label} timestamp frozen across {len(msgs)} exchanges ({vals[0]:#x})"
+        for i in range(1, len(vals)):
+            if vals[i] and vals[i - 1] and vals[i] < vals[i - 1]:
+                return True, (
+                    f"{label} timestamp went backwards "
+                    f"({vals[i - 1]:#x} -> {vals[i]:#x})"
+                )
+    return False, "timestamps advance across exchanges"
+
+
 def probe_ntp(host: str, port: int) -> list[Indicator]:
     # 1) Baseline NTPv4 client mode-3
     base_req = build_client_request()
@@ -401,7 +448,75 @@ def probe_ntp(host: str, port: int) -> list[Indicator]:
         else f"refid={base_msg.reference_id!r}"
     )
 
+    # --- arbitrary auth / KoD absent: short mode-3 burst (2–3 extras) ---
+    # Exchanges so far: base, vn, clone (=3). Burst adds 2 → total 5.
+    burst_msgs: list[NtpPacket] = []
+    burst_served = 0
+    burst_kod = False
+    burst_rtts: list[float] = []
+    for _ in range(2):
+        breq = build_client_request()
+        bex, bmsg, _berr = _exchange(host, port, breq)
+        burst_rtts.append(bex.rtt_ms)
+        if bmsg is not None and bmsg.mode == _MODE_SERVER:
+            burst_served += 1
+            burst_msgs.append(bmsg)
+            if _is_rate_deny_kod(bmsg):
+                burst_kod = True
+    kod_hit = False
+    if burst_served >= 2 and not burst_kod:
+        # "Uniform serve under load": every burst packet is mode-4 with no RATE/DENY
+        # KoD, and replies are canned (identical) or freeze transmit timestamps.
+        raws = {m.raw for m in burst_msgs}
+        xmts = {m.transmit_timestamp for m in burst_msgs}
+        kod_hit = len(raws) == 1 or len(xmts) == 1
+    kod_detail = (
+        f"mode-3 burst: {burst_served}/2 uniform mode-4 replies with no KoD RATE/DENY"
+        if kod_hit
+        else (
+            "KoD RATE/DENY observed under burst"
+            if burst_kod
+            else f"burst served {burst_served}/2 mode-4 replies (clock advanced / not uniform)"
+        )
+    )
+
+    # --- state: timestamp monotonicity across baseline/clone/burst ---
+    jittered_reconnect_pause()
+    mono_msgs: list[NtpPacket] = [base_msg]
+    if _clone_msg is not None:
+        mono_msgs.append(_clone_msg)
+    mono_msgs.extend(burst_msgs)
+    # One more exchange after jitter for a fresh sample.
+    late_req = build_client_request()
+    late_ex, late_msg, _late_err = _exchange(host, port, late_req)
+    if late_msg is not None:
+        mono_msgs.append(late_msg)
+    state_hit, state_detail = _timestamps_non_monotonic(mono_msgs)
+    rtt_note = rtt_evidence(base_ex.rtt_ms, *burst_rtts, late_ex.rtt_ms)
+
     return [
+        Indicator(
+            id="ntp.kod_absent",
+            title="NTP mode-3 burst is served without KoD RATE/DENY",
+            category="arbitrary_auth",
+            triggered=kod_hit,
+            protocol="ntp",
+            detail=kod_detail,
+            evidence=rtt_note,
+            remediation="Emit stratum-0 KoD RATE/DENY under client burst load (RFC 5905 §7.4)",
+            fidelity="high" if kod_hit else "medium",
+        ),
+        Indicator(
+            id="ntp.state_nonpersist",
+            title="NTP timestamps fail monotonicity across exchanges",
+            category="state_nonpersist",
+            triggered=state_hit,
+            protocol="ntp",
+            detail=state_detail,
+            evidence=rtt_note,
+            remediation="Advance transmit/receive/reference timestamps per exchange",
+            fidelity="high" if state_hit else "medium",
+        ),
         Indicator(
             id="ntp.framing",
             title="NTP response framing is invalid",

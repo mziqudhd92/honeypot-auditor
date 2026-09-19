@@ -1,24 +1,44 @@
 """Memcached ASCII protocol fingerprint engine.
 
-Strategies: static signature only (VERSION/stats framing · unknown-command
-ERROR fidelity · get-miss END · canned stats clones · stock VERSION lures ·
-verbosity/noreply façades).
+Strategies: arbitrary auth (dual entropy-varied ASCII ``set`` acceptance +
+binary/SASL frame evidence) · state non-persistence (set then reconnect get
+miss / stats ignore write) · static signature (VERSION/stats framing ·
+unknown-command ERROR fidelity · get-miss END · canned stats clones · stock
+VERSION lures · verbosity/noreply façades).
 
-Never sends flush_all, stats reset, slab reassign, or SET/ADD/REPLACE.
-Bare ``verbosity`` (wrong arity → ERROR) is the non-destructive stand-in for
-flush-accept stubs.
+Never sends flush_all, stats reset, or slab reassign. Probe keys use an
+``hpa_`` prefix, short TTL, and are deleted after checks when STORED.
+Bare ``verbosity`` (wrong arity → ERROR) remains the non-destructive
+stand-in for flush-accept stubs among static tells.
 """
 
 from __future__ import annotations
 
 import re
 import secrets
+import struct
 
 from honeypot_auditor.models import Indicator
 from honeypot_auditor.netutil import closed_reason, tcp_transact
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    entropy_varied_creds,
+    is_safe_mode,
+    jittered_reconnect_pause,
+    rtt_evidence,
+    skip_suite,
+)
 
 _MC_SKIP = (
+    (
+        "memcached.arbitrary_auth",
+        "Memcached accepts two entropy-varied ASCII set writes",
+        "arbitrary_auth",
+    ),
+    (
+        "memcached.state_nonpersist",
+        "Memcached probe key does not persist across reconnect",
+        "state_nonpersist",
+    ),
     (
         "memcached.version_framing",
         "Memcached VERSION reply violates ASCII framing",
@@ -120,6 +140,9 @@ _STOCK_VERSIONS_GENERIC = frozenset(
 _VERSION_LINE_RE = re.compile(r"^VERSION\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 _STAT_LINE_RE = re.compile(r"^STAT\s+\S+", re.IGNORECASE | re.MULTILINE)
 
+# Minimal binary SASL list-mechs request (24-byte header, magic 0x80 opcode 0x21).
+_BINARY_SASL_LIST = struct.pack(">BBHBBHIIQ", 0x80, 0x21, 0, 0, 0, 0, 0, 1, 0)
+
 
 def _cmd(text: str) -> bytes:
     return f"{text}\r\n".encode("ascii")
@@ -127,6 +150,20 @@ def _cmd(text: str) -> bytes:
 
 def _mc_call(host: str, port: int, command: str) -> tuple[bytes, str]:
     return tcp_transact(host, port, _cmd(command))
+
+
+def _mc_set(host: str, port: int, key: str, value: bytes, *, exptime: int = 5) -> tuple[bytes, str]:
+    payload = (
+        f"set {key} 0 {exptime} {len(value)}\r\n".encode("ascii")
+        + value
+        + b"\r\n"
+    )
+    return tcp_transact(host, port, payload)
+
+
+def _safe_key(prefix: str, label: str) -> str:
+    body = re.sub(r"[^A-Za-z0-9_.-]", "", label)[:24] or "x"
+    return f"{prefix}{body}"
 
 
 def _decode(raw: bytes) -> str:
@@ -150,6 +187,21 @@ def _looks_like_memcached(raw: bytes) -> bool:
 
 def _is_error(raw: bytes) -> bool:
     return _first_token(_decode(raw)) == _MC_ERROR
+
+
+def _is_stored(raw: bytes) -> bool:
+    return _first_token(_decode(raw)) == "STORED"
+
+
+def _is_get_miss(raw: bytes) -> bool:
+    text = _decode(raw)
+    if not text.strip():
+        return False
+    token = _first_token(text)
+    if token == "END":
+        return True
+    # END after empty VALUE block is still a miss shape; VALUE means a hit.
+    return token != "VALUE" and bool(re.search(r"(?im)^END\s*$", text)) and "VALUE " not in text.upper()
 
 
 def _is_version_framed(raw: bytes) -> bool:
@@ -305,7 +357,124 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
     flush_hit = bool(verbosity_raw) and not _is_error(verbosity_raw)
     noreply_hit = bool(noreply_raw.strip())
 
+    # --- arbitrary_auth: dual entropy-varied ASCII set + binary/SASL evidence ---
+    (low_user, _low_pass), (high_user, _high_pass) = entropy_varied_creds()
+    auth_keys: list[str] = []
+    auth_stored = 0
+    auth_notes: list[str] = []
+    auth_err = ""
+    for label, user in (("low-entropy", low_user), ("high-entropy", high_user)):
+        key = _safe_key("hpa_a_", user)
+        set_raw, set_err = _mc_set(host, port, key, b"x", exptime=5)
+        if set_err and not set_raw:
+            auth_err = auth_err or set_err
+            auth_notes.append(f"{label}: set unanswered ({set_err})")
+            continue
+        if _is_stored(set_raw):
+            auth_stored += 1
+            auth_keys.append(key)
+            auth_notes.append(f"{label}: set STORED key={key}")
+            _mc_call(host, port, f"delete {key}")
+        else:
+            auth_notes.append(f"{label}: set {_first_token(_decode(set_raw)) or 'empty'}")
+
+    bin_raw, bin_err = tcp_transact(host, port, _BINARY_SASL_LIST)
+    bin_note = ""
+    if auth_stored == 2:
+        if bin_err and not bin_raw:
+            bin_note = f"; binary/SASL frame closed ({closed_reason(bin_err)})"
+        elif bin_raw:
+            if bin_raw[:1] == b"\x81":
+                bin_note = "; binary/SASL frame answered with binary magic"
+            elif _is_error(bin_raw) or not _looks_like_memcached(bin_raw):
+                bin_note = (
+                    f"; binary/SASL mishandled "
+                    f"(ascii_token={_first_token(_decode(bin_raw))!r} or garbage)"
+                )
+            else:
+                bin_note = f"; binary/SASL reply={_first_token(_decode(bin_raw))!r}"
+
+    auth_skipped = auth_stored == 0 and bool(auth_err) and all(
+        "unanswered" in n for n in auth_notes
+    )
+    auth_hit = auth_stored == 2
+    auth_detail = (
+        f"two entropy-varied ASCII set writes both STORED{bin_note}"
+        if auth_hit
+        else ("; ".join(auth_notes) if auth_notes else "dual set not evaluated")
+    )
+
+    # --- state_nonpersist: set → pause → get miss / stats ignore ---
+    state_key = f"hpa_s_{secrets.token_hex(4)}"
+    stats_before, _ = _mc_call(host, port, "stats")
+    state_set_raw, state_set_err = _mc_set(host, port, state_key, b"y", exptime=30)
+    state_skipped = False
+    state_hit = False
+    state_detail = "state persistence not evaluated"
+    state_err = ""
+    if state_set_err and not state_set_raw:
+        state_skipped = True
+        state_err = state_set_err
+        state_detail = closed_reason(state_set_err)
+    elif not _is_stored(state_set_raw):
+        state_skipped = True
+        state_detail = (
+            f"set rejected before persistence check "
+            f"({_first_token(_decode(state_set_raw)) or 'empty'})"
+        )
+    else:
+        stats_after, _ = _mc_call(host, port, "stats")
+        pause_s = jittered_reconnect_pause()
+        got_raw, got_err = _mc_call(host, port, f"get {state_key}")
+        notes: list[str] = []
+        if got_err and not got_raw:
+            notes.append(f"get after reconnect failed: {closed_reason(got_err)}")
+        elif _is_get_miss(got_raw):
+            notes.append(f"get {state_key} returned END miss after STORED")
+        stats_ignore = (
+            bool(stats_before)
+            and bool(stats_after)
+            and stats_before == stats_after
+        )
+        if stats_ignore:
+            notes.append("stats reply unchanged after successful set (write ignored)")
+        state_hit = bool(notes)
+        state_detail = (
+            "; ".join(notes)
+            if notes
+            else f"key {state_key} persisted across reconnect"
+        )
+        rtt_note = rtt_evidence(pause_s * 1000.0)
+        if rtt_note and state_hit:
+            state_detail = f"{state_detail}; pause_{rtt_note}"
+        _mc_call(host, port, f"delete {state_key}")
+
     return [
+        _ind(
+            id="memcached.arbitrary_auth",
+            title="Memcached accepts two entropy-varied ASCII set writes",
+            category="arbitrary_auth",
+            triggered=auth_hit,
+            skipped=auth_skipped,
+            skip_reason=closed_reason(auth_err) if auth_skipped else "",
+            error=auth_err if auth_skipped else "",
+            detail=auth_detail,
+            evidence=",".join(auth_keys) if auth_hit else "",
+            fidelity="decisive" if auth_hit else "medium",
+            remediation="Require SASL/authz before accepting arbitrary set writes",
+        ),
+        _ind(
+            id="memcached.state_nonpersist",
+            title="Memcached probe key does not persist across reconnect",
+            category="state_nonpersist",
+            triggered=state_hit,
+            skipped=state_skipped,
+            skip_reason=state_detail if state_skipped else "",
+            error=state_err,
+            detail=state_detail,
+            fidelity="high" if state_hit else "medium",
+            remediation="Persist set values across connections; advance stats on writes",
+        ),
         _ind(
             id="memcached.version_framing",
             title="Memcached VERSION reply violates ASCII framing",

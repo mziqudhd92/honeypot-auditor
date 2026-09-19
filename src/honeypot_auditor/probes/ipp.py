@@ -2,6 +2,9 @@
 
 Protocol non-compliance strategies (read-only — never print, pause, or
 reconfigure queues):
+  · arbitrary_auth — two entropy-varied Basic credentials both unlock /admin
+  · state_nonpersist — unsupported IPP opcode still successful-ok and/or ghost
+    printer identity drifts across reconnect
   · static_signature — CUPS root framing; stock Server header lures; unknown-path
     facade; DELETE method stub; /printers stub; open /admin; frozen Date;
     IPP Content-Type framing; ghost-printer successful-ok; request-id echo;
@@ -17,6 +20,7 @@ See docs/IPP.md, RFC 8010/8011 (IPP), and CUPS HTTP admin surface.
 
 from __future__ import annotations
 
+import base64
 import re
 import secrets
 import struct
@@ -26,11 +30,27 @@ from dataclasses import dataclass
 from honeypot_auditor.config import effective_user_agent
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason, tcp_transact
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    entropy_varied_creds,
+    is_safe_mode,
+    jittered_reconnect_pause,
+    rtt_evidence,
+    skip_suite,
+)
 from honeypot_auditor.proxy_transport import create_tls_connection
 from honeypot_auditor.settings import settings
 
 _IPP_SKIP = (
+    (
+        "ipp.arbitrary_auth",
+        "IPP/CUPS accepts two entropy-varied Basic credentials on /admin",
+        "arbitrary_auth",
+    ),
+    (
+        "ipp.state_nonpersist",
+        "IPP state drifts across reconnect (illegal-op ok / ghost identity)",
+        "state_nonpersist",
+    ),
     (
         "ipp.root_framing",
         "IPP/CUPS root response is not a print-service HTTP face",
@@ -800,7 +820,139 @@ def probe_ipp(host: str, port: int) -> list[Indicator]:
                     f"illegal-op IPP status-code=0x{parsed_ill.status:04x}"
                 )
 
+    # --- arbitrary_auth: dual entropy-varied Basic on /admin ---
+    (low_user, low_pass), (high_user, high_pass) = entropy_varied_creds()
+    auth_ok = 0
+    auth_notes: list[str] = []
+    auth_err = ""
+    for label, user, password in (
+        ("low-entropy", low_user, low_pass),
+        ("high-entropy", high_user, high_pass),
+    ):
+        token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+        ba_status, _ba_hdrs, ba_body, ba_err = _http_exchange(
+            host,
+            port,
+            "GET",
+            "/admin",
+            tls=use_tls,
+            extra_headers={"Authorization": f"Basic {token}"},
+        )
+        if ba_err and ba_status == 0 and not ba_body:
+            auth_err = auth_err or ba_err
+            auth_notes.append(f"{label}: unanswered ({ba_err})")
+            continue
+        if ba_status == 200:
+            auth_ok += 1
+            auth_notes.append(f"{label}: Basic unlocked /admin (status=200)")
+        else:
+            auth_notes.append(f"{label}: Basic status={ba_status}")
+    auth_skipped = auth_ok == 0 and bool(auth_err) and all(
+        "unanswered" in n for n in auth_notes
+    )
+    auth_hit = auth_ok == 2
+    auth_detail = (
+        "two entropy-varied Basic credentials both unlocked /admin (status=200)"
+        if auth_hit
+        else ("; ".join(auth_notes) if auth_notes else "Basic /admin not evaluated")
+    )
+    if ad_status in {401, 403}:
+        auth_detail = f"anon /admin was {ad_status}; {auth_detail}"
+
+    # --- state_nonpersist: illegal-op successful-ok and/or ghost drift ---
+    state_notes: list[str] = []
+    state_skipped = False
+    state_err = ""
+    if illegal_hit and (
+        "successful-ok" in illegal_detail or "echoed HTML root" in illegal_detail
+    ):
+        state_notes.append(illegal_detail)
+
+    pause_s = jittered_reconnect_pause()
+    rid4 = (rid3 + 1) % 0x100000000 or 1
+    ipp_reconnect = _build_get_printer_attributes(rid4, uri)
+    if not ipp_skipped:
+        r_status, _r_hdrs, r_body, r_err = _http_exchange(
+            host,
+            port,
+            "POST",
+            ipp_path,
+            tls=use_tls,
+            extra_headers={"Content-Type": "application/ipp"},
+            body=ipp_reconnect,
+        )
+        if r_err and not r_body:
+            if not state_notes:
+                state_skipped = True
+                state_err = r_err
+        else:
+            parsed_r = _parse_ipp_header(r_body) if r_body else None
+            if parsed1 is not None and parsed_r is not None:
+                if parsed1.status != parsed_r.status:
+                    state_notes.append(
+                        f"ghost printer status drifted "
+                        f"0x{parsed1.status:04x}→0x{parsed_r.status:04x} across reconnect"
+                    )
+                elif (
+                    ghost_hit
+                    and parsed_r.status == _IPP_SUCCESSFUL_OK
+                    and i1_body
+                    and r_body
+                    and i1_body != r_body
+                ):
+                    state_notes.append(
+                        "ghost printer identity/attributes changed across reconnect"
+                    )
+            elif parsed1 is not None and parsed_r is None and r_body:
+                state_notes.append(
+                    "ghost printer reply lost IPP framing across reconnect"
+                )
+    elif not state_notes:
+        state_skipped = True
+
+    state_hit = bool(state_notes)
+    state_detail = (
+        "; ".join(state_notes)
+        if state_notes
+        else (
+            closed_reason(state_err)
+            if state_skipped and state_err
+            else "IPP state stable across reconnect / illegal-op rejected"
+        )
+    )
+    rtt_note = rtt_evidence(pause_s * 1000.0)
+    if rtt_note and state_hit:
+        state_detail = f"{state_detail}; pause_{rtt_note}"
+
     return [
+        Indicator(
+            id="ipp.arbitrary_auth",
+            title="IPP/CUPS accepts two entropy-varied Basic credentials on /admin",
+            category="arbitrary_auth",
+            triggered=auth_hit,
+            skipped=auth_skipped,
+            skip_reason=closed_reason(auth_err) if auth_skipped else "",
+            error=auth_err if auth_skipped else "",
+            protocol="ipp",
+            detail=auth_detail,
+            evidence=f"{low_user},{high_user}" if auth_hit else "",
+            remediation="Reject unknown Basic credentials on /admin",
+            fidelity="decisive" if auth_hit else "medium",
+        ),
+        Indicator(
+            id="ipp.state_nonpersist",
+            title="IPP state drifts across reconnect (illegal-op ok / ghost identity)",
+            category="state_nonpersist",
+            triggered=state_hit,
+            skipped=state_skipped and not state_hit,
+            skip_reason=state_detail if state_skipped and not state_hit else "",
+            error=state_err,
+            protocol="ipp",
+            detail=state_detail,
+            evidence="",
+            remediation="Reject illegal IPP opcodes; keep ghost-printer errors stable across sessions",
+            fidelity="high" if state_hit else "medium",
+        ),
         Indicator(
             id="ipp.root_framing",
             title="IPP/CUPS root response is not a print-service HTTP face",

@@ -19,6 +19,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Three-strategy expansion for nine protocols that previously used
+  **static_signature** only: DNS, NTP, Elasticsearch, IPP/CUPS, Memcached, HTTP,
+  SIP, Git, and HTTP proxy now activate **arbitrary_auth** + **state_nonpersist**
+  + **static_signature** (`dns.arbitrary_auth` / `dns.state_nonpersist`,
+  `ntp.kod_absent` / `ntp.state_nonpersist`, `elasticsearch.*`, `ipp.*`,
+  `memcached.*`, `http.*`, `sip.*`, `git.*`, `httpproxy.*`; Memcached allows
+  probe-key set/delete, never `flush_all`)
 - Docs sync: surface NTP in README/BASIC banner, ports table, site index,
   agents/llms briefs, SCORING, and `docs/udp/README.md` (guide already at
   `docs/udp/NTP.md`)

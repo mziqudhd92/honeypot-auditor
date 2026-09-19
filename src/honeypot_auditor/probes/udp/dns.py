@@ -1,22 +1,31 @@
 """DNS fingerprint engine (RFC 1035 + light RFC 6891 EDNS0).
 
-RFC non-compliance strategies (non-destructive QUERY only — never AXFR/ANY flood):
+RFC non-compliance strategies (non-destructive QUERY only — never AXFR/UPDATE/ANY flood):
+  · arbitrary_auth — two entropy-varied private-label / bogus-TLD queries both NOERROR
+  · state_nonpersist — frozen SOA serial · bitwise-identical answer · AA/TTL contradiction
   · static_signature — header framing, txid echo, OPCODE facade, question echo,
     RCODE stub on .invalid, response clone, 0x20 case mismatch (gated),
     EDNS FORMERR on valid OPT, stock TXT/SOA lure tokens (gated)
 
-UDP/53 (lab 15353). See docs/udp/DNS.md.
+UDP/53 (lab 15353). See docs/udp/DNS.md. Budget ≤8 UDP exchanges.
 """
 
 from __future__ import annotations
 
+import re
 import secrets
 import struct
 from dataclasses import dataclass
 
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason, udp_exchange
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    entropy_varied_creds,
+    is_safe_mode,
+    jittered_reconnect_pause,
+    rtt_evidence,
+    skip_suite,
+)
 from honeypot_auditor.probes.udp._engine import UDPEngine
 
 OPCODE_QUERY = 0
@@ -33,8 +42,19 @@ CLASS_IN = 1
 RCODE_NOERROR = 0
 RCODE_FORMERR = 1
 RCODE_NXDOMAIN = 3
+RCODE_REFUSED = 5
 
 _DNS_SKIP = (
+    (
+        "dns.arbitrary_auth",
+        "DNS returns NOERROR for two entropy-varied private-label queries",
+        "arbitrary_auth",
+    ),
+    (
+        "dns.state_nonpersist",
+        "DNS answer state is frozen or contradictory across re-query",
+        "state_nonpersist",
+    ),
     (
         "dns.header_framing",
         "DNS response header framing is invalid",
@@ -444,6 +464,57 @@ def _rr_text(rr: DnsRR) -> str:
     return rr.rdata.decode("utf-8", "replace")
 
 
+def _dns_label(token: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9-]", "", token.lower())[:20] or "hpa"
+    return f"hpa-{safe}-{secrets.token_hex(2)}"
+
+
+def _auth_qnames() -> tuple[str, str]:
+    low, high = entropy_varied_creds()
+    return f"{_dns_label(low[0])}.invalid", f"{_dns_label(high[0])}.test"
+
+
+def _soa_serial(rr: DnsRR) -> int | None:
+    """Extract SOA SERIAL from wire rdata (skip two domain names, then u32)."""
+    if rr.rtype != TYPE_SOA or len(rr.rdata) < 22:
+        return None
+    pos = 0
+    data = rr.rdata
+    for _ in range(2):
+        while pos < len(data):
+            length = data[pos]
+            if length == 0:
+                pos += 1
+                break
+            if length & 0xC0 == 0xC0:
+                pos += 2
+                break
+            pos += 1 + length
+        else:
+            return None
+    if pos + 4 > len(data):
+        return None
+    return struct.unpack_from("!I", data, pos)[0]
+
+
+def _has_static_answer(msg: DnsMessage) -> bool:
+    """NOERROR with answers or a static SOA in answer/authority."""
+    if msg.rcode != RCODE_NOERROR:
+        return False
+    for rr in msg.answers:
+        if rr.rtype == TYPE_OPT:
+            continue
+        if rr.rtype == TYPE_SOA or msg.ancount > 0:
+            return True
+    return bool(msg.ancount > 0 and msg.answers)
+
+
+def _payload_sans_txid(data: bytes) -> bytes:
+    if len(data) < 2:
+        return data
+    return data[2:]
+
+
 def probe_dns(host: str, port: int) -> list[Indicator]:
     qname = _mixed_case_qname()
     base_txid = secrets.randbelow(0x10000) or 1
@@ -646,9 +717,95 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
     # stock always gated in v1 (weak lure tokens).
     stock_requires = True
 
-    rtt_note = f"baseline_rtt_ms={base_ex.rtt_ms:.2f}"
+    # --- arbitrary auth: two entropy-varied private-label / bogus-TLD queries ---
+    # Exchanges so far: base, facade, clone, edns (=4). Auth + state add ≤3 → total ≤7.
+    auth_q1, auth_q2 = _auth_qnames()
+    auth_ok = 0
+    auth_notes: list[str] = []
+    auth_rtts: list[float] = []
+    for aq in (auth_q1, auth_q2):
+        atxid = secrets.randbelow(0x10000) or 1
+        aex = _exchange(host, port, build_query(aq, txid=atxid, rd=True))
+        auth_rtts.append(aex.rtt_ms)
+        amsg = parse_dns_message(aex.data) if aex.data else None
+        if amsg is not None and amsg.qr == 1 and _has_static_answer(amsg):
+            auth_ok += 1
+            auth_notes.append(f"{aq}: NOERROR answers/SOA")
+        elif amsg is not None and amsg.rcode in (RCODE_NXDOMAIN, RCODE_REFUSED):
+            auth_notes.append(f"{aq}: rcode={amsg.rcode}")
+        elif amsg is not None:
+            auth_notes.append(f"{aq}: rcode={amsg.rcode} ancount={amsg.ancount}")
+        else:
+            auth_notes.append(f"{aq}: unanswered/unparseable")
+    auth_hit = auth_ok >= 2
+    auth_detail = (
+        "two entropy-varied private-label queries both returned NOERROR with answers/SOA"
+        if auth_hit
+        else "; ".join(auth_notes)
+    )
+
+    # --- state: re-query same baseline QNAME after jitter ---
+    jittered_reconnect_pause()
+    state_txid = (base_txid + 7) % 0x10000 or 7
+    state_ex = _exchange(host, port, build_query(qname, txid=state_txid, rd=True))
+    state_msg = parse_dns_message(state_ex.data) if state_ex.data else None
+    state_hit = False
+    state_detail = "re-query answer state looks dynamic"
+    if state_msg is not None and state_msg.qr == 1 and state_ex.data:
+        # Frozen SOA serial
+        serials_a = [s for s in (_soa_serial(rr) for rr in base_msg.answers) if s is not None]
+        serials_b = [s for s in (_soa_serial(rr) for rr in state_msg.answers) if s is not None]
+        if serials_a and serials_b and serials_a[0] == serials_b[0]:
+            state_hit = True
+            state_detail = f"frozen SOA serial {serials_a[0]} across re-query"
+        elif (
+            (base_msg.ancount > 0 or bool(serials_a))
+            and _payload_sans_txid(base_ex.data) == _payload_sans_txid(state_ex.data)
+        ):
+            state_hit = True
+            state_detail = "bitwise-identical answer payload across re-query (ignoring txid)"
+        else:
+            # AA / TTL contradiction
+            ttls_a = [rr.ttl for rr in base_msg.answers if rr.rtype != TYPE_OPT]
+            ttls_b = [rr.ttl for rr in state_msg.answers if rr.rtype != TYPE_OPT]
+            aa_flip = base_msg.aa != state_msg.aa
+            ttl_up = bool(ttls_a and ttls_b and ttls_b[0] > ttls_a[0])
+            if aa_flip or ttl_up:
+                state_hit = True
+                state_detail = (
+                    f"AA/TTL contradiction: aa {base_msg.aa}->{state_msg.aa} "
+                    f"ttl {ttls_a[:1]}->{ttls_b[:1]}"
+                )
+    elif state_ex.error and not state_ex.data:
+        state_detail = f"re-query unanswered ({closed_reason(state_ex.error)})"
+
+    rtt_note = rtt_evidence(base_ex.rtt_ms, *auth_rtts, state_ex.rtt_ms) or (
+        f"baseline_rtt_ms={base_ex.rtt_ms:.2f}"
+    )
 
     return [
+        Indicator(
+            id="dns.arbitrary_auth",
+            title="DNS returns NOERROR for two entropy-varied private-label queries",
+            category="arbitrary_auth",
+            triggered=auth_hit,
+            protocol="dns",
+            detail=auth_detail,
+            evidence=f"{auth_q1};{auth_q2};{rtt_note}",
+            remediation="Return NXDOMAIN/REFUSED for nonexistent private-label / reserved TLDs",
+            fidelity="decisive" if auth_hit else "medium",
+        ),
+        Indicator(
+            id="dns.state_nonpersist",
+            title="DNS answer state is frozen or contradictory across re-query",
+            category="state_nonpersist",
+            triggered=state_hit,
+            protocol="dns",
+            detail=state_detail,
+            evidence=rtt_note,
+            remediation="Advance SOA serials and vary TTLs; do not replay identical answer blobs",
+            fidelity="high" if state_hit else "medium",
+        ),
         Indicator(
             id="dns.header_framing",
             title="DNS response header framing is invalid",
@@ -790,6 +947,7 @@ __all__ = [
     "RCODE_FORMERR",
     "RCODE_NOERROR",
     "RCODE_NXDOMAIN",
+    "RCODE_REFUSED",
     "TYPE_A",
     "TYPE_OPT",
     "TYPE_SOA",

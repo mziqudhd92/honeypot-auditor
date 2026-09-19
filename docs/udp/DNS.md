@@ -8,26 +8,29 @@ Honeypot-auditor’s DNS engine speaks **classic DNS over UDP**
 It targets shallow DNS stubs that answer without parsing the request: wrong
 transaction IDs, ignored question sections, illegal OPCODE facades, NXDOMAIN
 names answered as NOERROR, canned identical datagrams, broken 0x20 case echo,
-and EDNS FORMERR on a *valid* OPT. It does **not** rely on product IOC lists
-alone.
+and EDNS FORMERR on a *valid* OPT. It also checks open-resolver-style acceptance
+of entropy-varied private-label queries and frozen/contradictory answer state
+across re-query. It does **not** rely on product IOC lists alone.
 
 ## Strategies
 
-DNS activates one of the three basic scoring strategies
+DNS activates **all three** basic scoring strategies
 (`PROTOCOL_STRATEGIES["dns"]`):
 
 | Strategy | Why it applies to DNS |
 |----------|------------------------|
-| **arbitrary_auth** | **Not used.** Classic DNS has no credential on the basic QUERY path; recursion flags are not auth. |
-| **static_signature** | Almost all DNS honeypot tells are protocol-facade failures: header framing, txid, OPCODE/QR, question echo, RCODE stubs, response clones, 0x20 case, EDNS mishandling, stock lure TXT/SOA. |
-| **state_nonpersist** | **Not used.** UDP QUERY/RESPONSE has no session to resume. |
+| **arbitrary_auth** | Two entropy-varied private-label / bogus-TLD queries both return **NOERROR** with answers/SOA (open-resolver / static SOA façade). Indicator: `dns.arbitrary_auth`. |
+| **static_signature** | Protocol-facade failures: header framing, txid, OPCODE/QR, question echo, RCODE stubs, response clones, 0x20 case, EDNS mishandling, stock lure TXT/SOA. |
+| **state_nonpersist** | Re-query of the baseline name shows frozen SOA serial, bitwise-identical answer payload (ignoring txid), or AA/TTL contradiction. Indicator: `dns.state_nonpersist`. |
 
 Detection philosophy:
 
 1. **Baseline speakership** — A QUERY for a synthetic mixed-case `hpaudit-<nonce>.invalid` name. No parseable QR=1 header → framing tell or suite skip.
 2. **Request fidelity** — response ID, question section (including 0x20 casing), and RCODE for `.invalid` must match the RFCs; canned identical UDP payloads are decisive.
 3. **Facade probes** — reserved/illegal OPCODE should be dropped (or FORMERR), not answered as a normal QUERY (UDP timeout on drop is a clean non-hit); a *valid* EDNS OPT must not produce FORMERR/garbage (timeout → skip; OPT *absence* alone is not a hit).
-4. **Lure text last** — stock TXT/SOA tokens corroborate; weak strings need another hit.
+4. **Open-resolver façade** — two entropy-varied private-label queries must not both land NOERROR with answers/SOA (`dns.arbitrary_auth`).
+5. **Answer state** — after a short pause, re-query the baseline name; frozen SOA serial, identical answer blobs, or AA/TTL contradiction score `dns.state_nonpersist`.
+6. **Lure text last** — stock TXT/SOA tokens corroborate; weak strings need another hit.
 
 ## Non-destructive policy
 
@@ -35,11 +38,14 @@ Detection philosophy:
 |---------|------------|
 | Single A QUERY for `hpaudit-<nonce>.invalid` (mixed-case 0x20) | AXFR / IXFR / zone transfer |
 | Second QUERY with a distinct transaction ID | ANY / amplification / large EDNS size games |
-| One reserved/illegal OPCODE probe | Recursive open-resolver scanning beyond the target |
-| One QUERY carrying a valid EDNS0 OPT RR | Forced truncation (`TC`) without a lab zone |
-| Inspect TXT/SOA rdata already returned | DoH / DoT |
+| Two entropy-varied private-label / bogus-TLD QUERYs | Recursive open-resolver scanning beyond the target |
+| One reserved/illegal OPCODE probe | Forced truncation (`TC`) without a lab zone |
+| One QUERY carrying a valid EDNS0 OPT RR | DoH / DoT |
+| One re-query of the baseline name (state check) | Dynamic updates / NOTIFY |
+| Inspect TXT/SOA rdata already returned | |
 
-Packet budget: ≤ **8** UDP exchanges per host.
+Packet budget: ≤ **8** UDP exchanges per host (baseline, facade, clone, EDNS,
+dual auth queries, and one state re-query fit the budget).
 
 ## Ports
 
@@ -61,10 +67,24 @@ A QUERY hPaUdIt-<n>.iNvAlId  ──►  header framing (QR=1 speaker)
         ├─ illegal OPCODE probe → header_facade
         ├─ second distinct-ID QUERY → response_clone
         ├─ QUERY + valid OPT → edns_facade
+        ├─ two private-label QUERYs → arbitrary_auth
+        ├─ re-query baseline QNAME → state_nonpersist
         └─ TXT/SOA lure tokens → stock_payload (often corroboration-gated)
 ```
 
 ## Indicators
+
+### Arbitrary auth / open-resolver façade
+
+| ID | Category | Fidelity | Corroboration | Trigger |
+|----|----------|----------|---------------|---------|
+| `dns.arbitrary_auth` | arbitrary_auth | **decisive** when hit | no | Two entropy-varied private-label / bogus-TLD queries both return NOERROR with answers/SOA. |
+
+### State non-persistence
+
+| ID | Category | Fidelity | Corroboration | Trigger |
+|----|----------|----------|---------------|---------|
+| `dns.state_nonpersist` | state_nonpersist | high when hit | no | Re-query shows frozen SOA serial, bitwise-identical answer (ignoring txid), or AA/TTL contradiction. |
 
 ### Static / RFC conformance
 
@@ -83,8 +103,8 @@ A QUERY hPaUdIt-<n>.iNvAlId  ──►  header framing (QR=1 speaker)
 ## Safe mode
 
 `--safe-mode` / `safe_mode`: only header framing on the baseline QUERY response is
-evaluated. Txid, facade, question, RCODE, clone, 0x20, EDNS, and stock probes are
-skipped.
+evaluated. Txid, facade, question, RCODE, clone, 0x20, EDNS, auth, state, and stock
+probes are skipped.
 
 ## Spec references
 
@@ -95,11 +115,11 @@ skipped.
 
 ## Scoring
 
-`PROTOCOL_STRATEGIES["dns"]` activates **static_signature** only.
-High-signal examples: `dns.response_clone` (`decisive`); txid / header facade /
-question echo / RCODE stub / EDNS typically `high` when triggered. Gated tells
-(`case_encoding_mismatch`, `stock_payload`) need corroboration. See
-[`SCORING.md`](../SCORING.md).
+`PROTOCOL_STRATEGIES["dns"]` activates **all three** basic strategies.
+High-signal examples: `dns.arbitrary_auth` and `dns.response_clone` (`decisive`);
+`dns.state_nonpersist`, txid / header facade / question echo / RCODE stub / EDNS
+typically `high` when triggered. Gated tells (`case_encoding_mismatch`,
+`stock_payload`) need corroboration. See [`SCORING.md`](../SCORING.md).
 
 ## FP notes
 
@@ -107,3 +127,4 @@ question echo / RCODE stub / EDNS typically `high` when triggered. Gated tells
 - **Filtered UDP** — timeout / empty reply → suite skip (not a framing hit). ICMP refused (connected mode) likewise skips.
 - **EDNS-optional servers** — ignoring OPT without FORMERR is fine; only mishandling a valid OPT scores.
 - **Real NXDOMAIN vs NOERROR/NODATA** — probe uses `.invalid`; NOERROR *with answers* is the stub tell, not empty NOERROR/NODATA alone.
+- **Real open resolvers** — `dns.arbitrary_auth` can fire on intentional recursive faces; treat as a decoy signal in authorized honeypot audits, not as proof of malice alone.
