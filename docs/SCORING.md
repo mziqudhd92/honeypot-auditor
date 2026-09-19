@@ -90,6 +90,21 @@ tells over banner IOCs alone — see [`udp/DNS.md`](udp/DNS.md).
 
 Full strategy narrative, probe flow, and non-destructive policy: [`udp/DNS.md`](udp/DNS.md).
 
+### Memcached ASCII non-compliance (basic probe)
+
+Memcached uses **static_signature** only (TCP ASCII; no auth/state axis). Prefer
+framing / ERROR / canned-stats tells over banner IOCs alone — see
+[`MEMCACHED.md`](MEMCACHED.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `memcached.stats_clone` | static_signature | Decisive when hit (bitwise-identical `stats` replies) |
+| `memcached.version_framing` / `memcached.stats_framing` / `memcached.unknown_command` | static_signature | High fidelity ASCII tells |
+| `memcached.get_miss` / `memcached.flush_stub` / `memcached.noreply_facade` | static_signature | Miss END · bare verbosity · noreply quiet |
+| `memcached.stock_version` | static_signature | Stock VERSION lure (generic tokens corroboration-gated) |
+
+Full strategy narrative, probe flow, and non-destructive policy: [`MEMCACHED.md`](MEMCACHED.md).
+
 ### Redis RESP non-compliance (basic probe)
 
 Redis uses all three basic strategies. Prefer RESP facade / state tells over banner

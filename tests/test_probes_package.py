@@ -31,6 +31,7 @@ _REQUIRED_CORE = frozenset(
         "snmp",
         "elasticsearch",
         "ipp",
+        "memcached",
     }
 )
 

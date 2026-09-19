@@ -15,7 +15,7 @@ honeypot-auditor is a Python CLI that fingerprints whether a host behaves like a
 
 | Concept | Meaning |
 |---------|---------|
-| Basic probes | Passive intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB/MQTT/SNMP/DNS/Elasticsearch/IPP |
+| Basic probes | Passive intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB/MQTT/SNMP/DNS/Elasticsearch/IPP/Memcached |
 | Redis (RESP) | Dual AUTH · persist/DBSIZE · COMMAND/INFO/PING stubs · AUTH wall · QUIT zombie · no FLUSHALL (see REDIS.md) |
 | Subnet scan | IPv4 CIDR up to `/24` (254 hosts); `--scan-concurrency`; combined JSON report |
 | Deep mode (`--deep`) | Shell semantics, OS coherence, HASSH/TCP stack, protocol FSM, co-tenancy, temporal (serial + concurrent-load latency)/egress |
@@ -116,6 +116,7 @@ Default (`--preset both`) probes IANA **and** docker/lab ports. Closed ports are
 | DNS | 53 (UDP) | 15353 | 53 + 15353 |
 | Elasticsearch | 9200 | 19200 | 9200 + 19200 |
 | IPP / CUPS | 631 | 1631 | 631 + 1631 |
+| Memcached | 11211 | 21211 | 11211 + 21211 |
 | SMB | 445 | 1445 | 445 + 1445 |
 | SIP | 5060 | 5060 | 5060 |
 | VNC | 5900 | 5000 | 5900 + 5000 |
@@ -176,6 +177,7 @@ UHBS (https://github.com/uhbs/uhbs-standard) grades decoy quality for builders. 
 - https://mziqudhd92.github.io/honeypot-auditor/udp/DNS.md
 - https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md
 - https://mziqudhd92.github.io/honeypot-auditor/IPP.md
+- https://mziqudhd92.github.io/honeypot-auditor/MEMCACHED.md
 - https://mziqudhd92.github.io/honeypot-auditor/MQTT.md
 - https://mziqudhd92.github.io/honeypot-auditor/IMAP.md
 - https://mziqudhd92.github.io/honeypot-auditor/SCORING.md

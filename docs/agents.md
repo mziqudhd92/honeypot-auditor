@@ -6,7 +6,7 @@ Prefer this file + `llms.txt` + `llms-full.txt` over scraping marketing HTML.
 
 ## What this is
 
-**honeypot-auditor** — MIT-licensed Python CLI that fingerprints low-interaction honeypots via non-destructive multi-protocol probes (**23** engines including MQTT, SNMP, DNS, Redis, Elasticsearch, and IPP/CUPS). Outputs weighted **Honeyscore (0–100%)**, Rich table, JSON.
+**honeypot-auditor** — MIT-licensed Python CLI that fingerprints low-interaction honeypots via non-destructive multi-protocol probes (**24** engines including MQTT, SNMP, DNS, Redis, Elasticsearch, IPP/CUPS, and Memcached). Outputs weighted **Honeyscore (0–100%)**, Rich table, JSON.
 
 - Site: https://mziqudhd92.github.io/honeypot-auditor/
 - Repo: https://github.com/mziqudhd92/honeypot-auditor
@@ -91,7 +91,7 @@ Subnet JSON: `scan_type: subnet`, `summary[]` (per-IP scores), `hosts[]` (full p
 
 Read triggered indicators in JSON (`indicators[].triggered`) or pass `-v` / `--verbose` for the full console breakdown (hits/intra, score + scoped formulas, fidelity, per-protocol matrix). Default console is the score panel only (`protocol_strategies` is always in JSON). Closed/skipped probes do not raise the score.
 
-Basic **strategies** (same three on every protocol): arbitrary auth, state non-persistence, static signature (includes unknown nmap `-sV` on any protocol, `-sV`/banner family mismatch, Redis RESP stubs, and canned MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB templates). When nmap is enabled, every open preset port is version-scanned. See `PROTOCOL_STRATEGIES` in config. Extra same-category hits add +7.5% (cap +15%); `fidelity: high|decisive` adds +15% high-signal bonus. IMAP mail-skin details: `docs/IMAP.md`. MQTT behavioral tells: `docs/MQTT.md`. SNMP RFC non-compliance (arbitrary_auth + static_signature only): `docs/SNMP.md`. DNS UDP RFC non-compliance (**static_signature** only): `docs/udp/DNS.md`. Redis RESP non-compliance: `docs/REDIS.md`. Elasticsearch HTTP API non-compliance (**static_signature** only — path/method/health/cat facades, not auth spraying): `docs/ELASTICSEARCH.md`. IPP/CUPS HTTP+IPP non-compliance (**static_signature** only): `docs/IPP.md`.
+Basic **strategies** (same three on every protocol): arbitrary auth, state non-persistence, static signature (includes unknown nmap `-sV` on any protocol, `-sV`/banner family mismatch, Redis RESP stubs, and canned MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB templates). When nmap is enabled, every open preset port is version-scanned. See `PROTOCOL_STRATEGIES` in config. Extra same-category hits add +7.5% (cap +15%); `fidelity: high|decisive` adds +15% high-signal bonus. IMAP mail-skin details: `docs/IMAP.md`. MQTT behavioral tells: `docs/MQTT.md`. SNMP RFC non-compliance (arbitrary_auth + static_signature only): `docs/SNMP.md`. DNS UDP RFC non-compliance (**static_signature** only): `docs/udp/DNS.md`. Redis RESP non-compliance: `docs/REDIS.md`. Elasticsearch HTTP API non-compliance (**static_signature** only — path/method/health/cat facades, not auth spraying): `docs/ELASTICSEARCH.md`. IPP/CUPS HTTP+IPP non-compliance (**static_signature** only): `docs/IPP.md`. Memcached ASCII non-compliance (**static_signature** only): `docs/MEMCACHED.md`.
 
 ## Repo layout (short)
 

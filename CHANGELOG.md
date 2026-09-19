@@ -19,6 +19,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Memcached ASCII engine on ports 11211/21211 with protocol non-compliance
+  detection: VERSION/stats framing, unknown-command ERROR fidelity, get-miss END,
+  bitwise-identical canned stats, stock VERSION lures (corroboration-gated for
+  generic), bare-verbosity flush-stub stand-in, noreply façade
+  (`docs/MEMCACHED.md`)
 - IPP/CUPS engine on ports 631/1631 with protocol non-compliance detection: CUPS
   root framing, stock Server header, unknown-path facade, DELETE method stub,
   `/printers` stub, open `/admin`, frozen Date, IPP Content-Type framing,

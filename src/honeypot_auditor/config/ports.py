@@ -30,6 +30,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "dns": 53,
     "elasticsearch": 9200,
     "ipp": 631,
+    "memcached": 11211,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -56,6 +57,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "dns": 15353,
     "elasticsearch": 19200,
     "ipp": 1631,
+    "memcached": 21211,
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {
@@ -84,6 +86,8 @@ _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     19200: "elasticsearch",  # lab Elasticsearch HTTP API
     631: "ipp",
     1631: "ipp",  # lab CUPS / IPP HTTP, pairs with IANA 631
+    11211: "memcached",
+    21211: "memcached",  # lab Memcached ASCII
 }
 
 
