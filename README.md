@@ -256,11 +256,11 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 
 ## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-**24** protocol engines in the current version. Each uses up to **3** probe
+**25** protocol engines in the current version. Each uses up to **3** probe
 strategies (arbitrary auth · state non-persistence · static signature). The
 **Strategies** column is how many of those three are active for that protocol in
 this release — not Shodan, co-tenancy, or individual indicator checks
-(**48** active strategy slots across all protocols).
+(**49** active strategy slots across all protocols).
 
 Default preset (`--preset both`) probes IANA well-known ports **and** common
 lab/docker aliases on the same faces. Override ports with `-p` / `--ports`.
