@@ -63,7 +63,7 @@ Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ```
-  [ BASIC ]  passive intel · Nmap NSE · SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/MQTT/SNMP/DNS/Elasticsearch/IPP/Memcached/SMTP/VNC/SIP
+  [ BASIC ]  passive intel · Nmap NSE · SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/MQTT/SNMP/DNS/NTP/Elasticsearch/IPP/Memcached/SMTP/VNC/SIP
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
              · co-tenancy buffet detect · latency · latency-under-load · egress bait
              (flag: --deep · more intrusive · same authorization rules)
@@ -256,11 +256,11 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 
 ## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-**24** protocol engines in the current version. Each uses up to **3** probe
+**25** protocol engines in the current version. Each uses up to **3** probe
 strategies (arbitrary auth · state non-persistence · static signature). The
 **Strategies** column is how many of those three are active for that protocol in
 this release — not Shodan, co-tenancy, or individual indicator checks
-(**48** active strategy slots across all protocols).
+(**49** active strategy slots across all protocols).
 
 Default preset (`--preset both`) probes IANA well-known ports **and** common
 lab/docker aliases on the same faces. Override ports with `-p` / `--ports`.
@@ -278,6 +278,7 @@ Closed faces are skipped, not scored.
 | MQTT | 1883 · 11883 | 3 |
 | SNMP | 161 · 1161 (UDP) | 2 |
 | DNS | 53 · 15353 (UDP) | 1 |
+| NTP | 123 · 1123 (UDP) | 1 |
 | Elasticsearch | 9200 · 19200 | 1 |
 | IPP / CUPS | 631 · 1631 | 1 |
 | Memcached | 11211 · 21211 | 1 |
@@ -293,7 +294,7 @@ Closed faces are skipped, not scored.
 | Git | 9418 · 9418 | 1 |
 | HTTP proxy | 3128 · 8080 | 1 |
 
-`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `53`/`15353` → DNS (UDP), `9200`/`19200` → Elasticsearch, `631`/`1631` → IPP, `11211`/`21211` → Memcached, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
+`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `53`/`15353` → DNS (UDP), `123`/`1123` → NTP (UDP), `9200`/`19200` → Elasticsearch, `631`/`1631` → IPP, `11211`/`21211` → Memcached, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
 The POP3 engine checks response framing, pre-authentication state boundaries (STAT), optional CAPA sampling, identical auth-failed `-ERR` blankets, stock lure banners, unknown-command handling, and repeated synthetic logins. It never lists, reads, retrieves, or deletes mail; see [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.html) and [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.html) (CAPA).
 
@@ -302,6 +303,8 @@ The IMAP engine pairs with POP3 for Exchange/mail skins (qeeqbox, OpenCanary-cla
 The SNMP engine speaks community SNMPv1/v2c over UDP and scores RFC non-compliance (any-community GetResponse, request-id mismatch, invalid version facade, success on missing OID, BER framing, stock sysDescr, GetNext stubs, wrong `sysObjectID`/`sysUpTime` ASN.1 types, OID-name mismatches, canned identical replies). Never sends SetRequest or walks. See [`docs/SNMP.md`](docs/SNMP.md), [RFC 1157](https://www.rfc-editor.org/rfc/rfc1157.html), and [RFC 3416](https://www.rfc-editor.org/rfc/rfc3416.html).
 
 The DNS engine speaks UDP/53 (lab **15353**) and scores RFC non-compliance under **static_signature** only (header framing, txid echo, illegal OPCODE facade, question echo, RCODE stub on `.invalid`, response clone, corroboration-gated 0x20 case mismatch, EDNS OPT facade, stock TXT/SOA lure). Never sends AXFR/IXFR/ANY floods or updates. See [`docs/udp/DNS.md`](docs/udp/DNS.md) and [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035.html).
+
+The NTP engine speaks UDP/123 (lab **1123**) and scores RFC 5905 non-compliance under **static_signature** only (framing, mode/VN facade, originate echo, stratum facade, response clone, corroboration-gated zeroed clock metrics / epoch-zero / stock refid). Never sends monlist or mode-7 control queries. See [`docs/udp/NTP.md`](docs/udp/NTP.md) and [RFC 5905](https://www.rfc-editor.org/rfc/rfc5905.html).
 
 The IPP/CUPS engine speaks HTTP (with TLS fallback) on **631** / lab **1631** and scores CUPS/IPP non-compliance under **static_signature** only (root framing, stock Server, path/method stubs, open `/admin`, frozen Date, IPP Content-Type framing, ghost-printer `successful-ok`, request-id echo, identical IPP replies, illegal operation façade, stock HTML lure). Never submits print jobs. See [`docs/IPP.md`](docs/IPP.md).
 

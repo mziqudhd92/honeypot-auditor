@@ -15,7 +15,7 @@ honeypot-auditor is a Python CLI that fingerprints whether a host behaves like a
 
 | Concept | Meaning |
 |---------|---------|
-| Basic probes | Passive intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB/MQTT/SNMP/DNS/Elasticsearch/IPP/Memcached |
+| Basic probes | Passive intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB/MQTT/SNMP/DNS/NTP/Elasticsearch/IPP/Memcached |
 | Redis (RESP) | Dual AUTH · persist/DBSIZE · COMMAND/INFO/PING stubs · AUTH wall · QUIT zombie · no FLUSHALL (see REDIS.md) |
 | Subnet scan | IPv4 CIDR up to `/24` (254 hosts); `--scan-concurrency`; combined JSON report |
 | Deep mode (`--deep`) | Shell semantics, OS coherence, HASSH/TCP stack, protocol FSM, co-tenancy, temporal (serial + concurrent-load latency)/egress |
@@ -114,6 +114,7 @@ Default (`--preset both`) probes IANA **and** docker/lab ports. Closed ports are
 | MQTT | 1883 | 11883 | 1883 + 11883 (+ 8883/18883 MQTTS) |
 | SNMP | 161 (UDP) | 1161 | 161 + 1161 (+ 10161 lab UDP) |
 | DNS | 53 (UDP) | 15353 | 53 + 15353 |
+| NTP | 123 (UDP) | 1123 | 123 + 1123 |
 | Elasticsearch | 9200 | 19200 | 9200 + 19200 |
 | IPP / CUPS | 631 | 1631 | 631 + 1631 |
 | Memcached | 11211 | 21211 | 11211 + 21211 |
@@ -175,6 +176,7 @@ UHBS (https://github.com/uhbs/uhbs-standard) grades decoy quality for builders. 
 - https://mziqudhd92.github.io/honeypot-auditor/REDIS.md
 - https://mziqudhd92.github.io/honeypot-auditor/SNMP.md
 - https://mziqudhd92.github.io/honeypot-auditor/udp/DNS.md
+- https://mziqudhd92.github.io/honeypot-auditor/udp/NTP.md
 - https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md
 - https://mziqudhd92.github.io/honeypot-auditor/IPP.md
 - https://mziqudhd92.github.io/honeypot-auditor/MEMCACHED.md
