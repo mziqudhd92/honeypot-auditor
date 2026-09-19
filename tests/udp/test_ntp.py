@@ -7,7 +7,15 @@ from typing import Any
 import pytest
 
 import honeypot_auditor.probes.udp.ntp as ntp
-from honeypot_auditor.config import PROTOCOL_STRATEGIES
+from honeypot_auditor.analyzer import build_report
+from honeypot_auditor.config import (
+    PORT_PRESET_DOCKER_RESEARCH,
+    PORT_PRESET_IANA,
+    PROTOCOL_STRATEGIES,
+    probe_port_map,
+    protocol_for_port,
+)
+from honeypot_auditor.models import Indicator
 from honeypot_auditor.netutil import UdpExchange
 from honeypot_auditor.probes import PROBE_BY_PROTOCOL
 from honeypot_auditor.settings import settings
@@ -142,6 +150,12 @@ def test_ntp_packet_round_trip():
     assert r.originate_timestamp == xmt
 
 
+def test_ntp_parse_rejects_short_and_empty():
+    assert ntp.parse_ntp_packet(b"") is None
+    assert ntp.parse_ntp_packet(b"\x00" * 47) is None
+    assert ntp.parse_ntp_packet(b"\x00" * 48) is not None
+
+
 def test_ntp_conformant_agent_is_clean():
     trx = _patch_conformant()
     with trx.patch():  # patches honeypot_auditor.netutil
@@ -241,6 +255,26 @@ def test_ntp_mode_facade_invalid_vn_still_serves():
     by_id = {i.id: i for i in inds}
     assert by_id["ntp.mode_facade"].triggered
     assert not by_id["ntp.org_echo"].triggered
+
+
+def test_ntp_invalid_vn_dropped_is_clean():
+    """Real daemons drop unsupported VN; that must not fire mode_facade."""
+
+    def reply(host, port, payload):
+        del host, port
+        parsed = ntp.parse_ntp_packet(payload)
+        assert parsed is not None
+        if parsed.vn not in (3, 4):
+            return b"", "timed out"
+        return _conformant_reply(payload)
+
+    trx = _scripted_from_callable(reply, drop_invalid_vn=False)
+    with trx.patch():
+        inds = ntp.probe_ntp("127.0.0.1", 123)
+    by_id = {i.id: i for i in inds}
+    assert not by_id["ntp.mode_facade"].triggered
+    assert not by_id["ntp.framing"].triggered
+    assert not any(i.triggered for i in inds)
 
 
 def test_ntp_org_echo_mismatch():
@@ -479,6 +513,38 @@ def test_ntp_stock_refid_gated():
     assert by_id["ntp.stock_refid"].requires_corroboration is True
 
 
+@pytest.mark.parametrize("refid", [b"fake", b"HONE", b"stub", b"mock"])
+def test_ntp_stock_refid_case_and_substring(refid: bytes):
+    """Stock lure matching is case-insensitive over the 4-byte refid field."""
+
+    def reply(host, port, payload):
+        del host, port
+        parsed = ntp.parse_ntp_packet(payload)
+        assert parsed is not None
+        return ntp.build_ntp_packet(
+            li=0,
+            vn=4,
+            mode=ntp._MODE_SERVER,
+            stratum=2,
+            poll=6,
+            precision=-20,
+            root_delay=0x100,
+            root_dispersion=0x50,
+            reference_id=refid,
+            reference_timestamp=_NOW,
+            originate_timestamp=parsed.transmit_timestamp,
+            receive_timestamp=_NOW,
+            transmit_timestamp=_NOW,
+        )
+
+    trx = _scripted_from_callable(reply)
+    with trx.patch():
+        inds = ntp.probe_ntp("127.0.0.1", 123)
+    stock = {i.id: i for i in inds}["ntp.stock_refid"]
+    assert stock.triggered
+    assert stock.requires_corroboration is True
+
+
 def test_ntp_kiss_of_death_stratum_zero_is_clean():
     """RFC kiss codes with stratum 0 are compliant; not stratum_facade."""
 
@@ -521,6 +587,93 @@ def test_ntp_registry_and_strategies():
     assert "static_signature" in row and row["static_signature"]
     assert ntp.UDP_ENGINE.name == "ntp"
     assert ntp.UDP_ENGINE.probe is ntp.probe_ntp
+
+
+def test_ntp_ports_iana_and_lab():
+    assert PORT_PRESET_IANA["ntp"] == 123
+    assert PORT_PRESET_DOCKER_RESEARCH["ntp"] == 1123
+    assert protocol_for_port(123) == "ntp"
+    assert protocol_for_port(1123) == "ntp"
+    both = probe_port_map("both")
+    assert both["ntp"] == [123, 1123]
+    assert probe_port_map("both", extra_ports=[1123]) == {"ntp": [1123]}
+
+
+def test_ntp_gated_tells_suppressed_alone_in_default_report():
+    """Lone gated NTP stock/zeroed/epoch tells must not inflate default score."""
+    inds = [
+        Indicator(
+            id="ntp.stock_refid",
+            title="NTP reference ID matches a stock honeypot lure token",
+            category="static_signature",
+            triggered=True,
+            protocol="ntp",
+            detail="refid lure token 'FAKE'",
+            requires_corroboration=True,
+        ),
+        Indicator(
+            id="ntp.zeroed_clock_metrics",
+            title="NTP root delay, dispersion, and reference timestamp are all zero",
+            category="static_signature",
+            triggered=True,
+            protocol="ntp",
+            detail="root_delay, root_dispersion, and reference_timestamp are all zero",
+            requires_corroboration=True,
+        ),
+    ]
+    report = build_report(
+        target="203.0.113.123",
+        resolved_ip="203.0.113.123",
+        ports={"ntp": [123]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+        deep=False,
+    )
+    by_id = {i.id: i for i in report.indicators}
+    assert not by_id["ntp.stock_refid"].triggered
+    assert not by_id["ntp.zeroed_clock_metrics"].triggered
+    assert report.score == 0.0
+    assert "suppressed: no corroborating tell" in by_id["ntp.stock_refid"].detail
+
+
+def test_ntp_gated_tells_kept_with_ungated_corroboration():
+    """Gated NTP lure stays live when an ungated tell (e.g. response_clone) fires."""
+    inds = [
+        Indicator(
+            id="ntp.stock_refid",
+            title="NTP reference ID matches a stock honeypot lure token",
+            category="static_signature",
+            triggered=True,
+            protocol="ntp",
+            detail="refid lure token 'FAKE'",
+            requires_corroboration=True,
+        ),
+        Indicator(
+            id="ntp.response_clone",
+            title="NTP returns bitwise-identical replies for distinct requests",
+            category="static_signature",
+            triggered=True,
+            protocol="ntp",
+            detail="bitwise-identical UDP payloads",
+            fidelity="decisive",
+        ),
+    ]
+    report = build_report(
+        target="203.0.113.123",
+        resolved_ip="203.0.113.123",
+        ports={"ntp": [123]},
+        indicators=inds,
+        notes=[],
+        started_at="",
+        finished_at="",
+        deep=False,
+    )
+    by_id = {i.id: i for i in report.indicators}
+    assert by_id["ntp.stock_refid"].triggered
+    assert "suppressed" not in by_id["ntp.stock_refid"].detail
+    assert report.score > 0
 
 
 def test_ntp_no_monlist_or_mode7_in_probe_requests():
