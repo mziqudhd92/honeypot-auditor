@@ -136,6 +136,14 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "EDNS OPT facade · stock TXT/SOA lure"
         ),
     },
+    "ntp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "framing · mode/VN facade · originate echo · stratum facade · "
+            "bitwise-identical canned replies · zeroed clock metrics · epoch-zero · stock refid"
+        ),
+    },
     "elasticsearch": {
         "arbitrary_auth": "",
         "state_nonpersist": "",

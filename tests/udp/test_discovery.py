@@ -18,6 +18,8 @@ def test_import_probes_package_with_udp_is_safe():
     discovered = {e.name for e in discover_udp_engines()}
     assert discovered <= set(PROBE_BY_PROTOCOL)
     assert "dns" in discovered
+    assert "ntp" in discovered
+    assert "ntp" in PROBE_BY_PROTOCOL
 
 
 def test_discover_udp_engines_skips_underscore_modules():
@@ -63,10 +65,11 @@ def test_discover_udp_engines_skips_underscore_modules():
     assert "fake_private" not in names
 
 
-def test_discover_udp_engines_includes_dns():
+def test_discover_udp_engines_includes_dns_and_ntp():
     engines = discover_udp_engines()
     names = {e.name for e in engines}
     assert "dns" in names
+    assert "ntp" in names
     assert names <= set(PROBE_BY_PROTOCOL)
 
 

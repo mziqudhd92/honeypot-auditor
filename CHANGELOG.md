@@ -19,6 +19,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- NTP UDP engine on ports 123/1123: framing, mode/VN facade, originate echo,
+  stratum facade, response clone, and corroboration-gated zeroed clock metrics /
+  epoch-zero / stock refid (`docs/udp/NTP.md`; never monlist/mode-7)
 - Memcached ASCII engine on ports 11211/21211 with protocol non-compliance
   detection: VERSION/stats framing, unknown-command ERROR fidelity, get-miss END,
   bitwise-identical canned stats, stock VERSION lures (corroboration-gated for
