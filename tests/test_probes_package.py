@@ -30,6 +30,8 @@ _REQUIRED_CORE = frozenset(
         "mqtt",
         "snmp",
         "elasticsearch",
+        "ipp",
+        "memcached",
     }
 )
 

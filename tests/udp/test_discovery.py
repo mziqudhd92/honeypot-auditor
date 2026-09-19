@@ -10,15 +10,16 @@ from honeypot_auditor.probes.udp import discover_udp_engines
 from honeypot_auditor.probes.udp._engine import UDPEngine
 
 
-def test_import_probes_package_with_udp_engines_is_safe():
-    """Registry import must not raise; NTP is discovered from probes/udp/."""
+def test_import_probes_package_with_udp_is_safe():
+    """UDP package discovery merges engines without breaking the registry."""
     assert isinstance(PROBE_BY_PROTOCOL, dict)
     assert "ssh" in PROBE_BY_PROTOCOL
     assert "snmp" in PROBE_BY_PROTOCOL
+    discovered = {e.name for e in discover_udp_engines()}
+    assert discovered <= set(PROBE_BY_PROTOCOL)
+    assert "dns" in discovered
+    assert "ntp" in discovered
     assert "ntp" in PROBE_BY_PROTOCOL
-    # DNS/TFTP arrive in sibling PRs — must not appear from this branch alone.
-    assert "dns" not in PROBE_BY_PROTOCOL
-    assert "tftp" not in PROBE_BY_PROTOCOL
 
 
 def test_discover_udp_engines_skips_underscore_modules():
@@ -64,13 +65,12 @@ def test_discover_udp_engines_skips_underscore_modules():
     assert "fake_private" not in names
 
 
-def test_discover_udp_engines_finds_ntp():
+def test_discover_udp_engines_includes_dns_and_ntp():
     engines = discover_udp_engines()
     names = {e.name for e in engines}
+    assert "dns" in names
     assert "ntp" in names
-    # Sibling protocol PRs are independent — this branch only ships NTP.
-    assert "dns" not in names
-    assert "tftp" not in names
+    assert names <= set(PROBE_BY_PROTOCOL)
 
 
 def test_udp_engine_dataclass_shape():
