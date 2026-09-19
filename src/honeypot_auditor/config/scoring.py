@@ -127,6 +127,15 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "OID-name echo · bitwise-identical canned replies"
         ),
     },
+    "dns": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "header framing · txid echo · illegal OPCODE facade · question echo · "
+            "RCODE stub on .invalid · response clone · 0x20 case mismatch · "
+            "EDNS OPT facade · stock TXT/SOA lure"
+        ),
+    },
     "elasticsearch": {
         "arbitrary_auth": "",
         "state_nonpersist": "",
@@ -135,6 +144,17 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "unknown-path root facade · DELETE/PUT/HEAD method stubs · "
             "/_cluster/health and /_cat/health shape facades · non-JSON Content-Type · "
             "X-Elastic-Product mismatch"
+        ),
+    },
+    "ipp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "CUPS root framing · stock Server header · unknown-path root facade · "
+            "DELETE method stub · /printers stub · open /admin · frozen Date · "
+            "IPP Content-Type framing · ghost-printer successful-ok · request-id "
+            "echo · bitwise-identical IPP replies · illegal operation · stock HTML "
+            "body lure"
         ),
     },
     "memcached": {
@@ -194,8 +214,6 @@ DEEP_WEIGHTS: dict[str, float] = {
 EXTENDED_PROBE_PORTS: dict[str, int] = {
     "modbus": 1502,
     "snmp": 161,
-    "dns": 15353,
-    "ipp": 631,
 }
 
 COTENANCY_CORROBORATION_CATEGORIES = frozenset(
