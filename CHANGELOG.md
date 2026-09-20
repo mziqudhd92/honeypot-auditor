@@ -19,6 +19,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- TFTP UDP engine on ports 69/1069: TID `fixed_source_port`, opcode/error/mode/WRQ
+  facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`
+  (`docs/udp/TFTP.md`); docs/site/LLM catalog synced to **26** engines / **50**
+  active strategy slots
 - Docs sync: surface NTP in README/BASIC banner, ports table, site index,
   agents/llms briefs, SCORING, and `docs/udp/README.md` (guide already at
   `docs/udp/NTP.md`)
@@ -43,7 +47,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
   `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
   `probes/udp/` package with `UDPEngine` discovery merged into
-  `PROBE_BY_PROTOCOL`, and `docs/udp/README.md` (NTP/TFTP engines follow)
+  `PROBE_BY_PROTOCOL`, and `docs/udp/README.md` (DNS/NTP/TFTP shipped)
 - Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
   detection: root framing, stock cluster/version/tagline/uuid, missing-index 200,
   unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and

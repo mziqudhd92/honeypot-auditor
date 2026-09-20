@@ -103,7 +103,7 @@ class MockUDPTransceiver:
         """Patch ``udp_exchange`` / ``udp_exchange_to`` on ``target`` (module path).
 
         Uses ``create=True`` so protocol modules that only import ``udp_exchange``
-        (e.g. DNS/NTP) still patch cleanly.
+        (e.g. DNS/NTP/TFTP) still patch cleanly.
         """
         with (
             patch(f"{target}.udp_exchange", side_effect=self.udp_exchange, create=True),

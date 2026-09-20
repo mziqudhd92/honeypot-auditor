@@ -32,6 +32,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "ipp": 631,
     "memcached": 11211,
     "ntp": 123,
+    "tftp": 69,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -60,6 +61,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "ipp": 1631,
     "memcached": 21211,
     "ntp": 1123,
+    "tftp": 1069,
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {

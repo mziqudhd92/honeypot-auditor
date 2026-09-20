@@ -209,6 +209,14 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "state_nonpersist": "cleartext-only auth · frozen auth.c:326 fail blob",
         "static_signature": "SSLRequest → N then AuthenticationCleartextPassword only",
     },
+    "tftp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "TID fixed_source_port · opcode/error/mode/WRQ facades · "
+            "RFC 2347 option blindness · stock ERROR/DATA lure"
+        ),
+    },
 }
 
 DEEP_WEIGHTS: dict[str, float] = {
