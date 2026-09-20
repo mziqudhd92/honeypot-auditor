@@ -92,6 +92,48 @@ alone — see [`udp/TFTP.md`](udp/TFTP.md).
 
 Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/TFTP.md`](udp/TFTP.md).
 
+### DNS RFC non-compliance (basic probe)
+
+DNS uses **static_signature** only (UDP/53; no auth/state axis). Prefer RFC facade
+tells over banner IOCs alone — see [`udp/DNS.md`](udp/DNS.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `dns.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across txids) |
+| `dns.header_framing` / `dns.txid` / `dns.header_facade` / `dns.question_echo` | static_signature | High fidelity RFC tells |
+| `dns.rcode_stub` / `dns.edns_facade` | static_signature | NXDOMAIN / EDNS OPT facade |
+| `dns.case_encoding_mismatch` / `dns.stock_payload` | static_signature | Corroboration-gated (0x20 case + stock TXT/SOA lure) |
+
+Full strategy narrative, probe flow, and non-destructive policy: [`udp/DNS.md`](udp/DNS.md).
+
+### NTP RFC 5905 non-compliance (basic probe)
+
+NTP uses **static_signature** only (UDP/123; no auth/state axis). Prefer RFC facade
+tells over banner IOCs alone — see [`udp/NTP.md`](udp/NTP.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `ntp.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across distinct xmt) |
+| `ntp.framing` / `ntp.mode_facade` / `ntp.org_echo` / `ntp.stratum_facade` | static_signature | High fidelity RFC tells |
+| `ntp.zeroed_clock_metrics` / `ntp.epoch_zero` / `ntp.stock_refid` | static_signature | Corroboration-gated (sparse metrics · epoch stamps · lure refid) |
+
+Full strategy narrative, probe flow, and non-destructive policy: [`udp/NTP.md`](udp/NTP.md).
+
+### Memcached ASCII non-compliance (basic probe)
+
+Memcached uses **static_signature** only (TCP ASCII; no auth/state axis). Prefer
+framing / ERROR / canned-stats tells over banner IOCs alone — see
+[`MEMCACHED.md`](MEMCACHED.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `memcached.stats_clone` | static_signature | Decisive when hit (bitwise-identical `stats` replies) |
+| `memcached.version_framing` / `memcached.stats_framing` / `memcached.unknown_command` | static_signature | High fidelity ASCII tells |
+| `memcached.get_miss` / `memcached.flush_stub` / `memcached.noreply_facade` | static_signature | Miss END · bare verbosity · noreply quiet |
+| `memcached.stock_version` | static_signature | Stock VERSION lure (generic tokens corroboration-gated) |
+
+Full strategy narrative, probe flow, and non-destructive policy: [`MEMCACHED.md`](MEMCACHED.md).
+
 ### Redis RESP non-compliance (basic probe)
 
 Redis uses all three basic strategies. Prefer RESP facade / state tells over banner

@@ -1,4 +1,4 @@
-"""UDP protocol engines (TFTP shipped; DNS / NTP land in follow-up PRs).
+"""UDP protocol engines (DNS, NTP, and TFTP shipped).
 
 Discovery loads non-``_``-prefixed submodules that export ``UDP_ENGINE`` (or
 ``probe_<name>``) and merges them into top-level ``PROBE_BY_PROTOCOL``.

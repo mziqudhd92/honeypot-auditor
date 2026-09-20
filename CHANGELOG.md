@@ -21,12 +21,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 - TFTP UDP engine on ports 69/1069: TID `fixed_source_port`, opcode/error/mode/WRQ
   facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`
-  (`docs/udp/TFTP.md`); docs/site/LLM catalog synced to **22** engines / **46**
+  (`docs/udp/TFTP.md`); docs/site/LLM catalog synced to **26** engines / **50**
   active strategy slots
+- Docs sync: surface NTP in README/BASIC banner, ports table, site index,
+  agents/llms briefs, SCORING, and `docs/udp/README.md` (guide already at
+  `docs/udp/NTP.md`)
+- NTP UDP engine on ports 123/1123: framing, mode/VN facade, originate echo,
+  stratum facade, response clone, and corroboration-gated zeroed clock metrics /
+  epoch-zero / stock refid (`docs/udp/NTP.md`; never monlist/mode-7)
+- Memcached ASCII engine on ports 11211/21211 with protocol non-compliance
+  detection: VERSION/stats framing, unknown-command ERROR fidelity, get-miss END,
+  bitwise-identical canned stats, stock VERSION lures (corroboration-gated for
+  generic), bare-verbosity flush-stub stand-in, noreply façade
+  (`docs/MEMCACHED.md`)
+- IPP/CUPS engine on ports 631/1631 with protocol non-compliance detection: CUPS
+  root framing, stock Server header, unknown-path facade, DELETE method stub,
+  `/printers` stub, open `/admin`, frozen Date, IPP Content-Type framing,
+  ghost-printer `successful-ok`, request-id echo, bitwise-identical IPP replies,
+  illegal operation-id façade, stock HTML body lure; TLS fallback when cleartext
+  yields a TLS record layer (`docs/IPP.md`)
+- DNS (UDP/53, lab 15353) RFC non-compliance engine under `probes/udp/`: header
+  framing, txid echo, illegal OPCODE facade, question echo, RCODE stub on
+  `.invalid`, response clone, corroboration-gated 0x20 case mismatch, EDNS OPT
+  facade, stock TXT/SOA lure (`docs/udp/DNS.md`)
 - UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
   `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
   `probes/udp/` package with `UDPEngine` discovery merged into
-  `PROBE_BY_PROTOCOL`, and `docs/udp/README.md` (DNS/NTP engines follow)
+  `PROBE_BY_PROTOCOL`, and `docs/udp/README.md` (DNS/NTP/TFTP shipped)
 - Elasticsearch HTTP API engine on ports 9200/19200 with protocol non-compliance
   detection: root framing, stock cluster/version/tagline/uuid, missing-index 200,
   unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and

@@ -103,7 +103,7 @@ class MockUDPTransceiver:
         """Patch ``udp_exchange`` / ``udp_exchange_to`` on ``target`` (module path).
 
         Uses ``create=True`` so protocol modules that only import ``udp_exchange``
-        still patch cleanly.
+        (e.g. DNS/NTP/TFTP) still patch cleanly.
         """
         with (
             patch(f"{target}.udp_exchange", side_effect=self.udp_exchange, create=True),
@@ -116,3 +116,9 @@ class MockUDPTransceiver:
 def mock_udp_cls() -> type[MockUDPTransceiver]:
     """Expose ``MockUDPTransceiver`` to tests without package imports."""
     return MockUDPTransceiver
+
+
+@pytest.fixture
+def scripted_reply_cls() -> type[ScriptedReply]:
+    """Expose ``ScriptedReply`` to tests without package imports."""
+    return ScriptedReply
