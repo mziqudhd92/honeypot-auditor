@@ -94,7 +94,7 @@ evaluated. TID, opcode, error, mode, WRQ, option, and stock probes are skipped.
 
 `PROTOCOL_STRATEGIES["tftp"]` activates **static_signature** only.
 High-signal example: `tftp.fixed_source_port` (`high` when hit). See
-[`SCORING.md`](../SCORING.md) (rollup blurbs land after protocol merges).
+[`SCORING.md`](../SCORING.md).
 
 ## FP notes
 

@@ -216,6 +216,22 @@ def test_tftp_stock_payload_requires_corroboration():
     assert not by_id["tftp.opcode_facade"].triggered
 
 
+def test_tftp_stock_payload_from_later_exchange_despite_clean_baseline():
+    """Clean baseline ERROR text must not mask a lure token on a later DATA reply."""
+    inds, _ = _run(
+        [
+            _reply(_error()),  # clean "File not found"
+            _reply(_data(1, b"conpot tftp lure")),  # mode facade + stock
+            _reply(_ack(0)),
+            _reply(_oack()),
+        ]
+    )
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["tftp.mode_facade"].triggered
+    assert by_id["tftp.stock_payload"].triggered
+    assert "conpot" in by_id["tftp.stock_payload"].detail
+
+
 def test_tftp_safe_mode_framing_only():
     old = settings.safe_mode
     settings.safe_mode = True

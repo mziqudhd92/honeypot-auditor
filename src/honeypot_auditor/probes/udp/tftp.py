@@ -156,18 +156,28 @@ def parse_tftp(data: bytes) -> TftpPacket | None:
 
 
 def _encode_rrq_wrq(opcode: int, filename: str, mode: str, options: dict[str, str] | None) -> bytes:
-    parts = [struct.pack("!H", opcode), filename.encode("utf-8"), b"\x00", mode.encode("ascii"), b"\x00"]
+    parts = [
+        struct.pack("!H", opcode),
+        filename.encode("utf-8"),
+        b"\x00",
+        mode.encode("ascii"),
+        b"\x00",
+    ]
     if options:
         for key, value in options.items():
             parts.extend([key.encode("ascii"), b"\x00", str(value).encode("ascii"), b"\x00"])
     return b"".join(parts)
 
 
-def build_rrq(filename: str, mode: str = "octet", *, options: dict[str, str] | None = None) -> bytes:
+def build_rrq(
+    filename: str, mode: str = "octet", *, options: dict[str, str] | None = None
+) -> bytes:
     return _encode_rrq_wrq(OP_RRQ, filename, mode, options)
 
 
-def build_wrq(filename: str, mode: str = "octet", *, options: dict[str, str] | None = None) -> bytes:
+def build_wrq(
+    filename: str, mode: str = "octet", *, options: dict[str, str] | None = None
+) -> bytes:
     return _encode_rrq_wrq(OP_WRQ, filename, mode, options)
 
 
@@ -180,7 +190,9 @@ def build_ack(block: int) -> bytes:
 
 
 def build_error(code: int, message: str = "") -> bytes:
-    return struct.pack("!HH", OP_ERROR, code & 0xFFFF) + message.encode("utf-8", "replace") + b"\x00"
+    return (
+        struct.pack("!HH", OP_ERROR, code & 0xFFFF) + message.encode("utf-8", "replace") + b"\x00"
+    )
 
 
 def build_oack(options: dict[str, str]) -> bytes:
@@ -206,6 +218,23 @@ def _collect_stock_text(pkt: TftpPacket | None) -> str:
     if pkt.opcode == OP_DATA:
         return pkt.data.decode("utf-8", "replace")
     return ""
+
+
+def _absorb_stock(stock_text: str, stock_token: str, pkt: TftpPacket | None) -> tuple[str, str]:
+    """Merge ERROR/DATA lure text from a later exchange without masking prior hits.
+
+    Always scan the new packet for stock tokens even when ``stock_text`` is already
+    set (a clean baseline ERROR must not hide a honeypot lure on a later DATA).
+    """
+    extra = _collect_stock_text(pkt)
+    if not extra:
+        return stock_text, stock_token
+    token = _stock_hit(extra)
+    if token and not stock_token:
+        return extra, token
+    if not stock_text:
+        return extra, stock_token
+    return stock_text, stock_token
 
 
 def _ind(
@@ -251,13 +280,13 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
     # 1) Baseline RRQ — missing file, mode octet (unconnected for TID learning).
     baseline = udp_exchange(host, port, build_rrq(filename, "octet"), connected=False)
     if baseline.error and not baseline.data:
-        return skip_suite(_TFTP_SKIP, closed_reason(baseline.error), protocol="tftp", error=baseline.error)
+        return skip_suite(
+            _TFTP_SKIP, closed_reason(baseline.error), protocol="tftp", error=baseline.error
+        )
 
     base_pkt = parse_tftp(baseline.data)
     if base_pkt is None:
-        framing_detail = (
-            f"UDP reply was not a parseable TFTP packet ({len(baseline.data)} bytes)"
-        )
+        framing_detail = f"UDP reply was not a parseable TFTP packet ({len(baseline.data)} bytes)"
         out: list[Indicator] = []
         reason = "not a TFTP speaker"
         for spec in _TFTP_SKIP:
@@ -328,7 +357,6 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
 
     stock_text = _collect_stock_text(base_pkt)
     stock_token = _stock_hit(stock_text)
-    stock_hit = bool(stock_token)
 
     # --- mode facade: illegal mode should not serve DATA ---
     # Silent drop/timeout is inconclusive-but-clean (not a skip); only DATA is a hit.
@@ -344,10 +372,7 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
             else f"illegal mode reply opcode={mode_pkt.opcode if mode_pkt else 'unparseable'}"
         )
     )
-    if mode_pkt and mode_pkt.opcode == OP_DATA:
-        stock_text = stock_text or _collect_stock_text(mode_pkt)
-        stock_token = stock_token or _stock_hit(stock_text)
-        stock_hit = bool(stock_token)
+    stock_text, stock_token = _absorb_stock(stock_text, stock_token, mode_pkt)
 
     # --- WRQ stub: expect ACK(0) or ERROR, never DATA ---
     wrq_ex = udp_exchange(host, port, build_wrq(filename, "octet"), connected=False)
@@ -363,6 +388,7 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
             else f"WRQ reply opcode={wrq_pkt.opcode if wrq_pkt else 'unparseable'}"
         )
     )
+    stock_text, stock_token = _absorb_stock(stock_text, stock_token, wrq_pkt)
 
     # --- option blindness: RRQ + blksize ---
     opt_ex = udp_exchange(
@@ -385,7 +411,11 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
         # ACK the OACK on the learned TID (no DATA upload).
         if opt_ex.peer_port:
             udp_exchange_to(host, opt_ex.peer_port, build_ack(0))
-    elif opt_pkt.opcode == OP_ERROR and opt_pkt.error_code == ERR_UNDEFINED and not opt_pkt.error_message.strip():
+    elif (
+        opt_pkt.opcode == OP_ERROR
+        and opt_pkt.error_code == ERR_UNDEFINED
+        and not opt_pkt.error_message.strip()
+    ):
         option_hit = True
         option_detail = "RRQ+blksize returned ERROR 0 with empty message (option choke)"
     elif opt_pkt.opcode == OP_ERROR and opt_pkt.error_code in {
@@ -394,14 +424,14 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
         ERR_OPTION_NEGOTIATION,
         ERR_ACCESS_VIOLATION,
     }:
-        option_detail = (
-            f"proper ERROR to optioned RRQ (code={opt_pkt.error_code} msg={opt_pkt.error_message!r})"
-        )
+        option_detail = f"proper ERROR to optioned RRQ (code={opt_pkt.error_code} msg={opt_pkt.error_message!r})"
     elif opt_pkt.opcode == OP_DATA:
         option_hit = True
         option_detail = "RRQ+blksize returned DATA without OACK"
     else:
         option_detail = f"optioned RRQ opcode={opt_pkt.opcode}"
+    stock_text, stock_token = _absorb_stock(stock_text, stock_token, opt_pkt)
+    stock_hit = bool(stock_token)
 
     if stock_token:
         stock_detail = f"stock lure token {stock_token!r} in TFTP payload"

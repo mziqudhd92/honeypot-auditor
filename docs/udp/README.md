@@ -1,8 +1,8 @@
 # UDP probe package
 
-Layout and transport scaffold for **DNS / NTP / TFTP** engines (protocol PRs
-follow). Existing **SNMP** and **SIP** probes stay in flat `probes/` until an
-optional relocate PR.
+Layout and transport for UDP engines. **TFTP** is shipped; **DNS / NTP** follow
+in later PRs. Existing **SNMP** and **SIP** probes stay in flat `probes/` until
+an optional relocate PR.
 
 ## Layout
 
@@ -10,16 +10,19 @@ optional relocate PR.
 src/honeypot_auditor/probes/udp/
   __init__.py      # re-exports discovery
   _engine.py       # UDPEngine + discover_udp_engines()
-  dns.py …         # later PRs only
+  tftp.py          # RFC 1350 + light RFC 2347
+  dns.py ntp.py …  # later PRs
 
 docs/udp/
   README.md        # this file
-  DNS.md NTP.md TFTP.md   # later PRs
+  TFTP.md          # shipped
+  DNS.md NTP.md    # later PRs
 
 tests/udp/
   conftest.py      # MockUDPTransceiver
   test_netutil_udp.py
   test_discovery.py
+  test_tftp.py
   test_dns.py …    # later PRs
 ```
 

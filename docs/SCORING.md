@@ -76,6 +76,22 @@ Prefer RFC facade / MIB-stub tells over banner IOCs alone — see [`SNMP.md`](SN
 
 Full strategy narrative, probe flow, and non-destructive policy: [`SNMP.md`](SNMP.md).
 
+### TFTP RFC non-compliance (basic probe)
+
+TFTP uses **static_signature** only (RFC 1350 / light RFC 2347 over UDP; no
+auth/state axis). Prefer TID / opcode / option facade tells over lure strings
+alone — see [`udp/TFTP.md`](udp/TFTP.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `tftp.fixed_source_port` | static_signature | High when reply `peer_port == dst_port` (no distinct server TID) |
+| `tftp.opcode_facade` / `tftp.error_stub` / `tftp.mode_facade` / `tftp.wrq_stub` | static_signature | Missing-file / illegal-mode / WRQ DATA facades |
+| `tftp.option_blindness` | static_signature | RRQ+`blksize` choke (`ERROR 0` empty) instead of OACK / proper ERROR |
+| `tftp.stock_payload` | static_signature | Stock ERROR/DATA lure tokens (corroboration-gated) |
+| `tftp.framing` | static_signature | Non-speaker / unparseable TFTP reply |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/TFTP.md`](udp/TFTP.md).
+
 ### Redis RESP non-compliance (basic probe)
 
 Redis uses all three basic strategies. Prefer RESP facade / state tells over banner

@@ -63,7 +63,7 @@ Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ```
-  [ BASIC ]  passive intel · Nmap NSE · SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/MQTT/SNMP/Elasticsearch/SMTP/VNC/SIP
+  [ BASIC ]  passive intel · Nmap NSE · SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/MQTT/SNMP/TFTP/Elasticsearch/SMTP/VNC/SIP
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
              · co-tenancy buffet detect · latency · latency-under-load · egress bait
              (flag: --deep · more intrusive · same authorization rules)
@@ -256,11 +256,11 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 
 ## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-**21** protocol engines in the current version. Each uses up to **3** probe
+**22** protocol engines in the current version. Each uses up to **3** probe
 strategies (arbitrary auth · state non-persistence · static signature). The
 **Strategies** column is how many of those three are active for that protocol in
 this release — not Shodan, co-tenancy, or individual indicator checks
-(**45** active strategy slots across all protocols).
+(**46** active strategy slots across all protocols).
 
 Default preset (`--preset both`) probes IANA well-known ports **and** common
 lab/docker aliases on the same faces. Override ports with `-p` / `--ports`.
@@ -277,6 +277,7 @@ Closed faces are skipped, not scored.
 | Redis | 6379 · 6379 | 3 |
 | MQTT | 1883 · 11883 | 3 |
 | SNMP | 161 · 1161 (UDP) | 2 |
+| TFTP | 69 · 1069 (UDP) | 1 |
 | Elasticsearch | 9200 · 19200 | 1 |
 | SMB | 445 · 1445 | 2 |
 | VNC | 5900 · 5000 | 2 |
@@ -290,13 +291,15 @@ Closed faces are skipped, not scored.
 | Git | 9418 · 9418 | 1 |
 | HTTP proxy | 3128 · 8080 | 1 |
 
-`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `9200`/`19200` → Elasticsearch, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
+`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `69`/`1069` → TFTP (UDP), `9200`/`19200` → Elasticsearch, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
 The POP3 engine checks response framing, pre-authentication state boundaries (STAT), optional CAPA sampling, identical auth-failed `-ERR` blankets, stock lure banners, unknown-command handling, and repeated synthetic logins. It never lists, reads, retrieves, or deletes mail; see [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.html) and [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.html) (CAPA).
 
 The IMAP engine pairs with POP3 for Exchange/mail skins (qeeqbox, OpenCanary-class): RFC 3501 greetings (`* OK` / `* PREAUTH` / `* BYE`), pre-auth `SELECT` bypass (LIST OK alone not scored), CAPABILITY-gated auth-failed NO/BAD blankets, stock Exchange lure greetings, unknown-command handling, and repeated synthetic `LOGIN` with `LOGOUT` cleanup. Ports **993** and lab **1993** use implicit TLS (IMAPS); STARTTLS on 143 is out of scope. It never reads, deletes, or modifies mailboxes. See [`docs/IMAP.md`](docs/IMAP.md) and [RFC 3501](https://www.rfc-editor.org/rfc/rfc3501.html).
 
 The SNMP engine speaks community SNMPv1/v2c over UDP and scores RFC non-compliance (any-community GetResponse, request-id mismatch, invalid version facade, success on missing OID, BER framing, stock sysDescr, GetNext stubs, wrong `sysObjectID`/`sysUpTime` ASN.1 types, OID-name mismatches, canned identical replies). Never sends SetRequest or walks. See [`docs/SNMP.md`](docs/SNMP.md), [RFC 1157](https://www.rfc-editor.org/rfc/rfc1157.html), and [RFC 3416](https://www.rfc-editor.org/rfc/rfc3416.html).
+
+The TFTP engine speaks RFC 1350 over UDP/69 (lab 1069) with a light RFC 2347 `blksize` probe under **static_signature** only: TID `fixed_source_port`, opcode/error/mode/WRQ facades, option blindness, corroboration-gated stock ERROR/DATA lures. Never uploads DATA or completes a write. See [`docs/udp/TFTP.md`](docs/udp/TFTP.md), [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350.html), and [RFC 2347](https://www.rfc-editor.org/rfc/rfc2347.html).
 
 The Redis engine speaks RESP on TCP/6379 with **protocol non-compliance** detection: dual random `AUTH` (decisive when both `+OK`), reconnect key persistence + `DBSIZE` coherence, plus split static tells (`PING` stub, `COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP`, missing/mismatched `ECHO`/`SELECT`, OpenCanary AUTH+NOAUTH wall, `TYPE`/`INCR` facades, wrong-arity `GET`, QUIT zombie). Never sends `FLUSHALL`/`FLUSHDB`/`CONFIG SET`/`SCRIPT LOAD`; probe keys use an `hpaudit_` prefix and are deleted. See [`docs/REDIS.md`](docs/REDIS.md) and the [Redis protocol spec](https://redis.io/docs/reference/protocol-spec/).
 
