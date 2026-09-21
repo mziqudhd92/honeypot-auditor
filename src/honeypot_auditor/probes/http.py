@@ -395,11 +395,11 @@ def probe_http(host: str, port: int) -> list[Indicator]:
     state_evidence = ""
     if not tls:
         low, high = entropy_varied_creds()
-        path = _PROTECTED_PATHS[0]
+        protected_path = _PROTECTED_PATHS[0]
         auth_ok = 0
         notes: list[str] = []
         anon_req = (
-            b"GET " + path.encode("ascii") + b" HTTP/1.1\r\n"
+            b"GET " + protected_path.encode("ascii") + b" HTTP/1.1\r\n"
             b"Host: " + host.encode("ascii", "replace") + b"\r\n"
             b"Connection: close\r\n"
             b"\r\n"
@@ -411,12 +411,12 @@ def probe_http(host: str, port: int) -> list[Indicator]:
         anon_code = _status_code(anon_first)
         if anon_code not in (401, 403):
             auth_detail = (
-                f"anonymous GET {path} returned {anon_code or 'no-status'}; "
+                f"anonymous GET {protected_path} returned {anon_code or 'no-status'}; "
                 f"not an authentication challenge"
             )
             auth_evidence = anon_first[:80]
         else:
-            notes.append(f"anonymous {path}: {anon_code}")
+            notes.append(f"anonymous {protected_path}: {anon_code}")
         for idx, (user, password) in enumerate((low, high)):
             if anon_code not in (401, 403):
                 break
@@ -424,7 +424,7 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             # Optional header casing permutation as evidence only.
             auth_name = b"Authorization" if idx == 0 else b"authorization"
             areq = (
-                b"GET " + path.encode("ascii") + b" HTTP/1.1\r\n"
+                b"GET " + protected_path.encode("ascii") + b" HTTP/1.1\r\n"
                 b"Host: " + host.encode("ascii", "replace") + b"\r\n"
                 + auth_name + b": Basic " + token.encode("ascii") + b"\r\n"
                 b"Connection: close\r\n"
@@ -434,13 +434,13 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             afirst = araw.decode("latin-1", "replace").split("\r\n", 1)[0] if araw else ""
             if " 200 " in afirst:
                 auth_ok += 1
-                notes.append(f"{user}@{path}: 200")
+                notes.append(f"{user}@{protected_path}: 200")
             else:
-                notes.append(f"{user}@{path}: {afirst[:40] or 'no-status'}")
+                notes.append(f"{user}@{protected_path}: {afirst[:40] or 'no-status'}")
         if anon_code in (401, 403):
             auth_hit = auth_ok >= 2
             auth_detail = (
-                f"anonymous GET {path} was {anon_code}; two entropy-varied Basic "
+                f"anonymous GET {protected_path} was {anon_code}; two entropy-varied Basic "
                 f"pairs both returned 200"
                 if auth_hit
                 else "; ".join(notes)
