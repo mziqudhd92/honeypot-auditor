@@ -25,6 +25,12 @@ def _denied() -> bytes:
 
 
 def _pkt_order() -> bytes:
+    # Emulator FSM string (not real mysqld ER 1156).
+    payload = b"\xff\x13\x041835: Expected seq(1) got seq(0)"
+    return bytes([len(payload), 0, 0, 2]) + payload
+
+
+def _er_1156() -> bytes:
     payload = b"\xff\x84\x04#08S01Got packets out of order"
     return bytes([len(payload), 0, 0, 2]) + payload
 
@@ -85,6 +91,14 @@ def test_mysql_expected_seq_fsm_is_honeypot_tell():
     hit = match_mysql_pkt_order(raw)
     assert hit is not None
     assert "Expected seq" in hit or "emulator seq FSM" in hit
+
+
+def test_mysql_er_1156_is_not_a_honeypot_tell():
+    """Real mysqld returns ER 1156 for a bad seq_id — that is clean."""
+    from honeypot_auditor.config.signatures.mysql import match_mysql_pkt_order
+
+    assert match_mysql_pkt_order(_er_1156()) is None
+    assert match_mysql_pkt_order(_pkt_order()) is not None
 
 
 def test_mysql_ssl_request_sets_client_ssl_flag():

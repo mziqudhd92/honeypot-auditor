@@ -1,8 +1,8 @@
 """Memcached ASCII protocol fingerprint engine.
 
-Strategies: arbitrary auth (dual entropy-varied ASCII ``set`` acceptance +
-binary/SASL frame evidence) · state non-persistence (set then reconnect get
-miss / stats ignore write / TTL never enforced) · static signature
+Strategies: arbitrary auth (ASCII ``set`` accepted while a binary SASL frame
+is answered as ASCII) · state non-persistence (set then get miss inside the
+TTL window / stats ignore write) · TTL ignored past exptime · static signature
 (VERSION/stats framing · unknown-command ERROR fidelity · get-miss END ·
 gets/CAS token facade · canned stats clones · VERSION-vs-stats version lie ·
 stock VERSION lures · verbosity/noreply façades).
@@ -431,16 +431,21 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
 
     bin_raw, bin_err = tcp_transact(host, port, _BINARY_SASL_LIST)
     bin_note = ""
+    bin_mishandled = False
     if auth_stored == 2:
         if bin_err and not bin_raw:
             bin_note = f"; binary/SASL frame closed ({closed_reason(bin_err)})"
         elif bin_raw:
             if bin_raw[:1] == b"\x81":
                 bin_note = "; binary/SASL frame answered with binary magic"
-            elif _is_error(bin_raw) or not _looks_like_memcached(bin_raw):
+            elif _is_error(bin_raw) or _looks_like_memcached(bin_raw):
+                # Real memcached answers magic 0x80 with a binary 0x81 header.
+                # An ASCII token on that frame is a skin. Open `set` alone is
+                # the protocol default and is not an auth bypass.
+                bin_mishandled = True
                 bin_note = (
-                    f"; binary/SASL mishandled "
-                    f"(ascii_token={_first_token(_decode(bin_raw))!r} or garbage)"
+                    f"; binary/SASL answered as ASCII "
+                    f"(token={_first_token(_decode(bin_raw))!r})"
                 )
             else:
                 bin_note = f"; binary/SASL reply={_first_token(_decode(bin_raw))!r}"
@@ -448,18 +453,22 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
     auth_skipped = auth_stored == 0 and bool(auth_err) and all(
         "unanswered" in n for n in auth_notes
     )
-    auth_hit = auth_stored == 2
+    auth_hit = auth_stored == 2 and bin_mishandled
     auth_detail = (
         f"two entropy-varied ASCII set writes both STORED{bin_note}"
         if auth_hit
-        else ("; ".join(auth_notes) if auth_notes else "dual set not evaluated")
+        else (
+            f"ASCII sets accepted; binary frame was not an ASCII façade{bin_note}"
+            if auth_stored == 2
+            else ("; ".join(auth_notes) if auth_notes else "dual set not evaluated")
+        )
     )
 
-    # --- state_nonpersist: set → pause → get miss / stats ignore ---
-    # The key carries a 1s TTL and the pause window is ≥1.4s, so a real server
-    # must have expired it by the get: a miss then is clean TTL behaviour, while
-    # a VALUE after the window is an expiry-ignoring skin (ttl_enforcement).
-    # A miss *inside* the window is still the classic state lie.
+    # --- state_nonpersist + ttl_enforcement on one 1s-TTL key ---
+    # First get stays inside the TTL (short pause). END there is a state lie.
+    # VALUE there is persistence; a later get after the TTL still returning
+    # VALUE is an expiry-ignoring skin. A miss after the window is clean expiry.
+    # A dropped get is a transport failure, not lost state.
     state_key = f"hpa_s_{secrets.token_hex(4)}"
     stats_before, _ = _mc_call(host, port, "stats")
     t_state_set = time.monotonic()
@@ -471,47 +480,74 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
     ttl_hit = False
     ttl_skipped = True
     ttl_detail = "TTL enforcement not evaluated"
+    elapsed_s = 0.0
     if state_set_err and not state_set_raw:
         state_skipped = True
         state_err = state_set_err
         state_detail = closed_reason(state_set_err)
+        ttl_detail = state_detail
     elif not _is_stored(state_set_raw):
         state_skipped = True
         state_detail = (
             f"set rejected before persistence check "
             f"({_first_token(_decode(state_set_raw)) or 'empty'})"
         )
+        ttl_detail = state_detail
     else:
         ttl_skipped = False
         stats_after, _ = _mc_call(host, port, "stats")
-        pause_s = jittered_reconnect_pause(min_ms=1400, max_ms=2200)
+        pause_s = jittered_reconnect_pause(min_ms=40, max_ms=180)
         got_raw, got_err = _mc_call(host, port, f"get {state_key}")
         elapsed_s = max(0.0, time.monotonic() - t_state_set)
-        expired_window = elapsed_s >= 1.0
+        inside = elapsed_s < 1.0
         notes: list[str] = []
+        persisted = False
         if got_err and not got_raw:
-            notes.append(f"get after reconnect failed: {closed_reason(got_err)}")
+            ttl_skipped = True
+            ttl_detail = f"get after set failed ({closed_reason(got_err)})"
         elif _is_get_miss(got_raw):
-            if expired_window:
-                ttl_detail = (
-                    f"key gone ~{elapsed_s:.1f}s after a 1s-TTL set "
-                    f"(expiry honored)"
-                )
-            else:
+            if inside:
                 notes.append(f"get {state_key} returned END miss after STORED")
                 ttl_detail = (
                     f"key missing {elapsed_s:.1f}s after STORED (inside TTL window; "
                     f"scored as state lie, not expiry)"
                 )
+            else:
+                ttl_detail = (
+                    f"key gone ~{elapsed_s:.1f}s after a 1s-TTL set "
+                    f"(expiry honored)"
+                )
         else:
-            if expired_window:
+            persisted = True
+            if inside:
+                ttl_detail = f"key alive {elapsed_s:.1f}s after set (inside TTL window)"
+            else:
                 ttl_hit = True
                 ttl_detail = (
                     f"get returned VALUE ~{elapsed_s:.1f}s after a 1s-TTL set "
                     f"(expiry ignored)"
                 )
+        if persisted and inside and not ttl_hit:
+            jittered_reconnect_pause(min_ms=1400, max_ms=2200)
+            elapsed_s = max(0.0, time.monotonic() - t_state_set)
+            if elapsed_s >= 1.0:
+                got2, got2_err = _mc_call(host, port, f"get {state_key}")
+                if got2_err and not got2:
+                    ttl_detail = f"post-TTL get failed ({closed_reason(got2_err)})"
+                elif _is_get_miss(got2):
+                    ttl_detail = (
+                        f"key gone ~{elapsed_s:.1f}s after a 1s-TTL set "
+                        f"(expiry honored)"
+                    )
+                else:
+                    ttl_hit = True
+                    ttl_detail = (
+                        f"get returned VALUE ~{elapsed_s:.1f}s after a 1s-TTL set "
+                        f"(expiry ignored)"
+                    )
             else:
-                ttl_detail = f"key alive {elapsed_s:.1f}s after set (inside TTL window)"
+                ttl_skipped = True
+                ttl_detail = "TTL window not reached after the inside-window get"
         stats_ignore = bool(stats_before) and bool(stats_after) and stats_before == stats_after
         if stats_ignore:
             notes.append("stats reply unchanged after successful set (write ignored)")
@@ -578,7 +614,7 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
             skip_reason=closed_reason(auth_err) if auth_skipped else "",
             error=auth_err if auth_skipped else "",
             detail=auth_detail,
-            evidence=",".join(auth_keys) if auth_hit else "",
+            evidence=";".join(auth_keys) if auth_hit else "",
             fidelity="decisive" if auth_hit else "medium",
             remediation="Require SASL/authz before accepting arbitrary set writes",
         ),
@@ -600,7 +636,7 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
             category="state_nonpersist",
             triggered=ttl_hit,
             skipped=ttl_skipped,
-            skip_reason=state_detail if ttl_skipped else "",
+            skip_reason=ttl_detail if ttl_skipped else "",
             error=state_err if ttl_skipped else "",
             detail=ttl_detail,
             evidence=(

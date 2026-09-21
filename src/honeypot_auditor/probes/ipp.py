@@ -2,7 +2,8 @@
 
 Protocol non-compliance strategies (read-only — never print, pause, or
 reconfigure queues):
-  · arbitrary_auth — two entropy-varied Basic credentials both unlock /admin
+  · arbitrary_auth — anonymous /admin challenged 401/403, then two entropy-varied
+    Basic credentials both return 200
   · state_nonpersist — unsupported IPP opcode still successful-ok and/or ghost
     printer identity drifts across reconnect
   · static_signature — CUPS root framing; stock Server header lures; unknown-path
@@ -850,14 +851,25 @@ def probe_ipp(host: str, port: int) -> list[Indicator]:
     auth_skipped = auth_ok == 0 and bool(auth_err) and all(
         "unanswered" in n for n in auth_notes
     )
-    auth_hit = auth_ok == 2
-    auth_detail = (
-        "two entropy-varied Basic credentials both unlocked /admin (status=200)"
-        if auth_hit
-        else ("; ".join(auth_notes) if auth_notes else "Basic /admin not evaluated")
-    )
-    if ad_status in {401, 403}:
-        auth_detail = f"anon /admin was {ad_status}; {auth_detail}"
+    # A public /admin already returns 200. Both Basic attempts getting 200 is
+    # the same page, not a credential bypass. Require the anonymous challenge.
+    challenged = ad_status in {401, 403}
+    auth_hit = auth_ok == 2 and challenged
+    if auth_hit:
+        auth_detail = (
+            f"anon /admin was {ad_status}; two entropy-varied Basic credentials "
+            f"both unlocked /admin (status=200)"
+        )
+    elif auth_ok == 2 and not challenged:
+        auth_detail = (
+            f"anon /admin was {ad_status}; both Basic requests were also 200 "
+            f"(path is public, not a credential bypass)"
+        )
+    else:
+        auth_detail = (
+            f"anon /admin was {ad_status}; "
+            + ("; ".join(auth_notes) if auth_notes else "Basic /admin not evaluated")
+        )
 
     # --- state_nonpersist: illegal-op successful-ok and/or ghost drift ---
     state_notes: list[str] = []

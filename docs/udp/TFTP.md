@@ -92,8 +92,8 @@ Option OACK uses `udp_exchange_with_retransmit_watch` then `udp_exchange_to`
 ## Safe mode
 
 `--safe-mode` / `safe_mode`: only TFTP framing on the baseline RRQ reply is
-evaluated. TID, opcode, error, mode, WRQ, option, reuse/clone/retransmit, and
-stock probes are skipped.
+evaluated. TID, opcode, error, mode, WRQ, option, reuse/clone/retransmit,
+block-size, and stock probes are skipped.
 
 ## Spec references
 

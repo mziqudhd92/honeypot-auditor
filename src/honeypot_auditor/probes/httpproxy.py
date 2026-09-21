@@ -63,7 +63,8 @@ def _proxy_get(*, auth: bytes = b"") -> bytes:
 
 
 def _is_proxy_success(code: int) -> bool:
-    return code > 0 and code != 407 and code < 500
+    """Proxy accepted the request (forwarded / served). 401/403/407 are denials."""
+    return 200 <= code < 400
 
 
 def probe_httpproxy(host: str, port: int) -> list[Indicator]:

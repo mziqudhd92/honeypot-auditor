@@ -77,6 +77,31 @@ def test_httpproxy_silent_accept(mock_tcp):
 
 
 @patch.object(httpproxy, "tcp_transact")
+def test_httpproxy_forbidden_is_not_auth_success(mock_tcp):
+    """Real Squid often returns 403 for denied absolute-URI — not an auth bypass."""
+    forbidden = (
+        b"HTTP/1.1 403 Forbidden\r\n"
+        b"Server: squid/6.13\r\n"
+        b"X-Squid-Error: ERR_ACCESS_DENIED 0\r\n"
+        b"\r\n"
+    )
+    mock_tcp.side_effect = [
+        (forbidden, ""),
+        (forbidden, ""),
+        (forbidden, ""),
+        (forbidden, ""),
+    ]
+    with (
+        patch.object(httpproxy, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(httpproxy, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = httpproxy.probe_httpproxy("127.0.0.1", 3128)
+    by_id = {i.id: i for i in inds}
+    assert not by_id["httpproxy.arbitrary_auth"].triggered
+    assert not by_id["httpproxy.signature"].triggered
+
+
+@patch.object(httpproxy, "tcp_transact")
 def test_httpproxy_arbitrary_auth_and_state(mock_tcp):
     mock_tcp.side_effect = [
         (_PLAIN_407, ""),  # baseline

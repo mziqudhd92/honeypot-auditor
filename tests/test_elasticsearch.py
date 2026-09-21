@@ -492,9 +492,39 @@ def test_es_arbitrary_auth_dual_basic():
     ):
         inds = es.probe_elasticsearch("127.0.0.1", 9200)
     auth = {i.id: i for i in inds}["elasticsearch.arbitrary_auth"]
+    assert not auth.triggered
+    assert "credential gate" in auth.detail
+
+
+def test_es_arbitrary_auth_after_anonymous_challenge():
+    """401 on anonymous GET /, then any Basic unlocks the root."""
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        has_auth = "authorization:" in text.lower()
+        if first.startswith("GET / HTTP/") and has_auth:
+            return _http_bytes(200, _ROOT, headers={"X-Elastic-Product": "Elasticsearch"}), ""
+        if first.startswith("GET / HTTP/"):
+            return (
+                _http_bytes(
+                    401,
+                    {"error": {"type": "security_exception", "reason": "missing credentials"}, "status": 401},
+                ),
+                "",
+            )
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with (
+        patch.object(es, "tcp_transact", side_effect=fake_tcp),
+        patch.object(es, "entropy_varied_creds", return_value=_FIXED_CREDS),
+        patch.object(es, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    auth = {i.id: i for i in inds}["elasticsearch.arbitrary_auth"]
     assert auth.triggered
     assert auth.fidelity == "decisive"
-    assert auth.category == "arbitrary_auth"
+    assert "," in (auth.evidence or "")
 
 
 def test_es_state_nonpersist_version_mismatch():

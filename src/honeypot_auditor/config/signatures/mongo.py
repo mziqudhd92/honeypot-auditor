@@ -25,14 +25,14 @@ def match_mongo_ping_unauthorized(text: str) -> str | None:
 
 
 def match_mongo_op_msg_reply(raw: bytes) -> str | None:
-    """OP_MSG hello reply uses opcode 2013 or a synthetic outbound requestId."""
+    """Synthetic OP_MSG reply header (hardcoded requestId 9999).
+
+    Opcode 2013 is the normal MongoDB wire protocol since 3.6 — never score it.
+    """
     data = raw or b""
     if len(data) < 16:
         return None
-    _length, request_id, _response_to, opcode = struct.unpack("<IIII", data[:16])
-    hits: list[str] = []
-    if opcode == 2013:
-        hits.append("OP_MSG opcode 2013 reply")
+    _length, request_id, _response_to, _opcode = struct.unpack("<IIII", data[:16])
     if request_id == 9999:
-        hits.append("synthetic reply requestId 9999")
-    return "; ".join(hits) if hits else None
+        return "synthetic reply requestId 9999"
+    return None

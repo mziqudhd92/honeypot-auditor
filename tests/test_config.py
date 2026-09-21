@@ -429,6 +429,13 @@ def test_match_extra_protocol_class_tells():
         "X-Squid-Error: ERR_CACHE_ACCESS_DENIED 0\r\n"
     )
     assert match_http_proxy_lure("HTTP/1.1 407 Proxy Authentication Required\r\n") is None
+    assert (
+        match_http_proxy_lure(
+            "HTTP/1.1 403 Forbidden\r\nServer: squid/6.13\r\n"
+            "X-Squid-Error: ERR_ACCESS_DENIED 0\r\n"
+        )
+        is None
+    )
     assert match_mssql_canned_prelogin(MSSQL_CANNED_PRELOGIN[1])
     assert match_mssql_canned_prelogin(b"\x04\x01\x00\xff") is None
     assert match_mongo_stock_hello(b"version\x00\x06\x00\x00\x004.4.6\x00")

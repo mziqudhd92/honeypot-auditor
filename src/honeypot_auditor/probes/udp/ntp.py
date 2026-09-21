@@ -3,7 +3,7 @@
 RFC non-compliance strategies (non-destructive mode-3 only — never monlist / mode-7):
   · arbitrary_auth / kod_absent — mode-3 burst still served with uniform mode-4
     (missing KoD RATE/DENY)
-  · state_nonpersist — transmit/receive/reference timestamps fail monotonicity
+  · state_nonpersist — transmit/receive timestamps frozen or move backwards
   · static_signature — framing, mode/VN facade, originate echo, stratum facade,
     canned bitwise-identical replies, zeroed clock metrics, epoch-zero timestamps,
     stock lure refids
@@ -278,13 +278,16 @@ def _is_rate_deny_kod(msg: NtpPacket) -> bool:
 
 
 def _timestamps_non_monotonic(msgs: list[NtpPacket]) -> tuple[bool, str]:
-    """Hit when transmit/receive/reference are frozen or go backwards across exchanges."""
+    """Hit when transmit/receive are frozen or go backwards across exchanges.
+
+    reference_timestamp updates on the server's poll interval and stays
+    constant across a short client burst on every synchronized server.
+    """
     if len(msgs) < 2:
         return False, "insufficient exchanges for monotonicity check"
     for field, label in (
         ("transmit_timestamp", "transmit"),
         ("receive_timestamp", "receive"),
-        ("reference_timestamp", "reference"),
     ):
         vals = [getattr(m, field) for m in msgs]
         if len(set(vals)) == 1 and vals[0] != 0:
@@ -524,8 +527,8 @@ def probe_ntp(host: str, port: int) -> list[Indicator]:
             category="arbitrary_auth",
             triggered=kod_hit,
             protocol="ntp",
-            detail=kod_detail,
-            evidence=rtt_note,
+            detail=f"{kod_detail}; {rtt_note}" if rtt_note else kod_detail,
+            evidence=f"burst_served={burst_served}",
             remediation="Emit stratum-0 KoD RATE/DENY under client burst load (RFC 5905 §7.4)",
             fidelity="high" if kod_hit else "medium",
         ),

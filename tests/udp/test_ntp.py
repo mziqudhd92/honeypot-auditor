@@ -640,7 +640,45 @@ def test_ntp_kod_absent_and_state_frozen():
         inds = ntp.probe_ntp("127.0.0.1", 123)
     by_id = {i.id: i for i in inds}
     assert by_id["ntp.kod_absent"].triggered
+    assert "," not in (by_id["ntp.kod_absent"].evidence or "")
     assert by_id["ntp.state_nonpersist"].triggered
+
+
+def test_ntp_stable_reference_timestamp_is_clean():
+    """A constant reference timestamp with an advancing clock is a live server."""
+    call_n = {"n": 0}
+
+    def reply(host, port, payload):
+        del host, port
+        parsed = ntp.parse_ntp_packet(payload)
+        assert parsed is not None
+        if parsed.vn not in (3, 4) or parsed.mode != ntp._MODE_CLIENT:
+            return b"", "timed out"
+        call_n["n"] += 1
+        n = call_n["n"]
+        return ntp.build_ntp_packet(
+            li=0,
+            vn=4,
+            mode=ntp._MODE_SERVER,
+            stratum=2,
+            poll=6,
+            precision=-20,
+            root_delay=0x100,
+            root_dispersion=0x50,
+            reference_id=b"GPS\x00",
+            reference_timestamp=_NOW,
+            originate_timestamp=parsed.transmit_timestamp,
+            receive_timestamp=_NOW + _ts(0, n),
+            transmit_timestamp=_NOW + _ts(n),
+        )
+
+    trx = _scripted_from_callable(reply, drop_invalid_vn=False)
+    with (
+        trx.patch(),
+        patch.object(ntp, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = ntp.probe_ntp("127.0.0.1", 123)
+    assert not {i.id: i for i in inds}["ntp.state_nonpersist"].triggered
 
 
 def test_ntp_kod_rate_clears_auth():

@@ -1,7 +1,7 @@
 """MySQL fingerprint engine.
 
 Strategies: static signature (EOL 5.5.x ubuntu greeting, stock handshake caps) ·
-state non-persistence (session dropped after one 1045, wrong-seq 1156, SSL-request
+state non-persistence (session dropped after one 1045, emulator Expected-seq FSM, SSL-request
 silent drop). Arbitrary auth is not on the basic path (deny-all is also a real
 server with the wrong password).
 """
@@ -27,7 +27,7 @@ _MYSQL_SKIP = (
         "static_signature",
     ),
     ("mysql.persist", "MySQL drops the session after one access-denied", "state_nonpersist"),
-    ("mysql.seq_order", "MySQL returns ER 1156 on wrong auth packet sequence", "state_nonpersist"),
+    ("mysql.seq_order", "MySQL returns an emulator seq FSM on wrong auth packet sequence", "state_nonpersist"),
     ("mysql.ssl_drop", "MySQL silently drops on CLIENT_SSL handshake request", "state_nonpersist"),
 )
 
@@ -209,7 +209,7 @@ def probe_mysql(host: str, port: int) -> list[Indicator]:
         ),
         Indicator(
             id="mysql.seq_order",
-            title="MySQL returns ER 1156 on wrong auth packet sequence",
+            title="MySQL returns an emulator seq FSM on wrong auth packet sequence",
             category="state_nonpersist",
             triggered=bool(seq_hit),
             skipped=not seq_greeting,
@@ -217,7 +217,7 @@ def probe_mysql(host: str, port: int) -> list[Indicator]:
             if seq_greeting
             else (closed_reason(seq_err) if seq_err else "no greeting"),
             protocol="mysql",
-            detail=seq_hit or "wrong auth sequence did not yield ER 1156",
+            detail=seq_hit or "wrong auth sequence: no emulator Expected-seq FSM",
             evidence=seq_reply[:120].hex() if seq_reply else "",
         ),
         Indicator(

@@ -1,0 +1,16 @@
+. {
+    errors
+    log
+    # Authoritative NXDOMAIN for reserved names; recurse everything else.
+    template IN A invalid {
+        rcode NXDOMAIN
+    }
+    template IN AAAA invalid {
+        rcode NXDOMAIN
+    }
+    template IN ANY invalid {
+        rcode NXDOMAIN
+    }
+    forward . 1.1.1.1 8.8.8.8
+    cache 30
+}

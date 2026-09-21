@@ -87,10 +87,8 @@ def test_sip_arbitrary_auth_static_nonce(mock_udp):
     ):
         inds = sip.probe_sip("127.0.0.1", 5060)
     by_id = {i.id: i for i in inds}
-    assert by_id["sip.arbitrary_auth"].triggered
-    assert "nonce" in by_id["sip.arbitrary_auth"].detail.lower() or "identical" in by_id[
-        "sip.arbitrary_auth"
-    ].detail.lower()
+    assert not by_id["sip.arbitrary_auth"].triggered
+    assert "not scored" in by_id["sip.arbitrary_auth"].detail
 
 
 @patch.object(sip, "udp_transact")

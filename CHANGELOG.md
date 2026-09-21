@@ -8,6 +8,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- False-positive gates for production services: DNS `header_facade` scores only
+  **NOERROR** on illegal OPCODE (NOTIMP/NXDOMAIN/FORMERR/REFUSED stay clean —
+  verified against 8.8.8.8 / 1.1.1.1); HTTP `/admin` Basic requires a prior
+  anonymous 401/403; chunked premature scores **2xx** only (TLS skipped);
+  cookie rotation on 200 is not a state lie; Memcached auth needs ASCII `set`
+  **and** binary SASL answered as ASCII; Elasticsearch/IPP auth require a
+  prior challenge; SIP nonce reuse is not scored; Git `want` stays on the same
+  TCP session; NTP state ignores stable reference timestamps; MySQL `seq_order`
+  scores emulator `Expected seq` FSM only (real ER 1156 is clean); MongoDB
+  `op_msg` scores synthetic `requestId=9999` only (OP_MSG opcode 2013 is
+  normal); HTTP proxy treats 401/403 as denial (not auth success) and no longer
+  treats bare `X-Squid-Error` as a lure; FTP no longer scores bare
+  `215 UNIX Type: L8` SYST; bare `nginx` Server token is not a lure
 - Apply `requires_corroboration` suppression in **default** reports (not only
   `--deep`), so common-version Elasticsearch stock hits and lone IMAP/POP3/SNMP
   stock banners no longer inflate Honeyscore without another ungated tell
@@ -19,6 +32,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Real-service Docker baseline lab (`deploy/docker-compose.real-services.yml` +
+  `scripts/real-services-lab.sh`) for nginx/Redis/Postgres/MySQL/Memcached/ES/
+  Mosquitto/CoreDNS/chrony/Mongo/OpenSSH(+SFTP)/Squid/Samba/vsftpd/telnet/
+  tftpd/Dovecot POP3/Postfix — expect **Likely Real Host**. TFTP is probed
+  in-network (Docker Desktop UDP TID NAT workaround)
 - Second detection-hardening wave against deception skins: `memcached
   .version_stats_coherence` (VERSION command vs `STAT version` lie — decisive),
   `memcached.ttl_enforcement` (VALUE served past a 1s TTL inside a ≥1.4s

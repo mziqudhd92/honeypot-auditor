@@ -1,9 +1,10 @@
 """HTTP fingerprint engine.
 
-Strategies: arbitrary auth (entropy-varied Basic on protected paths), state
-non-persistence (session cookie / POST body not retained), static signature
-(empty PUT 405, GET / → index.html login skin, 407 Via localhost, framework
-404+session cookie, silent TCP accept/tarpit). When GET / returns an empty 404,
+Strategies: arbitrary auth (entropy-varied Basic only after an anonymous
+401/403), state non-persistence (cookie replay rejected, POST body not
+retained), static signature (empty PUT 405, GET / → index.html login skin,
+407 Via localhost, 2xx before an unterminated chunked body completes,
+framework 404+session cookie, silent TCP accept/tarpit). When GET / returns an empty 404,
 up to five common admin paths are probed once each for a stock login skin
 (phpMyAdmin /admin /login). Server banner strings are operator-configurable;
 login skin and empty 405 are the source-hardcoded tells.
@@ -114,6 +115,13 @@ _TLS_PORTS = frozenset({443, 8443})
 
 def _scheme(port: int) -> str:
     return "https" if port in _TLS_PORTS else "http"
+
+
+def _status_code(first: str) -> int:
+    parts = (first or "").split()
+    if len(parts) >= 2 and parts[1].isdigit():
+        return int(parts[1])
+    return 0
 
 
 def _tcp_accepts(host: str, port: int) -> bool:
@@ -326,12 +334,13 @@ def probe_http(host: str, port: int) -> list[Indicator]:
         wildcard_host_hit = bool(wh_text) and " 200 " in wh_first
         wildcard_detail = wh_first or "(no response)"
 
-    # --- premature reply to an unterminated chunked POST (gated) ---
-    # The framing so far is legal but the terminal 0-chunk never arrives; a
-    # conformant server must keep waiting (surfaces as our read timeout), so
-    # any full HTTP status line back is a reply-before-body-reading skin.
-    # Gated: 100-continue/408-happy intermediaries exist in front of real apps.
+    # --- premature 2xx to an unterminated chunked POST (gated) ---
+    # The framing so far is legal but the terminal 0-chunk never arrives.
+    # A final 2xx before that chunk means the handler answered without reading
+    # the body. 4xx/5xx may be sent before the body is consumed (RFC 9112) and
+    # are not scored. TLS faces skip the plaintext probe.
     chunked_hit = False
+    chunked_skipped = bool(tls)
     chunked_detail = "chunked premature reply not evaluated (TLS face)"
     chunked_first = ""
     if not tls:
@@ -352,10 +361,16 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             if chunked_raw
             else ""
         )
-        if chunked_first.startswith("HTTP/"):
+        chunked_code = _status_code(chunked_first)
+        if 200 <= chunked_code < 300:
             chunked_hit = True
             chunked_detail = (
                 f"replied {chunked_first[:60]} before the terminal chunk arrived"
+            )
+        elif chunked_code:
+            chunked_detail = (
+                f"status {chunked_code} before the terminal chunk is an error "
+                f"response (not scored)"
             )
         elif chunked_raw:
             chunked_detail = (
@@ -383,7 +398,28 @@ def probe_http(host: str, port: int) -> list[Indicator]:
         path = _PROTECTED_PATHS[0]
         auth_ok = 0
         notes: list[str] = []
+        anon_req = (
+            b"GET " + path.encode("ascii") + b" HTTP/1.1\r\n"
+            b"Host: " + host.encode("ascii", "replace") + b"\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+        )
+        anon_raw, _ = tcp_transact(host, port, anon_req, recv_first=False)
+        anon_first = (
+            anon_raw.decode("latin-1", "replace").split("\r\n", 1)[0] if anon_raw else ""
+        )
+        anon_code = _status_code(anon_first)
+        if anon_code not in (401, 403):
+            auth_detail = (
+                f"anonymous GET {path} returned {anon_code or 'no-status'}; "
+                f"not an authentication challenge"
+            )
+            auth_evidence = anon_first[:80]
+        else:
+            notes.append(f"anonymous {path}: {anon_code}")
         for idx, (user, password) in enumerate((low, high)):
+            if anon_code not in (401, 403):
+                break
             token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
             # Optional header casing permutation as evidence only.
             auth_name = b"Authorization" if idx == 0 else b"authorization"
@@ -401,13 +437,15 @@ def probe_http(host: str, port: int) -> list[Indicator]:
                 notes.append(f"{user}@{path}: 200")
             else:
                 notes.append(f"{user}@{path}: {afirst[:40] or 'no-status'}")
-        auth_hit = auth_ok >= 2
-        auth_detail = (
-            f"two entropy-varied Basic pairs both returned 200 on {path}"
-            if auth_hit
-            else "; ".join(notes)
-        )
-        auth_evidence = "; ".join(notes)
+        if anon_code in (401, 403):
+            auth_hit = auth_ok >= 2
+            auth_detail = (
+                f"anonymous GET {path} was {anon_code}; two entropy-varied Basic "
+                f"pairs both returned 200"
+                if auth_hit
+                else "; ".join(notes)
+            )
+            auth_evidence = "; ".join(notes)
 
         # --- state: cookie honor / POST body retention ---
         cookie = ""
@@ -433,11 +471,10 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             craw, _ = tcp_transact(host, port, creq, recv_first=False)
             ctext = craw.decode("latin-1", "replace")
             # Not honored: new Set-Cookie / login skin again / 401 ignoring cookie.
-            c_headers = _parse_headers(ctext)
-            if "set-cookie" in c_headers and c_headers["set-cookie"].split(";", 1)[0].strip() != cookie:
-                state_hit = True
-                state_detail = "Set-Cookie session not honored across reconnect (new cookie issued)"
-            elif " 401 " in ctext.split("\r\n", 1)[0] or " 403 " in ctext.split("\r\n", 1)[0]:
+            c_first = ctext.split("\r\n", 1)[0] if ctext else ""
+            # A new Set-Cookie is normal session rotation. The lie is rejecting
+            # the cookie the server just issued.
+            if _status_code(c_first) in (401, 403):
                 state_hit = True
                 state_detail = "session cookie ignored (401/403 on reconnect)"
             state_evidence = cookie[:80]
@@ -512,6 +549,8 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             title="HTTP answers before an unterminated chunked body completes",
             category="static_signature",
             triggered=chunked_hit,
+            skipped=chunked_skipped,
+            skip_reason=chunked_detail if chunked_skipped else "",
             protocol="http",
             detail=chunked_detail,
             evidence=chunked_first[:120],

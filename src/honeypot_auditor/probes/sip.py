@@ -1,8 +1,8 @@
 """SIP fingerprint engine.
 
-Strategies: arbitrary auth (Digest façade / static nonce), state non-persistence
+Strategies: arbitrary auth (fake Digest accepted with 200), state non-persistence
 (CSeq/Call-ID binding), static signature (default User-Agent template, Via
-received/rport coherence, response CSeq echo).
+received/rport coherence, response CSeq echo). Nonce reuse alone is not scored.
 """
 
 from __future__ import annotations
@@ -278,16 +278,19 @@ def probe_sip(host: str, port: int) -> list[Indicator]:
         if a[0] and b[0] and a == b:
             static_nonce = True
 
-    auth_hit = reg_ok >= 2 or static_nonce
-    auth_detail = (
-        "two REGISTER with fake Digest both returned 200"
-        if reg_ok >= 2
-        else (
-            f"identical nonce/realm reused across sessions ({challenges[0]})"
-            if static_nonce
-            else "; ".join(reg_notes) or "Digest challenges differed / REGISTER rejected"
+    # Nonce reuse across two rapid challenges is normal (nonce lifetime).
+    # Only a 200 to an invalid Digest response is an auth façade.
+    auth_hit = reg_ok >= 2
+    if auth_hit:
+        auth_detail = "two REGISTER with fake Digest both returned 200"
+    elif static_nonce:
+        auth_detail = (
+            f"nonce/realm reused across sessions ({challenges[0]}); "
+            f"not scored (registrars reuse nonces). "
+            + ("; ".join(reg_notes) if reg_notes else "")
         )
-    )
+    else:
+        auth_detail = "; ".join(reg_notes) or "Digest challenges differed / REGISTER rejected"
 
     # --- state: re-REGISTER after jitter ---
     state_hit = False

@@ -2,7 +2,8 @@
 
 RFC non-compliance strategies (non-destructive QUERY only — never AXFR/UPDATE/ANY flood):
   · arbitrary_auth — two entropy-varied private-label / bogus-TLD queries both NOERROR
-  · state_nonpersist — frozen SOA serial · bitwise-identical answer · AA/TTL contradiction
+  · state_nonpersist — bitwise-identical positive answer · answer-section SOA serial
+    frozen · AA/TTL contradiction (authority SOA on NXDOMAIN is not a freeze)
   · static_signature — header framing, txid echo, OPCODE facade, question echo,
     RCODE stub on .invalid, response clone, 0x20 case mismatch (gated),
     EDNS FORMERR on valid OPT, stock TXT/SOA lure tokens (gated)
@@ -41,8 +42,22 @@ CLASS_IN = 1
 
 RCODE_NOERROR = 0
 RCODE_FORMERR = 1
+RCODE_SERVFAIL = 2
 RCODE_NXDOMAIN = 3
+RCODE_NOTIMP = 4
 RCODE_REFUSED = 5
+
+# Illegal/reserved OPCODE replies that real resolvers emit (RFC 1035 §4.1.1).
+# Only NOERROR (answered as a normal QUERY) is a façade tell.
+_CLEAN_ILLEGAL_OPCODE_RCODES = frozenset(
+    {
+        RCODE_FORMERR,
+        RCODE_SERVFAIL,
+        RCODE_NXDOMAIN,
+        RCODE_NOTIMP,
+        RCODE_REFUSED,
+    }
+)
 
 _DNS_SKIP = (
     (
@@ -149,6 +164,7 @@ class DnsMessage:
     additionals: tuple[DnsRR, ...]
     has_opt: bool
     raw_question: bytes
+    authority: tuple[DnsRR, ...] = ()
     end_pos: int = -1
 
 
@@ -307,11 +323,9 @@ def parse_dns_message(data: bytes) -> DnsMessage | None:
     answers, pos, _ = _parse_rrs(data, pos, ancount)
     if pos < 0:
         return None
-    _auth, pos, _ = _parse_rrs(data, pos, nscount)
+    authority, pos, _ = _parse_rrs(data, pos, nscount)
     if pos < 0:
         return None
-    # Fold authority into answers for stock scanning.
-    answers = answers + _auth
     additionals, pos, has_opt = _parse_rrs(data, pos, arcount)
     if pos < 0:
         return None
@@ -334,6 +348,7 @@ def parse_dns_message(data: bytes) -> DnsMessage | None:
         qtype=qtype,
         qclass=qclass,
         answers=answers,
+        authority=authority,
         additionals=additionals,
         has_opt=has_opt,
         raw_question=raw_question,
@@ -388,6 +403,7 @@ def build_response(
     aa: bool = False,
     ra: bool = True,
     answers: tuple[DnsRR, ...] = (),
+    authority: tuple[DnsRR, ...] = (),
     txid_override: int | None = None,
     qr: int = 1,
     echo_question: bool = True,
@@ -403,6 +419,7 @@ def build_response(
         question = b""
         qdcount = 0
     an_bytes = b"".join(_encode_rr(rr) for rr in answers)
+    ns_bytes = b"".join(_encode_rr(rr) for rr in authority)
     header = pack_header(
         txid,
         qr=qr,
@@ -413,8 +430,9 @@ def build_response(
         rcode=rcode,
         qdcount=qdcount,
         ancount=len(answers),
+        nscount=len(authority),
     )
-    return header + question + an_bytes
+    return header + question + an_bytes + ns_bytes
 
 
 def attach_additional(message: bytes, additionals: tuple[DnsRR, ...]) -> bytes:
@@ -478,7 +496,8 @@ def _dns_label(token: str) -> str:
 
 def _auth_qnames() -> tuple[str, str]:
     low, high = entropy_varied_creds()
-    return f"{_dns_label(low[0])}.invalid", f"{_dns_label(high[0])}.test"
+    # Both names stay under .invalid. .test is a real internal zone in many labs.
+    return f"{_dns_label(low[0])}.invalid", f"{_dns_label(high[0])}.invalid"
 
 
 def _soa_serial(rr: DnsRR) -> int | None:
@@ -505,15 +524,14 @@ def _soa_serial(rr: DnsRR) -> int | None:
 
 
 def _has_static_answer(msg: DnsMessage) -> bool:
-    """NOERROR with answers or a static SOA in answer/authority."""
-    if msg.rcode != RCODE_NOERROR:
+    """NOERROR with a positive answer section.
+
+    Authority SOA on NOERROR is NODATA, and on NXDOMAIN it is the negative
+    cache. Neither is a fabricated answer.
+    """
+    if msg.rcode != RCODE_NOERROR or msg.ancount <= 0:
         return False
-    for rr in msg.answers:
-        if rr.rtype == TYPE_OPT:
-            continue
-        if rr.rtype == TYPE_SOA or msg.ancount > 0:
-            return True
-    return bool(msg.ancount > 0 and msg.answers)
+    return any(rr.rtype != TYPE_OPT for rr in msg.answers)
 
 
 def _payload_sans_txid(data: bytes) -> bytes:
@@ -644,16 +662,17 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
 
     # --- stock lure in answers ---
     lure_match = ""
-    for rr in base_msg.answers:
+    for rr in (*base_msg.answers, *base_msg.authority):
         lure_match = _stock_hit(_rr_text(rr))
         if lure_match:
             break
     stock_hit = bool(lure_match)
 
     # --- illegal OPCODE facade ---
-    # Conformant resolvers typically *drop* reserved OPCODEs (surfaces as UDP
-    # timeout). That is a clean non-hit — not a skipped probe. Only score when
-    # the peer answers as a normal QUERY (or FORMERR, which we treat as ok).
+    # Conformant peers drop reserved OPCODEs (UDP timeout) or return FORMERR /
+    # NOTIMP / REFUSED. Public resolvers may also NXDOMAIN the QNAME. Only a
+    # NOERROR reply counts as "answered as a normal QUERY" — NOTIMP (8.8.8.8)
+    # and NXDOMAIN (1.1.1.1) must stay clean.
     fac_txid = (base_txid + 1) % 0x10000 or 1
     fac_payload = build_query(qname, txid=fac_txid, rd=True, opcode=OPCODE_ILLEGAL)
     fac_ex = _exchange(host, port, fac_payload)
@@ -661,16 +680,24 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
     facade_detail = "illegal OPCODE unanswered (ok)"
     if fac_ex.data:
         fac_msg = parse_dns_message(fac_ex.data)
-        if fac_msg is not None and fac_msg.qr == 1 and fac_msg.rcode != RCODE_FORMERR:
+        if fac_msg is not None and fac_msg.qr == 1 and fac_msg.rcode == RCODE_NOERROR:
             facade_hit = True
             facade_detail = (
                 f"illegal OPCODE={OPCODE_ILLEGAL} answered "
-                f"rcode={fac_msg.rcode} qr={fac_msg.qr}"
+                f"rcode=0 (NOERROR) qr=1"
             )
-        elif fac_msg is not None and fac_msg.rcode == RCODE_FORMERR:
-            facade_detail = "FORMERR for illegal OPCODE (ok)"
+        elif fac_msg is not None and fac_msg.rcode in _CLEAN_ILLEGAL_OPCODE_RCODES:
+            facade_detail = (
+                f"illegal OPCODE={OPCODE_ILLEGAL} answered "
+                f"rcode={fac_msg.rcode} (ok; not a QUERY success)"
+            )
         elif fac_msg is None:
             facade_detail = "unparseable reply to illegal OPCODE (inconclusive)"
+        elif fac_msg is not None:
+            facade_detail = (
+                f"illegal OPCODE={OPCODE_ILLEGAL} answered "
+                f"rcode={fac_msg.rcode} qr={fac_msg.qr} (ok)"
+            )
     elif fac_ex.error:
         facade_detail = f"illegal OPCODE unanswered ({closed_reason(fac_ex.error)}; ok)"
 
@@ -780,7 +807,8 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
     state_hit = False
     state_detail = "re-query answer state looks dynamic"
     if state_msg is not None and state_msg.qr == 1 and state_ex.data:
-        # Frozen SOA serial
+        # Answer-section SOA only. Authority SOA on NXDOMAIN/NODATA is stable
+        # on every conforming resolver and is not a frozen-clock tell.
         serials_a = [s for s in (_soa_serial(rr) for rr in base_msg.answers) if s is not None]
         serials_b = [s for s in (_soa_serial(rr) for rr in state_msg.answers) if s is not None]
         if serials_a and serials_b and serials_a[0] == serials_b[0]:
@@ -819,7 +847,7 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
             triggered=auth_hit,
             protocol="dns",
             detail=auth_detail,
-            evidence=f"{auth_q1};{auth_q2};{rtt_note}",
+            evidence=f"{auth_q1};{auth_q2}",
             remediation="Return NXDOMAIN/REFUSED for nonexistent private-label / reserved TLDs",
             fidelity="decisive" if auth_hit else "medium",
         ),
@@ -864,7 +892,7 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
             protocol="dns",
             detail=facade_detail,
             evidence=fac_ex.data[:128].hex() if fac_ex.data else "",
-            remediation="Drop or FORMERR reserved/illegal OPCODEs",
+            remediation="Drop, FORMERR, or NOTIMP reserved/illegal OPCODEs",
             fidelity="high",
         ),
         Indicator(
@@ -988,8 +1016,10 @@ __all__ = [
     "OPCODE_QUERY",
     "RCODE_FORMERR",
     "RCODE_NOERROR",
+    "RCODE_NOTIMP",
     "RCODE_NXDOMAIN",
     "RCODE_REFUSED",
+    "RCODE_SERVFAIL",
     "TYPE_A",
     "TYPE_OPT",
     "TYPE_SOA",

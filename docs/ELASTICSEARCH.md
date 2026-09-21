@@ -15,7 +15,7 @@ Elasticsearch activates **all three** basic scoring strategies
 
 | Strategy | Why it applies to Elasticsearch |
 |----------|----------------------------------|
-| **arbitrary_auth** | Two entropy-varied Basic (or API-key-shaped) headers both return **200** ES root on `GET /`. Indicator: `elasticsearch.arbitrary_auth`. Dual synthetic credentials only — no password dictionary spray against `_security`. |
+| **arbitrary_auth** | Anonymous `GET /` is **401/403**, then two entropy-varied Basic headers both return the ES root. An already-open root (anonymous 200) is not a bypass. Indicator: `elasticsearch.arbitrary_auth`. |
 | **static_signature** | Decoy “ES” faces are almost always canned HTTP handlers: wrong root shape, stock `cluster_name` / `cluster_uuid` / version, **200** on missing indices, unknown paths that return the root JSON, DELETE/PUT/HEAD that ignore the verb, `/_cluster/health` and `/_cat/health` that echo root instead of health/cat shapes, non-JSON `Content-Type`, JSON-only replies to `Accept: application/yaml` (gated — real ES negotiates YAML natively), or missing `X-Elastic-Product` on modern versions. |
 | **state_nonpersist** | After reconnect, `GET /` cluster UUID/version mismatches `/_nodes` or `/_cluster/health`. Indicator: `elasticsearch.state_nonpersist`. |
 
@@ -34,8 +34,9 @@ Detection philosophy:
    versions ≥ 7.14 should send `X-Elastic-Product: Elasticsearch`. A `GET /`
    with `Accept: application/yaml` must be answered in YAML (content
    negotiation facade, corroboration-gated for JSON-normalizing proxies).
-5. **Dual Basic façade** — two entropy-varied credentials both unlocking `GET /`
-   as a 200 ES root score `elasticsearch.arbitrary_auth`.
+5. **Dual Basic façade** — anonymous `GET /` must challenge (401/403) and both
+   entropy-varied Basic headers then return the ES root to score
+   `elasticsearch.arbitrary_auth`. An already-open anonymous root is not a bypass.
 6. **Cluster identity drift** — root metadata that contradicts `/_nodes` or
    `/_cluster/health` after reconnect scores `elasticsearch.state_nonpersist`.
 7. **Lure metadata last** — decisive lure tokens (honeypot names, frozen EOL
@@ -73,6 +74,7 @@ GET /  ──►  root JSON framing (version + tagline/cluster)
         ├─ safe-mode ──► stop (framing only)
         │
         ├─ Content-Type JSON? → content_type
+        ├─ Accept: application/yaml → content_negotiation (gated)
         ├─ stock cluster/name/tagline/version/uuid → stock_cluster
         ├─ GET /hpa-audit-<token> → missing_index_ok
         ├─ GET /_hpa_nonexistent_* → path_facade
@@ -80,7 +82,7 @@ GET /  ──►  root JSON framing (version + tagline/cluster)
         ├─ GET /_cluster/health → cluster_health_stub
         ├─ GET /_cat/health?format=json → cat_stub
         ├─ X-Elastic-Product vs version ≥ 7.14 → product_header
-        ├─ dual entropy-varied Basic on GET / → arbitrary_auth
+        ├─ anon 401/403 then dual Basic on GET / → arbitrary_auth
         └─ /_nodes + /_cluster/health vs root → state_nonpersist
 ```
 
@@ -90,7 +92,7 @@ GET /  ──►  root JSON framing (version + tagline/cluster)
 
 | ID | Category | Trigger |
 |----|----------|---------|
-| `elasticsearch.arbitrary_auth` | arbitrary_auth | Two entropy-varied Basic credentials both return **200** ES root on `GET /`. Fidelity **decisive** when hit. |
+| `elasticsearch.arbitrary_auth` | arbitrary_auth | Anonymous `GET /` challenged 401/403, then two entropy-varied Basic credentials both return the root. Fidelity **decisive** when hit. |
 
 ### State non-persistence
 
@@ -131,8 +133,8 @@ GET /  ──►  root JSON framing (version + tagline/cluster)
 ## Safe mode
 
 `--safe-mode` / `safe_mode`: only root framing on `GET /` is evaluated.
-Missing-index, path, method, health, cat, Content-Type, product-header, stock
-metadata, dual-Basic auth, and state probes are skipped.
+Missing-index, path, method, health, cat, Content-Type, yaml negotiation,
+product-header, stock metadata, dual-Basic auth, and state probes are skipped.
 
 ## Example
 

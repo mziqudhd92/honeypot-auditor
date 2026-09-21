@@ -1,7 +1,8 @@
 """Elasticsearch HTTP API fingerprint engine.
 
 Protocol non-compliance strategies (read-only — never index/delete/bulk write):
-  · arbitrary_auth — two entropy-varied Basic headers both 200 on GET /
+  · arbitrary_auth — anonymous GET / challenged 401/403, then two entropy-varied
+    Basic headers both return the root document
   · state_nonpersist — root cluster UUID/version vs /_nodes or /_cluster/health
   · static_signature — stock cluster/version/tagline/uuid lures; missing-index 200;
     unknown API path returns root-shaped 200; DELETE/PUT/HEAD on ``/`` method stubs;
@@ -461,6 +462,13 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
     root = _as_dict(_parse_json(body))
     root_ok = _is_es_root(root)
     framing_hit = not root_ok
+    auth_from_challenge = False
+    auth_ok = 0
+    auth_notes: list[str] = []
+    auth_err = ""
+    auth_skipped = False
+    low_user = ""
+    high_user = ""
     if root is not None and root_ok:
         framing_detail = (
             f"root ok cluster_name={root.get('cluster_name')!r} "
@@ -471,6 +479,46 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
             "GET / did not return an Elasticsearch root document "
             f"(status={status}, json_keys={sorted(root)[:8] if root else []})"
         )
+
+    # Security-enabled clusters challenge GET /. A skin that then accepts any
+    # Basic credential and returns the root is an auth bypass. An already-open
+    # root (anonymous 200) is not: Basic is ignored because there is no gate.
+    if framing_hit and status in (401, 403):
+        anon_status = status
+        (low_user, low_pass), (high_user, high_pass) = entropy_varied_creds()
+        unlocked: tuple[int, dict[str, str], bytes] | None = None
+        for label, user, password in (
+            ("low-entropy", low_user, low_pass),
+            ("high-entropy", high_user, high_pass),
+        ):
+            a_status, a_hdrs, a_body, a_err = _http_exchange(
+                host,
+                port,
+                "GET",
+                "/",
+                extra_headers=_basic_auth_header(user, password),
+            )
+            if a_err and a_status == 0 and not a_body:
+                auth_err = auth_err or a_err
+                auth_notes.append(f"{label}: unanswered ({a_err})")
+                continue
+            a_doc = _as_dict(_parse_json(a_body))
+            if a_status == 200 and _is_es_root(a_doc):
+                auth_ok += 1
+                unlocked = (a_status, a_hdrs, a_body)
+                root = a_doc
+                auth_notes.append(f"{label}: Basic unlocked ES root (status=200)")
+            else:
+                auth_notes.append(f"{label}: Basic status={a_status}")
+        if auth_ok == 2 and unlocked is not None and root is not None and _is_es_root(root):
+            status, headers, body = unlocked
+            root_ok = True
+            framing_hit = False
+            auth_from_challenge = True
+            framing_detail = (
+                f"anonymous GET / was {anon_status}; root unlocked by arbitrary Basic "
+                f"cluster_name={root.get('cluster_name')!r} version={_version_number(root)!r}"
+            )
 
     if framing_hit:
         out: list[Indicator] = []
@@ -728,44 +776,23 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
             f"(header={product!r})"
         )
 
-    # --- arbitrary_auth: dual entropy-varied Basic on GET / ---
-    (low_user, low_pass), (high_user, high_pass) = entropy_varied_creds()
-    auth_notes: list[str] = []
-    auth_ok = 0
-    auth_err = ""
-    auth_skipped = False
-    for label, user, password in (
-        ("low-entropy", low_user, low_pass),
-        ("high-entropy", high_user, high_pass),
-    ):
-        a_status, _a_hdrs, a_body, a_err = _http_exchange(
-            host,
-            port,
-            "GET",
-            "/",
-            extra_headers=_basic_auth_header(user, password),
+    # --- arbitrary_auth ---
+    # Reached only when GET / already returned a root document. If that was the
+    # anonymous response, Basic cannot be a bypass. The 401-then-unlock path
+    # sets auth_from_challenge before framing succeeds.
+    if auth_from_challenge:
+        auth_hit = auth_ok == 2
+        auth_detail = (
+            "anonymous GET / challenged; two entropy-varied Basic credentials "
+            "both returned 200 ES root"
+            if auth_hit
+            else ("; ".join(auth_notes) if auth_notes else "Basic challenge not bypassed")
         )
-        if a_err and a_status == 0 and not a_body:
-            auth_err = auth_err or a_err
-            auth_notes.append(f"{label}: unanswered ({a_err})")
-            continue
-        a_doc = _as_dict(_parse_json(a_body))
-        if a_status == 200 and _is_es_root(a_doc):
-            auth_ok += 1
-            auth_notes.append(f"{label}: Basic accepted (status=200 ES root)")
-        else:
-            auth_notes.append(f"{label}: Basic status={a_status}")
-    auth_skipped = auth_ok == 0 and bool(auth_err) and all(
-        "unanswered" in n for n in auth_notes
-    )
-    auth_hit = auth_ok == 2
-    auth_detail = (
-        "two entropy-varied Basic credentials both returned 200 ES root on GET /"
-        if auth_hit
-        else ("; ".join(auth_notes) if auth_notes else "Basic auth not evaluated")
-    )
-    if status == 401:
-        auth_detail = f"anon GET / was 401; {auth_detail}"
+    else:
+        auth_hit = False
+        auth_detail = (
+            "anonymous GET / already returned the ES root; Basic is not a credential gate"
+        )
 
     # --- state_nonpersist: root vs /_nodes + /_cluster/health after reconnect ---
     pause_s = jittered_reconnect_pause()

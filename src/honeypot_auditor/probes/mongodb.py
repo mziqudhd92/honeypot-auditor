@@ -20,7 +20,7 @@ from honeypot_auditor.probes.common import skip_suite
 
 _MONGO_SKIP = (
     ("mongodb.signature", "MongoDB hello connectionId is frozen at 1", "static_signature"),
-    ("mongodb.op_msg", "MongoDB OP_MSG hello uses a synthetic reply header", "static_signature"),
+    ("mongodb.op_msg", "MongoDB OP_MSG hello uses a synthetic reply requestId", "static_signature"),
     ("mongodb.persist", "MongoDB ping is unauthorized after hello", "state_nonpersist"),
 )
 
@@ -90,7 +90,7 @@ def probe_mongodb(host: str, port: int) -> list[Indicator]:
         ),
         Indicator(
             id="mongodb.op_msg",
-            title="MongoDB OP_MSG hello uses a synthetic reply header",
+            title="MongoDB OP_MSG hello uses a synthetic reply requestId",
             category="static_signature",
             triggered=bool(op_msg_hit),
             skipped=not op_msg_raw and bool(op_msg_err),

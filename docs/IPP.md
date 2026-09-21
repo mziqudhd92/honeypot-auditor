@@ -13,7 +13,7 @@ IPP activates **all three** basic scoring strategies
 
 | Strategy | Why it applies to IPP/CUPS |
 |----------|----------------------------|
-| **arbitrary_auth** | Two entropy-varied Basic credentials both unlock `/admin` (status **200**). Indicator: `ipp.arbitrary_auth`. Dual synthetic pairs only — no password dictionary spray. |
+| **arbitrary_auth** | Anonymous `/admin` is **401/403**, then two entropy-varied Basic credentials both return 200. A public 200 is not a bypass. Indicator: `ipp.arbitrary_auth`. |
 | **static_signature** | Decoy CUPS faces are usually canned HTTP/IPP handlers: wrong root framing, stock `Server` strings, unknown paths that echo `/`, DELETE ignored, `/printers` stub/root echo, open `/admin`, frozen `Date`, IPP POSTs that return HTML, successful-ok for missing printers, non-echoed request-ids, bitwise-identical IPP replies, illegal ops accepted, or honeypot phrases in the body. |
 | **state_nonpersist** | Unsupported IPP opcode still `successful-ok` and/or ghost-printer identity/status drifts across reconnect. Indicator: `ipp.state_nonpersist`. |
 
@@ -23,7 +23,7 @@ Detection philosophy:
 2. **TLS fallback** — cleartext first; if the peer returns a TLS record layer (or cleartext fails), retry the suite over TLS on the same port.
 3. **Path and method fidelity** — unknown paths should 404/401; `DELETE /` should not **echo the GET `/` body** (status-alone 200 is not a hit).
 4. **Printers listing** — `/printers` should not echo root or advertise honeypot empty-queue copy. A bare empty 200 is **not** a stub (fresh CUPS).
-5. **Admin surface** — unauthenticated `GET /admin` 200 with a CUPS admin face is a decoy tell; 401/403 is clean. Dual entropy-varied Basic both unlocking `/admin` scores `ipp.arbitrary_auth`.
+5. **Admin surface** — unauthenticated `GET /admin` 200 with a CUPS admin face is a decoy tell; 401/403 is clean. `ipp.arbitrary_auth` scores only when that challenge is followed by two entropy-varied Basic credentials both returning 200.
 6. **Frozen Date** — identical `Date` across two GETs is a hit; missing `Date` on both is corroboration-gated.
 7. **IPP framing** — `POST` with `Content-Type: application/ipp` should return parseable IPP, not the HTML root.
 8. **Ghost printer** — `Get-Printer-Attributes` for a nonexistent `printer-uri` must not return `successful-ok`.
@@ -72,7 +72,7 @@ GET /  ──►  cleartext; TLS retry if record-layer / empty
         ├─ POST Get-Printer-Attributes → ipp_framing / ghost_printer / request_id
         ├─ second IPP request-id → ipp_clone
         ├─ POST illegal op 0x7FFF → illegal_op
-        ├─ dual entropy-varied Basic on /admin → arbitrary_auth
+        ├─ anon 401/403 then dual Basic on /admin → arbitrary_auth
         └─ illegal-ok / ghost drift across reconnect → state_nonpersist
 ```
 
@@ -82,7 +82,7 @@ GET /  ──►  cleartext; TLS retry if record-layer / empty
 
 | ID | Category | Fidelity | Corroboration | Trigger |
 |----|----------|----------|---------------|---------|
-| `ipp.arbitrary_auth` | arbitrary_auth | decisive when hit | no | Two entropy-varied Basic credentials both unlock `/admin` (status 200). |
+| `ipp.arbitrary_auth` | arbitrary_auth | decisive when hit | no | Anonymous `/admin` was 401/403, then two entropy-varied Basic credentials both return 200. |
 
 ### State non-persistence
 

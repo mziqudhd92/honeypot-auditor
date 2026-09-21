@@ -298,6 +298,28 @@ def test_memcached_arbitrary_auth_dual_set(mock_pause, mock_creds, mock_hex, moc
     assert auth.fidelity == "decisive"
     assert auth.category == "arbitrary_auth"
     assert "STORED" in auth.detail
+    assert "," not in (auth.evidence or "")
+
+
+@patch.object(mc, "tcp_transact")
+@patch.object(mc.secrets, "token_hex", return_value="deadbeef")
+@patch.object(mc, "entropy_varied_creds", return_value=_FIXED_CREDS)
+@patch.object(mc, "jittered_reconnect_pause", return_value=0.0)
+def test_memcached_open_set_with_binary_is_not_auth(mock_pause, mock_creds, mock_hex, mock_tcp):
+    """Default memcached accepts set and answers binary with magic 0x81."""
+    mock_tcp.side_effect = _static_then(
+        b"STORED\r\n",
+        b"DELETED\r\n",
+        b"STORED\r\n",
+        b"DELETED\r\n",
+        b"\x81" + b"\x00" * 23,
+        _LIVE_STATS_2,
+        b"ERROR\r\n",
+        b"ERROR\r\n",
+    )
+    inds = mc.probe_memcached("127.0.0.1", 11211)
+    auth = {i.id: i for i in inds}["memcached.arbitrary_auth"]
+    assert not auth.triggered
 
 
 @patch.object(mc, "tcp_transact")
@@ -491,6 +513,35 @@ def test_memcached_ttl_ignored_after_window(mock_pause, mock_creds, mock_hex, _m
     assert not by_id["memcached.state_nonpersist"].triggered
     assert not by_id["memcached.stats_clone"].triggered
     assert not by_id["memcached.cas_facade"].triggered
+
+
+@patch.object(mc, "tcp_transact")
+@patch.object(mc.time, "monotonic", side_effect=[0.0, 0.2, 2.0])
+@patch.object(mc.secrets, "token_hex", return_value="deadbeef")
+@patch.object(mc, "entropy_varied_creds", return_value=_FIXED_CREDS)
+@patch.object(mc, "jittered_reconnect_pause", return_value=0.0)
+def test_memcached_ttl_second_get_after_window(mock_pause, mock_creds, mock_hex, _mono, mock_tcp):
+    """A key still present inside the TTL window is re-read after the window."""
+    mock_tcp.side_effect = _static_then(
+        b"ERROR\r\n",
+        b"ERROR\r\n",
+        b"ERROR\r\n",
+        _LIVE_STATS_1,
+        b"STORED\r\n",
+        _LIVE_STATS_2,
+        b"VALUE hpa_s_deadbeef 0 1\r\ny\r\nEND\r\n",  # get inside the 1s window
+        b"VALUE hpa_s_deadbeef 0 1\r\ny\r\nEND\r\n",  # get after the window
+        b"DELETED\r\n",
+        b"STORED\r\n",
+        b"VALUE hpa_c_deadbeef 0 1 9\r\nz\r\nEND\r\n",
+        b"DELETED\r\n",
+    )
+    inds = mc.probe_memcached("127.0.0.1", 11211)
+    by_id = {i.id: i for i in inds}
+    ttl = by_id["memcached.ttl_enforcement"]
+    assert ttl.triggered
+    assert "expiry ignored" in ttl.detail
+    assert not by_id["memcached.state_nonpersist"].triggered
 
 
 @patch.object(mc, "tcp_transact")

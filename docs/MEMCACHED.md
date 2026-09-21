@@ -18,7 +18,7 @@ Memcached activates **all three** basic scoring strategies
 
 | Strategy | Why it applies to Memcached |
 |----------|-----------------------------|
-| **arbitrary_auth** | Two entropy-varied ASCII `set` writes both `STORED` (optional binary/SASL mishandling as corroborating evidence). Indicator: `memcached.arbitrary_auth`. |
+| **arbitrary_auth** | ASCII `set` is `STORED` **and** a binary SASL frame is answered as ASCII (open `set` alone is the protocol default). Indicator: `memcached.arbitrary_auth`. |
 | **state_nonpersist** | Probe-key `set` then reconnect `get` miss / `stats` ignore the write. Indicator: `memcached.state_nonpersist`. |
 | **static_signature** | Version/stats framing, unknown-command ERROR fidelity, get-miss END, gets/CAS façade, canned stats clones, stock VERSION strings, verbosity/noreply façades. |
 
@@ -68,15 +68,22 @@ version  ──►  ASCII speakership (+ version_framing / stock_version)
         │
         ├─ safe-mode ──► stop (version_framing only)
         │
-        ├─ stats → stats_framing
+        ├─ stats → stats_framing · version_stats_coherence (vs VERSION token)
         ├─ foo → unknown_command (must ERROR)
         ├─ get hpaudit_* → get_miss (must END, not VALUE)
         ├─ stats again → stats_clone (bitwise identity)
         ├─ verbosity (no level) → flush_stub stand-in (must ERROR)
         ├─ verbosity 0 noreply → noreply_facade (must stay quiet)
-        ├─ dual entropy-varied set (+ optional binary frame) → arbitrary_auth
-        └─ probe-key set → pause → get / stats → state_nonpersist
+        ├─ ASCII set STORED + binary SASL answered as ASCII → arbitrary_auth
+        ├─ probe-key set (1s TTL) → ≥1.4s pause → get
+        │       ├─ END inside window → state_nonpersist (state lie)
+        │       ├─ END after window → clean expiry
+        │       └─ VALUE after window → ttl_enforcement (expiry ignored)
+        └─ set + gets probe key → cas_facade (VALUE must carry cas_unique)
 ```
+
+The TTL window costs ~1.5–2s of wall time per memcached face; every other
+check rides exchanges the probe already makes.
 
 ## Indicators
 
@@ -84,7 +91,7 @@ version  ──►  ASCII speakership (+ version_framing / stock_version)
 
 | ID | Category | Trigger |
 |----|----------|---------|
-| `memcached.arbitrary_auth` | arbitrary_auth | Two entropy-varied ASCII `set` writes both return `STORED` (binary/SASL mishandling may appear in detail). Fidelity **decisive** when hit. Probe keys are deleted after the check. |
+| `memcached.arbitrary_auth` | arbitrary_auth | ASCII `set` accepted while a binary SASL frame is answered as ASCII. Fidelity **decisive** when hit. Evidence uses `;` so it does not trip the two-account score override. |
 
 ### State non-persistence
 
@@ -117,8 +124,9 @@ version  ──►  ASCII speakership (+ version_framing / stock_version)
 ## Safe mode
 
 `--safe-mode` / `safe_mode`: only `version` speakership +
-`memcached.version_framing` are evaluated. Stats, get, unknown-command, clone,
-stock, verbosity, noreply, auth, and state probes are skipped.
+`memcached.version_framing` are evaluated. Stats, get, gets/CAS, unknown-command,
+clone, version-stats coherence, stock, verbosity, noreply, auth, state, and
+TTL probes are skipped.
 
 ## Spec references
 

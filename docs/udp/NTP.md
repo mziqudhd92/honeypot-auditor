@@ -20,7 +20,7 @@ NTP activates **all three** basic scoring strategies
 |----------|------------------------|
 | **arbitrary_auth** | Mode-3 burst still served with uniform mode-4 replies and **no** KoD `RATE`/`DENY` (RFC 5905 §7.4). Indicator: `ntp.kod_absent`. |
 | **static_signature** | Framing, mode/VN facade, originate echo, stratum facade, response clone, zeroed metrics, epoch-zero timestamps, implausible precision/poll metadata, stock refid lures. |
-| **state_nonpersist** | Transmit / receive / reference timestamps fail monotonicity across exchanges (frozen or go backwards). Indicator: `ntp.state_nonpersist`. |
+| **state_nonpersist** | Transmit / receive timestamps are frozen or go backwards. A stable reference timestamp is normal between polls. Indicator: `ntp.state_nonpersist`. |
 
 Detection philosophy:
 
@@ -63,6 +63,7 @@ mode-3 VN=4 client (random xmt)  ──►  ≥48-byte NTP framing
         ├─ VN=0 client still served     → ntp.mode_facade
         ├─ org ≠ client xmt             → ntp.org_echo
         ├─ stratum 0 w/o kiss / ≥16     → ntp.stratum_facade
+        ├─ precision/poll out of range  → ntp.clock_metadata (gated)
         ├─ second distinct xmt          → ntp.response_clone
         ├─ mode-3 burst (2 extras)      → ntp.kod_absent
         ├─ timestamps across exchanges  → ntp.state_nonpersist
@@ -83,7 +84,7 @@ mode-3 VN=4 client (random xmt)  ──►  ≥48-byte NTP framing
 
 | ID | Category | Fidelity | Corroboration | Trigger |
 |----|----------|----------|---------------|---------|
-| `ntp.state_nonpersist` | state_nonpersist | high when hit | no | Transmit / receive / reference timestamps are frozen or go backwards across exchanges. |
+| `ntp.state_nonpersist` | state_nonpersist | high when hit | no | Transmit / receive timestamps are frozen or go backwards. Reference timestamp stability is not scored. |
 
 ### Static / RFC conformance
 
@@ -104,8 +105,9 @@ Kiss-o'-death stratum 0 with RFC kiss codes (`INIT`, `STEP`, `RATE`, …) is **c
 ## Safe mode
 
 `--safe-mode` / `safe_mode`: only framing on the baseline reply is evaluated.
-Mode, originate, stratum, clone, KoD burst, monotonicity, zeroed-metrics,
-epoch-zero, and stock-refid probes are skipped with a safe-mode reason.
+Mode, originate, stratum, clock-metadata, clone, KoD burst, monotonicity,
+zeroed-metrics, epoch-zero, and stock-refid probes are skipped with a safe-mode
+reason.
 
 ## Spec references
 
@@ -124,6 +126,8 @@ hit before they inflate Honeyscore. See [`SCORING.md`](../SCORING.md).
 
 - **Unsynced real NTP** can briefly show sparse delay/dispersion — hence
   `ntp.zeroed_clock_metrics` and `ntp.epoch_zero` are corroboration-gated.
+- **Odd embedded clocks** can report coarse precision — hence the
+  precision/poll range check (`ntp.clock_metadata`) is also corroboration-gated.
 - **Kiss-o'-death** stratum 0 replies are legitimate; do not treat every
   stratum 0 as a facade. Missing KoD under a short burst is the
   `ntp.kod_absent` tell.

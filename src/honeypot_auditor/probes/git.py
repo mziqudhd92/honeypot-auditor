@@ -11,7 +11,7 @@ import secrets
 
 from honeypot_auditor.config import match_git_always_missing
 from honeypot_auditor.models import Indicator
-from honeypot_auditor.netutil import closed_reason, tcp_transact
+from honeypot_auditor.netutil import closed_reason, tcp_roundtrips, tcp_transact
 from honeypot_auditor.probes.common import (
     entropy_varied_creds,
     is_safe_mode,
@@ -134,17 +134,25 @@ def probe_git(host: str, port: int) -> list[Indicator]:
     caps = _claimed_caps(ads_raw) if ads_raw else []
 
     if caps and ads_raw:
-        neg_raw, _neg_err = tcp_transact(host, port, _want_negotiate(caps))
+        # want/done must follow the advertisement on the same TCP session.
+        # A fresh connection that only sends `want` is not a capability check.
+        session_repo = repo_a if ad_a else repo_b
+        replies, _neg_err = tcp_roundtrips(
+            host,
+            port,
+            [_upload_pack_req(session_repo), _want_negotiate(caps)],
+        )
+        neg_raw = replies[1] if len(replies) > 1 else b""
         if _is_err(neg_raw) or (neg_raw and b"ERR" in neg_raw.upper()):
             state_hit = True
             state_detail = (
-                f"advertised {','.join(caps)} but follow-up negotiation returned ERR/canned failure"
+                f"advertised {','.join(caps)} but same-session negotiation returned ERR/canned failure"
             )
             state_evidence = neg_raw[:300].decode("utf-8", "replace")
         elif not neg_raw:
             state_hit = True
             state_detail = (
-                f"advertised {','.join(caps)} but follow-up negotiation produced no pack data"
+                f"advertised {','.join(caps)} but same-session negotiation produced no pack data"
             )
     elif ad_a or ad_b:
         # First looked like advertisement; re-check after jitter — ERR is inconsistent.

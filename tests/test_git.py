@@ -59,13 +59,13 @@ def test_git_closed_port(mock_tcp):
     }
 
 
+@patch.object(git, "tcp_roundtrips", return_value=([_AD, _ERR], ""))
 @patch.object(git, "tcp_transact")
-def test_git_arbitrary_auth_any_repo_facade(mock_tcp):
+def test_git_arbitrary_auth_any_repo_facade(mock_tcp, _roundtrips):
     mock_tcp.side_effect = [
         (_ERR, ""),  # signature
         (_AD, ""),  # auth a
         (_AD, ""),  # auth b
-        (_ERR, ""),  # capability negotiation follow-up
     ]
     with (
         patch.object(git, "entropy_varied_creds", return_value=_CREDS),
@@ -77,13 +77,13 @@ def test_git_arbitrary_auth_any_repo_facade(mock_tcp):
     assert by_id["git.state_nonpersist"].triggered  # caps claimed then ERR
 
 
+@patch.object(git, "tcp_roundtrips", return_value=([_AD, _ERR], ""))
 @patch.object(git, "tcp_transact")
-def test_git_state_ad_then_err_inconsistent(mock_tcp):
+def test_git_state_ad_then_err_inconsistent(mock_tcp, _roundtrips):
     mock_tcp.side_effect = [
         (_ERR, ""),  # signature
         (_AD, ""),  # auth a (ad)
         (_ERR, ""),  # auth b (err) — mixed, no auth hit
-        (_ERR, ""),  # re-check after jitter → ERR (inconsistent with prior ad)
     ]
     with (
         patch.object(git, "entropy_varied_creds", return_value=_CREDS),

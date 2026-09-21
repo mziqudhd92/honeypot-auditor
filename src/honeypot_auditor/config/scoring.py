@@ -63,11 +63,14 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": "loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone",
     },
     "http": {
-        "arbitrary_auth": "two entropy-varied Basic/login pairs both 200 on protected path",
-        "state_nonpersist": "session cookie / POST body not retained across reconnect",
+        "arbitrary_auth": (
+            "two entropy-varied Basic pairs both 200 on a path that anonymously "
+            "challenged 401/403"
+        ),
+        "state_nonpersist": "session cookie replay returns 401/403 · POST body not retained",
         "static_signature": (
             "empty PUT 405 · GET / → index.html login skin · 407 Via localhost · "
-            "reply-before-body on unterminated chunked POST"
+            "2xx before the terminal chunk of an unterminated chunked POST"
         ),
     },
     "pop3": {
@@ -93,8 +96,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "sip": {
         "arbitrary_auth": (
-            "two entropy-varied Digest REGISTER both 200 without valid response · "
-            "or static nonce/realm across sessions"
+            "two entropy-varied Digest REGISTER both 200 without a valid response"
         ),
         "state_nonpersist": "CSeq / Call-ID binding not monotonic after re-REGISTER",
         "static_signature": "default User-Agent template · Via received/rport coherence · CSeq echo",
@@ -138,7 +140,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "two entropy-varied private-label / bogus-TLD queries both NOERROR "
             "(open-resolver / static SOA façade)"
         ),
-        "state_nonpersist": "frozen SOA serial · bitwise-identical answer · AA/TTL contradiction",
+        "state_nonpersist": (
+            "bitwise-identical positive answer · answer-section SOA serial frozen · "
+            "AA/TTL contradiction"
+        ),
         "static_signature": (
             "header framing · txid echo · illegal OPCODE facade · question echo · "
             "RCODE stub on .invalid · response clone · 0x20 case mismatch · "
@@ -149,7 +154,9 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "arbitrary_auth": (
             "mode-3 burst still served with uniform mode-4 (missing KoD RATE/DENY)"
         ),
-        "state_nonpersist": "transmit/receive/reference timestamps fail monotonicity across exchanges",
+        "state_nonpersist": (
+            "transmit/receive timestamps frozen or move backwards across exchanges"
+        ),
         "static_signature": (
             "framing · mode/VN facade · originate echo · stratum facade · "
             "bitwise-identical canned replies · zeroed clock metrics · epoch-zero · "
@@ -157,7 +164,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "elasticsearch": {
-        "arbitrary_auth": "two entropy-varied Basic/API-key headers both 200 on GET /",
+        "arbitrary_auth": (
+            "anonymous GET / challenged 401/403, then two entropy-varied Basic "
+            "headers both return the ES root"
+        ),
         "state_nonpersist": "GET / cluster UUID/version mismatches /_nodes or /_cluster/health",
         "static_signature": (
             "root framing · stock cluster/version/tagline/uuid · missing-index 200 · "
@@ -167,7 +177,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "ipp": {
-        "arbitrary_auth": "two entropy-varied Basic credentials both unlock /admin",
+        "arbitrary_auth": (
+            "anonymous /admin challenged 401/403, then two entropy-varied Basic "
+            "credentials both return 200"
+        ),
         "state_nonpersist": (
             "unsupported IPP opcode still successful-ok · ghost printer identity fails across reconnect"
         ),
@@ -181,10 +194,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "memcached": {
         "arbitrary_auth": (
-            "two entropy-varied ASCII set/auth accepted · binary/SASL frame mishandled"
+            "ASCII set accepted while a binary SASL frame is answered as ASCII"
         ),
         "state_nonpersist": (
-            "probe-key set then reconnect get miss / stats ignore write / TTL never enforced"
+            "probe-key set then get miss inside the TTL window / stats ignore the write"
         ),
         "static_signature": (
             "VERSION framing · STAT/END framing · unknown-command ERROR · "
@@ -195,7 +208,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "mysql": {
         "arbitrary_auth": "",
-        "state_nonpersist": "drop after 1045 · wrong-seq ER 1156 · SSL-request silent drop",
+        "state_nonpersist": "drop after 1045 · emulator Expected-seq FSM · SSL-request silent drop",
         "static_signature": "EOL 5.5.x ubuntu greeting · stock handshake caps",
     },
     "git": {
