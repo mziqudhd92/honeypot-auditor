@@ -20,8 +20,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 
 - TFTP UDP engine on ports 69/1069: TID `fixed_source_port`, opcode/error/mode/WRQ
-  facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`
-  (`docs/udp/TFTP.md`); docs/site/LLM catalog synced to **26** engines / **50**
+  facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`, plus
+  `tid_reuse` (`state_nonpersist`), `response_clone`, and `no_retransmit`
+  (`docs/udp/TFTP.md`); docs/site/LLM catalog synced to **26** engines / **51**
   active strategy slots
 - Docs sync: surface NTP in README/BASIC banner, ports table, site index,
   agents/llms briefs, SCORING, and `docs/udp/README.md` (guide already at

@@ -2,7 +2,8 @@
 
 RFC non-compliance strategies (non-destructive RRQ/WRQ headers only — never DATA upload):
   · static_signature — TID source port, opcode/error/mode/WRQ facades,
-    option blindness, stock ERROR/DATA lure tokens (corroboration-gated)
+    option blindness, response clone, no OACK retransmit, stock ERROR/DATA lure
+  · state_nonpersist — server TID reused across independent RRQs
 
 UDP/69 (lab 1069). See docs/udp/TFTP.md, RFC 1350, RFC 2347.
 """
@@ -14,7 +15,12 @@ import struct
 from dataclasses import dataclass
 
 from honeypot_auditor.models import Indicator, skipped_indicator
-from honeypot_auditor.netutil import closed_reason, udp_exchange, udp_exchange_to
+from honeypot_auditor.netutil import (
+    closed_reason,
+    udp_exchange,
+    udp_exchange_to,
+    udp_exchange_with_retransmit_watch,
+)
 from honeypot_auditor.probes.common import is_safe_mode, skip_suite
 from honeypot_auditor.probes.udp._engine import UDPEngine
 
@@ -52,6 +58,21 @@ _TFTP_SKIP = (
     (
         "tftp.option_blindness",
         "TFTP chokes on RFC 2347 option negotiation",
+        "static_signature",
+    ),
+    (
+        "tftp.tid_reuse",
+        "TFTP reuses the same server TID across independent transfers",
+        "state_nonpersist",
+    ),
+    (
+        "tftp.response_clone",
+        "TFTP returns a canned identical payload for distinct RRQs",
+        "static_signature",
+    ),
+    (
+        "tftp.no_retransmit",
+        "TFTP never retransmits OACK when ACK is withheld",
         "static_signature",
     ),
     (
@@ -237,6 +258,21 @@ def _absorb_stock(stock_text: str, stock_token: str, pkt: TftpPacket | None) -> 
     return stock_text, stock_token
 
 
+def _is_stubby_clone_payload(pkt: TftpPacket | None) -> bool:
+    """True when an identical replay is suspicious (not a normal File not found ERROR)."""
+    if pkt is None:
+        return False
+    if pkt.opcode in (OP_DATA, OP_ACK):
+        return True
+    if pkt.opcode == OP_ERROR:
+        if pkt.error_code == ERR_UNDEFINED and not pkt.error_message.strip():
+            return True
+        if pkt.error_code > 7:
+            return True
+        return False
+    return False
+
+
 def _ind(
     spec: tuple[str, str, str],
     *,
@@ -358,6 +394,51 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
     stock_text = _collect_stock_text(base_pkt)
     stock_token = _stock_hit(stock_text)
 
+    # --- second independent RRQ: TID reuse + response clone ---
+    filename2 = f"hpaudit-{secrets.token_hex(4)}.bin"
+    second = udp_exchange(host, port, build_rrq(filename2, "octet"), connected=False)
+    second_pkt = parse_tftp(second.data) if second.data else None
+    second_skipped = bool(second.error and not second.data)
+
+    tid_reuse_hit = False
+    tid_reuse_detail = "TID reuse not evaluated"
+    tid_reuse_skipped = second_skipped
+    if not second_skipped and baseline.peer_port and second.peer_port:
+        # Only score reused *ephemeral* TIDs (service-port reuse is fixed_source_port).
+        if (
+            baseline.peer_port == second.peer_port
+            and baseline.peer_port != port
+            and second.peer_port != port
+        ):
+            tid_reuse_hit = True
+            tid_reuse_detail = f"independent RRQs reused server TID peer_port={baseline.peer_port}"
+        else:
+            tid_reuse_detail = (
+                f"TIDs baseline={baseline.peer_port} second={second.peer_port} (distinct ok)"
+            )
+    elif second_skipped:
+        tid_reuse_detail = second.error or "no reply to second RRQ"
+
+    clone_hit = False
+    clone_detail = "response clone not evaluated"
+    clone_skipped = second_skipped
+    if not second_skipped and baseline.data and second.data and baseline.data == second.data:
+        if _is_stubby_clone_payload(base_pkt) or _is_stubby_clone_payload(second_pkt):
+            clone_hit = True
+            clone_detail = (
+                f"bitwise-identical {len(baseline.data)}-byte reply for distinct missing-file RRQs"
+            )
+        else:
+            clone_detail = (
+                "identical ERROR payloads for distinct names "
+                "(normal File not found; not scored as clone)"
+            )
+    elif not second_skipped:
+        clone_detail = "second RRQ payload differs from baseline (ok)"
+    else:
+        clone_detail = second.error or "no reply to second RRQ"
+    stock_text, stock_token = _absorb_stock(stock_text, stock_token, second_pkt)
+
     # --- mode facade: illegal mode should not serve DATA ---
     # Silent drop/timeout is inconclusive-but-clean (not a skip); only DATA is a hit.
     mode_ex = udp_exchange(host, port, build_rrq(filename, "hpaudit"), connected=False)
@@ -390,8 +471,8 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
     )
     stock_text, stock_token = _absorb_stock(stock_text, stock_token, wrq_pkt)
 
-    # --- option blindness: RRQ + blksize ---
-    opt_ex = udp_exchange(
+    # --- option blindness + OACK retransmit watch ---
+    opt_ex, opt_rexmit = udp_exchange_with_retransmit_watch(
         host,
         port,
         build_rrq(filename, "octet", options={"blksize": "512"}),
@@ -401,14 +482,33 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
     opt_skipped = bool(opt_ex.error and not opt_ex.data)
     option_hit = False
     option_detail = "option negotiation not evaluated"
+    no_rexmit_hit = False
+    no_rexmit_skipped = True
+    no_rexmit_detail = "OACK retransmit not evaluated"
+    no_rexmit_err = ""
     if opt_skipped:
         option_detail = opt_ex.error or "no reply to optioned RRQ (inconclusive)"
+        no_rexmit_detail = option_detail
+        no_rexmit_err = opt_ex.error
     elif opt_pkt is None:
         option_hit = True
         option_detail = "unparseable reply to RRQ+blksize"
+        no_rexmit_detail = "no OACK to watch for retransmit"
+        no_rexmit_err = opt_ex.error
     elif opt_pkt.opcode == OP_OACK:
         option_detail = f"OACK options={dict(opt_pkt.options)}"
-        # ACK the OACK on the learned TID (no DATA upload).
+        no_rexmit_skipped = False
+        if opt_rexmit.data:
+            no_rexmit_detail = (
+                f"OACK retransmitted ({len(opt_rexmit.data)} bytes; rtt_ms={opt_rexmit.rtt_ms:.3f})"
+            )
+        else:
+            no_rexmit_hit = True
+            no_rexmit_detail = (
+                f"OACK not retransmitted while ACK withheld ({closed_reason(opt_rexmit.error)})"
+            )
+            no_rexmit_err = opt_rexmit.error
+        # ACK the OACK on the learned TID (no DATA upload) after the watch window.
         if opt_ex.peer_port:
             udp_exchange_to(host, opt_ex.peer_port, build_ack(0))
     elif (
@@ -418,6 +518,7 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
     ):
         option_hit = True
         option_detail = "RRQ+blksize returned ERROR 0 with empty message (option choke)"
+        no_rexmit_detail = "option ERROR (no OACK retransmit watch)"
     elif opt_pkt.opcode == OP_ERROR and opt_pkt.error_code in {
         ERR_FILE_NOT_FOUND,
         ERR_ILLEGAL_OPERATION,
@@ -425,11 +526,23 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
         ERR_ACCESS_VIOLATION,
     }:
         option_detail = f"proper ERROR to optioned RRQ (code={opt_pkt.error_code} msg={opt_pkt.error_message!r})"
+        no_rexmit_detail = "option ERROR (no OACK retransmit watch)"
     elif opt_pkt.opcode == OP_DATA:
         option_hit = True
         option_detail = "RRQ+blksize returned DATA without OACK"
+        # DATA also expects ACK — one-shot DATA is the same class of stub.
+        no_rexmit_skipped = False
+        if opt_rexmit.data:
+            no_rexmit_detail = f"DATA retransmitted ({len(opt_rexmit.data)} bytes)"
+        else:
+            no_rexmit_hit = True
+            no_rexmit_detail = (
+                f"DATA not retransmitted while ACK withheld ({closed_reason(opt_rexmit.error)})"
+            )
+            no_rexmit_err = opt_rexmit.error
     else:
         option_detail = f"optioned RRQ opcode={opt_pkt.opcode}"
+        no_rexmit_detail = f"opcode={opt_pkt.opcode} (no OACK retransmit watch)"
     stock_text, stock_token = _absorb_stock(stock_text, stock_token, opt_pkt)
     stock_hit = bool(stock_token)
 
@@ -503,6 +616,54 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
                 triggered=option_hit,
                 detail=option_detail,
                 evidence=(opt_ex.data[:256].hex() if opt_ex.data else ""),
+                fidelity="high",
+            )
+        ),
+        (
+            skipped_indicator(
+                *_spec("tftp.tid_reuse"),
+                tid_reuse_detail,
+                protocol="tftp",
+                error=second.error,
+            )
+            if tid_reuse_skipped
+            else _ind(
+                _spec("tftp.tid_reuse"),
+                triggered=tid_reuse_hit,
+                detail=tid_reuse_detail,
+                evidence=f"baseline_tid={baseline.peer_port};second_tid={second.peer_port}",
+                fidelity="high",
+            )
+        ),
+        (
+            skipped_indicator(
+                *_spec("tftp.response_clone"),
+                clone_detail,
+                protocol="tftp",
+                error=second.error,
+            )
+            if clone_skipped
+            else _ind(
+                _spec("tftp.response_clone"),
+                triggered=clone_hit,
+                detail=clone_detail,
+                evidence=(baseline.data[:128].hex() if clone_hit else ""),
+                fidelity="high",
+            )
+        ),
+        (
+            skipped_indicator(
+                *_spec("tftp.no_retransmit"),
+                no_rexmit_detail,
+                protocol="tftp",
+                error=no_rexmit_err,
+            )
+            if no_rexmit_skipped
+            else _ind(
+                _spec("tftp.no_retransmit"),
+                triggered=no_rexmit_hit,
+                detail=no_rexmit_detail,
+                evidence=(opt_ex.data[:128].hex() if opt_ex.data else ""),
                 fidelity="high",
             )
         ),

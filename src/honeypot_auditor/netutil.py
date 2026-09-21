@@ -141,6 +141,93 @@ def udp_exchange(
         sock.close()
 
 
+def udp_exchange_with_retransmit_watch(
+    host: str,
+    port: int,
+    payload: bytes,
+    *,
+    retransmit_wait: float | None = None,
+    connected: bool = False,
+    timeout: float | None = None,
+    max_bytes: int = 4096,
+) -> tuple[UdpExchange, UdpExchange]:
+    """Send once; return ``(first_reply, idle_listen)`` on the same local socket.
+
+    Used to detect one-shot TFTP stubs that never retransmit OACK/DATA when the
+    client withholds ACK. ``idle_listen`` has empty data + ``timed out`` when no
+    second datagram arrives within ``retransmit_wait``.
+    """
+    if timeout is None:
+        timeout = settings.timeout_seconds
+    if retransmit_wait is None:
+        retransmit_wait = min(1.0, max(0.4, float(timeout) * 0.5))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.settimeout(timeout)
+        started = time.perf_counter()
+        try:
+            if connected:
+                sock.connect((host, port))
+                sock.send(payload)
+                data = sock.recv(max_bytes)
+                peer_host, peer_port = host, port
+            else:
+                sock.sendto(payload, (host, port))
+                data, addr = sock.recvfrom(max_bytes)
+                peer_host, peer_port = addr[0], int(addr[1])
+        except OSError as exc:
+            return (
+                UdpExchange(
+                    data=b"",
+                    peer_host="",
+                    peer_port=0,
+                    rtt_ms=0.0,
+                    error=str(exc),
+                ),
+                UdpExchange(
+                    data=b"",
+                    peer_host="",
+                    peer_port=0,
+                    rtt_ms=0.0,
+                    error="timed out",
+                ),
+            )
+        first = UdpExchange(
+            data=data,
+            peer_host=peer_host,
+            peer_port=peer_port,
+            rtt_ms=(time.perf_counter() - started) * 1000.0,
+            error="",
+        )
+        sock.settimeout(retransmit_wait)
+        idle_started = time.perf_counter()
+        try:
+            if connected:
+                data2 = sock.recv(max_bytes)
+                peer2_host, peer2_port = peer_host, peer_port
+            else:
+                data2, addr2 = sock.recvfrom(max_bytes)
+                peer2_host, peer2_port = addr2[0], int(addr2[1])
+            second = UdpExchange(
+                data=data2,
+                peer_host=peer2_host,
+                peer_port=peer2_port,
+                rtt_ms=(time.perf_counter() - idle_started) * 1000.0,
+                error="",
+            )
+        except OSError as exc:
+            second = UdpExchange(
+                data=b"",
+                peer_host="",
+                peer_port=0,
+                rtt_ms=(time.perf_counter() - idle_started) * 1000.0,
+                error=str(exc) or "timed out",
+            )
+        return first, second
+    finally:
+        sock.close()
+
+
 def udp_exchange_to(
     host: str,
     peer_port: int,

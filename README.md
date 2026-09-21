@@ -260,7 +260,7 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 strategies (arbitrary auth · state non-persistence · static signature). The
 **Strategies** column is how many of those three are active for that protocol in
 this release — not Shodan, co-tenancy, or individual indicator checks
-(**50** active strategy slots across all protocols).
+(**51** active strategy slots across all protocols).
 
 Default preset (`--preset both`) probes IANA well-known ports **and** common
 lab/docker aliases on the same faces. Override ports with `-p` / `--ports`.
@@ -279,7 +279,7 @@ Closed faces are skipped, not scored.
 | SNMP | 161 · 1161 (UDP) | 2 |
 | DNS | 53 · 15353 (UDP) | 1 |
 | NTP | 123 · 1123 (UDP) | 1 |
-| TFTP | 69 · 1069 (UDP) | 1 |
+| TFTP | 69 · 1069 (UDP) | 2 |
 | Elasticsearch | 9200 · 19200 | 1 |
 | IPP / CUPS | 631 · 1631 | 1 |
 | Memcached | 11211 · 21211 | 1 |
@@ -307,7 +307,7 @@ The DNS engine speaks UDP/53 (lab **15353**) and scores RFC non-compliance under
 
 The NTP engine speaks UDP/123 (lab **1123**) and scores RFC 5905 non-compliance under **static_signature** only (framing, mode/VN facade, originate echo, stratum facade, response clone, corroboration-gated zeroed clock metrics / epoch-zero / stock refid). Never sends monlist or mode-7 control queries. See [`docs/udp/NTP.md`](docs/udp/NTP.md) and [RFC 5905](https://www.rfc-editor.org/rfc/rfc5905.html).
 
-The TFTP engine speaks RFC 1350 over UDP/69 (lab 1069) with a light RFC 2347 `blksize` probe under **static_signature** only: TID `fixed_source_port`, opcode/error/mode/WRQ facades, option blindness, corroboration-gated stock ERROR/DATA lures. Never uploads DATA or completes a write. See [`docs/udp/TFTP.md`](docs/udp/TFTP.md), [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350.html), and [RFC 2347](https://www.rfc-editor.org/rfc/rfc2347.html).
+The TFTP engine speaks RFC 1350 over UDP/69 (lab 1069) with a light RFC 2347 `blksize` probe under **static_signature** + **state_nonpersist**: TID `fixed_source_port`, TID reuse across RRQs, opcode/error/mode/WRQ facades, option blindness, response clone, no OACK retransmit, corroboration-gated stock ERROR/DATA lures. Never uploads DATA or completes a write. See [`docs/udp/TFTP.md`](docs/udp/TFTP.md), [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350.html), and [RFC 2347](https://www.rfc-editor.org/rfc/rfc2347.html).
 
 The IPP/CUPS engine speaks HTTP (with TLS fallback) on **631** / lab **1631** and scores CUPS/IPP non-compliance under **static_signature** only (root framing, stock Server, path/method stubs, open `/admin`, frozen Date, IPP Content-Type framing, ghost-printer `successful-ok`, request-id echo, identical IPP replies, illegal operation façade, stock HTML lure). Never submits print jobs. See [`docs/IPP.md`](docs/IPP.md).
 

@@ -13,6 +13,7 @@ from honeypot_auditor.settings import settings
 
 _DST = 69
 _TID = 49152  # ephemeral Transfer ID (≠ dst)
+_TID2 = 49153
 
 # Bound by autouse fixture from conftest ``mock_udp_cls`` (avoid importing conftest).
 _MockUDP: Any = None
@@ -54,13 +55,24 @@ def _timeout() -> Reply:
     return (b"", 0, 0.0, "timed out")
 
 
+def _second_rrq(*, peer_port: int = _TID2, data: bytes | None = None) -> Reply:
+    """Independent missing-file RRQ (distinct TID by default)."""
+    return _reply(data if data is not None else _error(), peer_port=peer_port)
+
+
+def _opt_pair(first: Reply, rexmit: Reply | None = None) -> list[Reply]:
+    """Option RRQ first reply + idle retransmit listen."""
+    return [first, rexmit if rexmit is not None else _reply(_oack())]
+
+
 def _conformant_replies() -> list[Reply]:
-    """Real tftpd shape: ERROR from ephemeral TID; reject bad mode; ACK WRQ; OACK options."""
+    """Real tftpd: distinct TIDs, mode reject, WRQ ACK, OACK + retransmit."""
     return [
-        _reply(_error()),  # baseline RRQ missing file
-        _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),  # bad mode
-        _reply(_ack(0)),  # WRQ → ACK block 0
-        _reply(_oack()),  # RRQ+blksize → OACK
+        _reply(_error()),
+        _second_rrq(),
+        _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
+        _reply(_ack(0)),
+        *_opt_pair(_reply(_oack()), _reply(_oack())),
     ]
 
 
@@ -98,8 +110,10 @@ def test_tftp_conformant_agent_is_clean():
     assert by_id["tftp.mode_facade"].skipped is False
     assert not by_id["tftp.wrq_stub"].triggered
     assert not by_id["tftp.option_blindness"].triggered
+    assert not by_id["tftp.tid_reuse"].triggered
+    assert not by_id["tftp.response_clone"].triggered
+    assert not by_id["tftp.no_retransmit"].triggered
     assert not by_id["tftp.stock_payload"].triggered
-    # First exchange learns TID; option follow-up may use udp_exchange_to.
     assert mock.calls
     assert mock.calls[0]["port"] == _DST
     assert mock.calls[0]["connected"] is False
@@ -116,10 +130,11 @@ def test_tftp_fixed_source_port_when_peer_equals_dst():
     """RFC 1350: server must reply from a new TID, not the service port."""
     inds, _ = _run(
         [
-            _reply(_error(), peer_port=_DST),  # baseline from 69
+            _reply(_error(), peer_port=_DST),
+            _second_rrq(peer_port=_TID2),
             _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
             _reply(_ack(0)),
-            _reply(_oack()),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
         ]
     )
     by_id = {ind.id: ind for ind in inds}
@@ -132,24 +147,26 @@ def test_tftp_fixed_source_port_when_peer_equals_dst():
 def test_tftp_opcode_facade_on_data_for_rrq():
     inds, _ = _run(
         [
-            _reply(_data(1, b"hello")),  # RRQ missing → DATA (facade)
+            _reply(_data(1, b"hello")),
+            _second_rrq(data=_error()),
             _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
             _reply(_ack(0)),
-            _reply(_oack()),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
         ]
     )
     by_id = {ind.id: ind for ind in inds}
     assert by_id["tftp.opcode_facade"].triggered
-    assert by_id["tftp.error_stub"].triggered  # missing file served as DATA
+    assert by_id["tftp.error_stub"].triggered
 
 
 def test_tftp_error_stub_on_out_of_range_code():
     inds, _ = _run(
         [
             _reply(_error(99, "wat")),
+            _second_rrq(),
             _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
             _reply(_ack(0)),
-            _reply(_oack()),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
         ]
     )
     by_id = {ind.id: ind for ind in inds}
@@ -161,9 +178,10 @@ def test_tftp_mode_facade_serves_data_for_illegal_mode():
     inds, _ = _run(
         [
             _reply(_error()),
-            _reply(_data(1, b"x")),  # illegal mode still DATA
+            _second_rrq(),
+            _reply(_data(1, b"x")),
             _reply(_ack(0)),
-            _reply(_oack()),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
         ]
     )
     by_id = {ind.id: ind for ind in inds}
@@ -175,9 +193,10 @@ def test_tftp_wrq_stub_on_data_reply():
     inds, _ = _run(
         [
             _reply(_error()),
+            _second_rrq(),
             _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
-            _reply(_data(1, b"nope")),  # WRQ → DATA
-            _reply(_oack()),
+            _reply(_data(1, b"nope")),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
         ]
     )
     by_id = {ind.id: ind for ind in inds}
@@ -188,30 +207,94 @@ def test_tftp_option_blindness_on_error_zero_empty():
     inds, mock = _run(
         [
             _reply(_error()),
+            _second_rrq(),
             _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
             _reply(_ack(0)),
-            _reply(_error(tftp.ERR_UNDEFINED, "")),  # options choke
+            *_opt_pair(_reply(_error(tftp.ERR_UNDEFINED, "")), _timeout()),
         ]
     )
     by_id = {ind.id: ind for ind in inds}
     assert by_id["tftp.option_blindness"].triggered
-    # Option RRQ goes to service port; OACK ACK follow-up uses learned TID when present.
+    assert by_id["tftp.no_retransmit"].skipped
     assert any(c["payload"][:2] == b"\x00\x01" and b"blksize" in c["payload"] for c in mock.calls)
+
+
+def test_tftp_tid_reuse_across_transfers():
+    inds, _ = _run(
+        [
+            _reply(_error(), peer_port=_TID),
+            _second_rrq(peer_port=_TID),  # same ephemeral TID
+            _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
+            _reply(_ack(0)),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
+        ]
+    )
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["tftp.tid_reuse"].triggered
+    assert by_id["tftp.tid_reuse"].category == "state_nonpersist"
+    assert not by_id["tftp.fixed_source_port"].triggered
+
+
+def test_tftp_response_clone_on_identical_data():
+    lure = _data(1, b"canned")
+    inds, _ = _run(
+        [
+            _reply(lure),
+            _second_rrq(data=lure),
+            _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
+            _reply(_ack(0)),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
+        ]
+    )
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["tftp.response_clone"].triggered
+    assert by_id["tftp.opcode_facade"].triggered
+
+
+def test_tftp_identical_file_not_found_is_not_clone():
+    """Normal tftpd often returns the same File not found ERROR for any missing name."""
+    err = _error()
+    inds, _ = _run(
+        [
+            _reply(err),
+            _second_rrq(data=err),
+            _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
+            _reply(_ack(0)),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
+        ]
+    )
+    by_id = {ind.id: ind for ind in inds}
+    assert not by_id["tftp.response_clone"].triggered
+
+
+def test_tftp_no_retransmit_on_one_shot_oack():
+    inds, _ = _run(
+        [
+            _reply(_error()),
+            _second_rrq(),
+            _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
+            _reply(_ack(0)),
+            *_opt_pair(_reply(_oack()), _timeout()),
+        ]
+    )
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["tftp.no_retransmit"].triggered
+    assert not by_id["tftp.option_blindness"].triggered
 
 
 def test_tftp_stock_payload_requires_corroboration():
     inds, _ = _run(
         [
             _reply(_error(tftp.ERR_FILE_NOT_FOUND, "honeypot tftp stub")),
+            _second_rrq(),
             _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
             _reply(_ack(0)),
-            _reply(_oack()),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
         ]
     )
     by_id = {ind.id: ind for ind in inds}
     assert by_id["tftp.stock_payload"].triggered
     assert by_id["tftp.stock_payload"].requires_corroboration is True
-    # Stock alone — no other ungated hits in this fixture.
     assert not by_id["tftp.error_stub"].triggered
     assert not by_id["tftp.opcode_facade"].triggered
 
@@ -220,10 +303,11 @@ def test_tftp_stock_payload_from_later_exchange_despite_clean_baseline():
     """Clean baseline ERROR text must not mask a lure token on a later DATA reply."""
     inds, _ = _run(
         [
-            _reply(_error()),  # clean "File not found"
-            _reply(_data(1, b"conpot tftp lure")),  # mode facade + stock
+            _reply(_error()),
+            _second_rrq(),
+            _reply(_data(1, b"conpot tftp lure")),
             _reply(_ack(0)),
-            _reply(_oack()),
+            *_opt_pair(_reply(_oack()), _reply(_oack())),
         ]
     )
     by_id = {ind.id: ind for ind in inds}
@@ -273,8 +357,11 @@ def test_tftp_registry_and_strategies():
     assert "tftp" in PROTOCOL_STRATEGIES
     row = PROTOCOL_STRATEGIES["tftp"]
     assert row["arbitrary_auth"] == ""
-    assert row["state_nonpersist"] == ""
-    assert "TID" in row["static_signature"] or "fixed" in row["static_signature"].lower()
+    assert "TID reuse" in row["state_nonpersist"]
+    assert (
+        "clone" in row["static_signature"].lower()
+        or "retransmit" in row["static_signature"].lower()
+    )
     assert tftp.UDP_ENGINE.name == "tftp"
     assert tftp.UDP_ENGINE.probe is tftp.probe_tftp
 
@@ -284,14 +371,14 @@ def test_tftp_uses_udp_exchange_to_for_oack_ack():
     inds, mock = _run(
         [
             _reply(_error()),
+            _second_rrq(),
             _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
             _reply(_ack(0)),
-            _reply(_oack(), peer_port=_TID),
-            _reply(_error()),  # optional post-ACK (ignored / timeout ok)
+            *_opt_pair(_reply(_oack(), peer_port=_TID), _reply(_oack(), peer_port=_TID)),
+            _reply(_error()),
         ]
     )
     assert not any(ind.triggered for ind in inds)
-    # At least one call targeted the learned TID (not only dst 69).
     assert any(c["port"] == _TID for c in mock.calls)
 
 
