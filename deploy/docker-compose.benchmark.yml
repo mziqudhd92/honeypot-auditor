@@ -36,4 +36,5 @@ services:
       - "127.0.0.1:8088:80/tcp"
     volumes:
       - ./nginx-baseline.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx-baseline-index.html:/usr/share/nginx/html/index.html:ro
     restart: unless-stopped

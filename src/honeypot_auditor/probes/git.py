@@ -44,7 +44,7 @@ def _repo_path(label: str) -> str:
 
 
 def _upload_pack_req(repo: str) -> bytes:
-    inner = f"git-upload-pack {repo}\0host=auditor.invalid\0".encode("utf-8")
+    inner = f"git-upload-pack {repo}\0host=auditor.invalid\0".encode()
     return _git_pkt(inner)
 
 

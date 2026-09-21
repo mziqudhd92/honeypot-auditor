@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import struct
-
 from honeypot_auditor.config.tells.mysql import (
     MYSQL_EOL_RE,
     MYSQL_STOCK_CAP_BLOCK,

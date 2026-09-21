@@ -420,7 +420,7 @@ def probe_http(host: str, port: int) -> list[Indicator]:
         for idx, (user, password) in enumerate((low, high)):
             if anon_code not in (401, 403):
                 break
-            token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+            token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
             # Optional header casing permutation as evidence only.
             auth_name = b"Authorization" if idx == 0 else b"authorization"
             areq = (

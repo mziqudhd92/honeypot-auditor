@@ -55,7 +55,7 @@ _CSEQ_RE = re.compile(r"(?im)^CSeq:\s*(\d+)\s+(\S+)")
 # (RFC 3261 §8.2.6.2, RFC 3581 §4). The branch keeps a fixed prefix so the
 # substring check still matches while remaining unique per transaction.
 _VIA_BRANCH_PREFIX = "z9hG4bKhpaudit"
-_VIA_BRANCH_TOKEN = "z9hg4bkhpaudit"
+_VIA_BRANCH_TOKEN = "z9hg4bkhpaudit"  # nosec B105 — Via magic-cookie prefix, not a password
 _RPORT_ECHO_RE = re.compile(r"rport\s*=\s*\d+", re.IGNORECASE)
 
 

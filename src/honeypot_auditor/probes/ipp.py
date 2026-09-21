@@ -830,7 +830,7 @@ def probe_ipp(host: str, port: int) -> list[Indicator]:
         ("low-entropy", low_user, low_pass),
         ("high-entropy", high_user, high_pass),
     ):
-        token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+        token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
         ba_status, _ba_hdrs, ba_body, ba_err = _http_exchange(
             host,
             port,

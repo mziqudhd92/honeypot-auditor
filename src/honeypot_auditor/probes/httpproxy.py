@@ -48,7 +48,7 @@ def _status(raw: bytes) -> int:
 
 
 def _basic_header(user: str, password: str) -> bytes:
-    token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
+    token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
     return f"Proxy-Authorization: Basic {token}\r\n".encode("ascii")
 
 

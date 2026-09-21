@@ -215,11 +215,14 @@ def _is_get_miss(raw: bytes) -> bool:
     if not text.strip():
         return False
     token = _first_token(text)
-    if token == "END":
+    if token == "END":  # nosec B105 — memcached get-miss token, not a password
         return True
     # END after empty VALUE block is still a miss shape; VALUE means a hit.
-    return token != "VALUE" and bool(re.search(r"(?im)^END\s*$", text)) and "VALUE " not in text.upper()
-
+    return (
+        token != "VALUE"  # nosec B105 — memcached VALUE line token, not a password
+        and bool(re.search(r"(?im)^END\s*$", text))
+        and "VALUE " not in text.upper()
+    )
 
 def _is_version_framed(raw: bytes) -> bool:
     text = _decode(raw).strip()
