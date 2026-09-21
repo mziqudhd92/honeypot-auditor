@@ -11,7 +11,9 @@ from honeypot_auditor.models import Indicator
 from honeypot_auditor.settings import settings
 
 
-def _http_bytes(status: int, body: dict | list | str | bytes, *, headers: dict[str, str] | None = None) -> bytes:
+def _http_bytes(
+    status: int, body: dict | list | str | bytes, *, headers: dict[str, str] | None = None
+) -> bytes:
     if isinstance(body, (dict, list)):
         payload = json.dumps(body).encode()
         default_ctype = "application/json"
@@ -91,8 +93,87 @@ def test_docker_shape_helpers():
     assert not docker._is_ping_ok(200, b"PONG")
     assert docker._is_docker_version(_VERSION)
     assert not docker._is_docker_version({"ok": True})
+    assert not docker._is_docker_version({"ApiVersion": "1.0", "Version": "x"})
     assert docker._is_docker_info(_INFO)
     assert not docker._is_docker_info(_VERSION)
+
+
+def test_docker_thin_apiversion_alone_is_not_a_speaker():
+    """ApiVersion+Version without Engine shape must not unlock deep tells / decisive stock."""
+    thin = {"ApiVersion": "1.0", "Version": "honeypot"}
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET /_ping"):
+            return _http_bytes(200, "OK"), ""
+        if first.startswith("GET /version"):
+            return _http_bytes(200, thin), ""
+        return b"", "unexpected"
+
+    with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
+        inds = docker.probe_docker("127.0.0.1", 2375)
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["docker.version_framing"].triggered
+    assert by_id["docker.version_framing"].fidelity == "medium"
+    assert by_id["docker.stock_version"].skipped
+    assert by_id["docker.path_facade"].skipped
+
+
+def test_docker_ports_in_presets():
+    from honeypot_auditor.config import (
+        PORT_PRESET_DOCKER_RESEARCH,
+        PORT_PRESET_IANA,
+        probe_port_map,
+        protocol_for_port,
+    )
+
+    assert PORT_PRESET_IANA["docker"] == 2375
+    assert PORT_PRESET_DOCKER_RESEARCH["docker"] == 12375
+    both = probe_port_map("both")
+    assert 2375 in both["docker"]
+    assert 12375 in both["docker"]
+    assert protocol_for_port(2375) == "docker"
+    assert protocol_for_port(12375) == "docker"
+
+
+def test_docker_info_unauthorized_is_skipped():
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET /info"):
+            return _http_bytes(401, {"message": "unauthorized"}), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
+        inds = docker.probe_docker("127.0.0.1", 2375)
+    info = {i.id: i for i in inds}["docker.info_stub"]
+    assert info.skipped
+    assert not info.triggered
+
+
+def test_docker_method_405_is_not_stub():
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("DELETE /_ping") or first.startswith("PUT /_ping"):
+            return _http_bytes(405, {"message": "method not allowed"}), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
+        inds = docker.probe_docker("127.0.0.1", 2375)
+    assert not {i.id: i for i in inds}["docker.method_stub"].triggered
+
+
+def test_docker_tls_hint_is_never_applicable_skip():
+    from honeypot_auditor.analyzer import _is_never_applicable_skip
+
+    with patch.object(docker, "tcp_transact", side_effect=_conformant_tcp):
+        inds = docker.probe_docker("127.0.0.1", 2375)
+    tls = {i.id: i for i in inds}["docker.tls_hint_mismatch"]
+    assert tls.skipped
+    assert "out of scope" in tls.skip_reason
+    assert _is_never_applicable_skip(tls)
 
 
 def test_docker_conformant_daemon_is_clean():
@@ -293,9 +374,7 @@ def test_docker_version_framing_skips_deep_probes():
     by_id = {ind.id: ind for ind in inds}
     assert not by_id["docker.ping_framing"].triggered
     assert by_id["docker.version_framing"].triggered
-    assert all(
-        i.skipped or i.id in {"docker.ping_framing", "docker.version_framing"} for i in inds
-    )
+    assert all(i.skipped or i.id in {"docker.ping_framing", "docker.version_framing"} for i in inds)
     assert len(inds) == 7
 
 

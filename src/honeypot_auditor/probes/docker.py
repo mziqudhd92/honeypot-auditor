@@ -89,13 +89,13 @@ _STOCK_APIVERSIONS_DECISIVE = frozenset(
     {
         "0.0",
         "99.99",
-        "1.0",
     }
 )
 
 # Generic / still-deployed values — common on real daemons; corroboration-gated.
 _STOCK_APIVERSIONS_GENERIC = frozenset(
     {
+        "1.0",  # too common historically to score alone (was decisive → FP risk)
         "1.24",
         "1.25",
         "1.37",
@@ -135,6 +135,20 @@ _INFO_REQUIRED_FIELDS = frozenset(
     }
 )
 
+# Extra keys that distinguish a real Engine /version document from thin JSON.
+_VERSION_SHAPE_FIELDS = frozenset(
+    {
+        "GitCommit",
+        "GoVersion",
+        "Os",
+        "Arch",
+        "MinAPIVersion",
+        "Platform",
+        "KernelVersion",
+        "BuildTime",
+    }
+)
+
 _TLS_SKIP_REASON = "TLS Engine API port 2376 out of scope for v1"
 
 
@@ -160,13 +174,9 @@ def _http_exchange(
         hdrs.setdefault("Content-Type", "application/json")
         hdrs["Content-Length"] = str(len(body))
     request = (
-        f"{method} {path} HTTP/1.1\r\n"
-        + "".join(f"{k}: {v}\r\n" for k, v in hdrs.items())
-        + "\r\n"
+        f"{method} {path} HTTP/1.1\r\n" + "".join(f"{k}: {v}\r\n" for k, v in hdrs.items()) + "\r\n"
     ).encode("ascii", "replace") + body
-    raw, err = tcp_transact(
-        host, port, request, recv_first=False, timeout=settings.timeout_seconds
-    )
+    raw, err = tcp_transact(host, port, request, recv_first=False, timeout=settings.timeout_seconds)
     if err and not raw:
         return 0, {}, b"", closed_reason(err)
     if not raw:
@@ -222,9 +232,17 @@ def _is_docker_version(doc: dict[str, Any] | None) -> bool:
         return False
     api = doc.get("ApiVersion")
     version = doc.get("Version")
-    return isinstance(api, str) and bool(api.strip()) and isinstance(version, str) and bool(
-        version.strip()
-    )
+    if not (
+        isinstance(api, str)
+        and bool(api.strip())
+        and isinstance(version, str)
+        and bool(version.strip())
+    ):
+        return False
+    # Require additional Engine shape so thin {"ApiVersion","Version"} JSON
+    # (e.g. ApiVersion=1.0 lure stubs) is not treated as a Docker speaker.
+    extras = sum(1 for key in _VERSION_SHAPE_FIELDS if key in doc)
+    return extras >= 2
 
 
 def _is_docker_info(doc: dict[str, Any] | None) -> bool:
@@ -323,7 +341,8 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
         )
 
     # Non-speaker: no usable version document → framing only (plus ping result).
-    if not version_ok:
+    # Medium fidelity: avoid dual high-signal static hits on random HTTP :2375.
+    if not version_ok or version is None:
         out: list[Indicator] = []
         for spec in _DOCKER_SKIP:
             if spec[0] == "docker.ping_framing":
@@ -336,10 +355,12 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
                         skipped=not ping_body and ping_status == 0 and bool(ping_err),
                         skip_reason=ping_err if not ping_body and ping_status == 0 else "",
                         protocol="docker",
-                        detail=ping_detail if (ping_body or ping_status) else ping_err or "not a Docker speaker",
+                        detail=ping_detail
+                        if (ping_body or ping_status)
+                        else ping_err or "not a Docker speaker",
                         evidence=(ping_body[:400].decode("utf-8", "replace") if ping_body else ""),
                         remediation="Return HTTP 200 with plain-text body OK on GET /_ping",
-                        fidelity="high" if (ping_body or ping_status) and ping_hit else "medium",
+                        fidelity="medium",
                     )
                 )
             elif spec[0] == "docker.version_framing":
@@ -352,10 +373,12 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
                         skipped=not ver_body and ver_status == 0,
                         skip_reason=ver_err if not ver_body and ver_status == 0 else "",
                         protocol="docker",
-                        detail=version_detail if (ver_body or ver_status) else ver_err or "not a Docker speaker",
+                        detail=version_detail
+                        if (ver_body or ver_status)
+                        else ver_err or "not a Docker speaker",
                         evidence=(ver_body[:400].decode("utf-8", "replace") if ver_body else ""),
                         remediation="Return Docker Engine version JSON on GET /version",
-                        fidelity="high" if (ver_body or ver_status) else "medium",
+                        fidelity="medium",
                     )
                 )
             elif spec[0] == "docker.tls_hint_mismatch":
@@ -376,14 +399,6 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
                     )
                 )
         return out
-
-    if version is None:
-        return skip_suite(
-            _DOCKER_SKIP,
-            "not a Docker Engine HTTP speaker",
-            protocol="docker",
-            error=ver_err or ping_err,
-        )
 
     if is_safe_mode():
         reason = "safe-mode: handshake-only probe"
@@ -434,9 +449,7 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
     if not path_skipped:
         if _looks_like_api_not_found(path_status, path_doc):
             path_detail = f"compliant unknown-path handling (status={path_status})"
-        elif path_status == 200 and (
-            _looks_like_version_or_info(path_doc) or path_doc == version
-        ):
+        elif path_status == 200 and (_looks_like_version_or_info(path_doc) or path_doc == version):
             path_hit = True
             path_detail = (
                 f"GET {mystery} returned status=200 version/info-shaped JSON "
@@ -465,9 +478,7 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
             method_notes.append(f"{verb} /_ping returned status=200 body={m_body[:40]!r}")
         else:
             method_notes.append(f"{verb} /_ping status={m_status}")
-    method_detail = (
-        "; ".join(method_notes) if method_notes else "method handling not evaluated"
-    )
+    method_detail = "; ".join(method_notes) if method_notes else "method handling not evaluated"
 
     # --- /info must be a system-info document, not a version echo ---
     info_status, _info_hdrs, info_body, info_err = _http_exchange(host, port, "GET", "/info")
@@ -486,8 +497,7 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
                 f"Containers={info_doc.get('Containers')}"
             )
         elif info_status == 200 and (
-            info_doc == version
-            or (_is_docker_version(info_doc) and not _is_docker_info(info_doc))
+            info_doc == version or (_is_docker_version(info_doc) and not _is_docker_info(info_doc))
         ):
             info_hit = True
             info_detail = (

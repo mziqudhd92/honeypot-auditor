@@ -27,8 +27,13 @@ PORT_PRESET_IANA: dict[str, int] = {
     "mongodb": 27017,
     "mqtt": 1883,
     "snmp": 161,
+    "dns": 53,
     "elasticsearch": 9200,
     "docker": 2375,
+    "ipp": 631,
+    "memcached": 11211,
+    "ntp": 123,
+    "tftp": 69,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -52,8 +57,13 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "mongodb": 27017,
     "mqtt": 11883,
     "snmp": 1161,
+    "dns": 15353,
     "elasticsearch": 19200,
     "docker": 12375,
+    "ipp": 1631,
+    "memcached": 21211,
+    "ntp": 1123,
+    "tftp": 1069,
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {
@@ -77,10 +87,16 @@ _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     8883: "mqtt",
     18883: "mqtt",  # lab MQTTS (implicit TLS), pairs with cleartext lab 11883
     10161: "snmp",  # alternate lab SNMP (UDP), pairs with cleartext lab 1161
+    15353: "dns",  # lab DNS (UDP), pairs with IANA 53
     9200: "elasticsearch",
     19200: "elasticsearch",  # lab Elasticsearch HTTP API
     2375: "docker",
     12375: "docker",  # lab Docker Engine API (plain HTTP)
+    631: "ipp",
+    1631: "ipp",  # lab CUPS / IPP HTTP, pairs with IANA 631
+    11211: "memcached",
+    21211: "memcached",  # lab Memcached ASCII
+    1123: "ntp",  # lab NTP (UDP), pairs with IANA 123
 }
 
 

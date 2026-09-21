@@ -127,6 +127,23 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "OID-name echo · bitwise-identical canned replies"
         ),
     },
+    "dns": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "header framing · txid echo · illegal OPCODE facade · question echo · "
+            "RCODE stub on .invalid · response clone · 0x20 case mismatch · "
+            "EDNS OPT facade · stock TXT/SOA lure"
+        ),
+    },
+    "ntp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "framing · mode/VN facade · originate echo · stratum facade · "
+            "bitwise-identical canned replies · zeroed clock metrics · epoch-zero · stock refid"
+        ),
+    },
     "elasticsearch": {
         "arbitrary_auth": "",
         "state_nonpersist": "",
@@ -144,6 +161,26 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "ping/version framing · stock ApiVersion/Version/GitCommit · "
             "unknown-path version/info facade · DELETE/PUT /_ping method stubs · "
             "/info missing fields or version echo · TLS hint deferred (2376)"
+        ),
+    },
+    "ipp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "CUPS root framing · stock Server header · unknown-path root facade · "
+            "DELETE method stub · /printers stub · open /admin · frozen Date · "
+            "IPP Content-Type framing · ghost-printer successful-ok · request-id "
+            "echo · bitwise-identical IPP replies · illegal operation · stock HTML "
+            "body lure"
+        ),
+    },
+    "memcached": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "VERSION framing · STAT/END framing · unknown-command ERROR · "
+            "get-miss END · canned stats clone · stock VERSION lure · "
+            "bare verbosity flush-stub stand-in · noreply facade"
         ),
     },
     "mysql": {
@@ -181,6 +218,14 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "state_nonpersist": "cleartext-only auth · frozen auth.c:326 fail blob",
         "static_signature": "SSLRequest → N then AuthenticationCleartextPassword only",
     },
+    "tftp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "TID fixed_source_port · opcode/error/mode/WRQ facades · "
+            "RFC 2347 option blindness · stock ERROR/DATA lure"
+        ),
+    },
 }
 
 DEEP_WEIGHTS: dict[str, float] = {
@@ -194,8 +239,6 @@ DEEP_WEIGHTS: dict[str, float] = {
 EXTENDED_PROBE_PORTS: dict[str, int] = {
     "modbus": 1502,
     "snmp": 161,
-    "dns": 15353,
-    "ipp": 631,
 }
 
 COTENANCY_CORROBORATION_CATEGORIES = frozenset(

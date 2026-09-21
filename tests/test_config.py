@@ -50,6 +50,7 @@ def test_probe_port_map_both_includes_iana_and_lab():
     assert ports["httpproxy"] == [3128, 8080]
     assert ports["mssql"] == [1433]
     assert ports["mongodb"] == [27017]
+    assert ports["ntp"] == [123, 1123]
 
 
 def test_probe_port_map_dash_p_is_exclusive():
@@ -390,6 +391,8 @@ def test_protocol_for_port_maps_new_faces():
     assert protocol_for_port(5000) == "vnc"
     assert protocol_for_port(8080) == "httpproxy"
     assert protocol_for_port(443) == "http"
+    assert protocol_for_port(123) == "ntp"
+    assert protocol_for_port(1123) == "ntp"
 
 
 def test_match_extra_protocol_class_tells():

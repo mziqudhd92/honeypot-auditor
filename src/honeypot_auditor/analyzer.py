@@ -456,6 +456,7 @@ _NEVER_APPLICABLE_SKIP_MARKERS = (
     "needs the requests package",
     "no session (auth failed)",
     "need two sessions",
+    "out of scope",
 )
 
 

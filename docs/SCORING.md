@@ -76,6 +76,64 @@ Prefer RFC facade / MIB-stub tells over banner IOCs alone — see [`SNMP.md`](SN
 
 Full strategy narrative, probe flow, and non-destructive policy: [`SNMP.md`](SNMP.md).
 
+### TFTP RFC non-compliance (basic probe)
+
+TFTP uses **static_signature** only (RFC 1350 / light RFC 2347 over UDP; no
+auth/state axis). Prefer TID / opcode / option facade tells over lure strings
+alone — see [`udp/TFTP.md`](udp/TFTP.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `tftp.fixed_source_port` | static_signature | High when reply `peer_port == dst_port` (no distinct server TID) |
+| `tftp.opcode_facade` / `tftp.error_stub` / `tftp.mode_facade` / `tftp.wrq_stub` | static_signature | Missing-file / illegal-mode / WRQ DATA facades |
+| `tftp.option_blindness` | static_signature | RRQ+`blksize` choke (`ERROR 0` empty) instead of OACK / proper ERROR |
+| `tftp.stock_payload` | static_signature | Stock ERROR/DATA lure tokens (corroboration-gated) |
+| `tftp.framing` | static_signature | Non-speaker / unparseable TFTP reply |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/TFTP.md`](udp/TFTP.md).
+
+### DNS RFC non-compliance (basic probe)
+
+DNS uses **static_signature** only (UDP/53; no auth/state axis). Prefer RFC facade
+tells over banner IOCs alone — see [`udp/DNS.md`](udp/DNS.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `dns.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across txids) |
+| `dns.header_framing` / `dns.txid` / `dns.header_facade` / `dns.question_echo` | static_signature | High fidelity RFC tells |
+| `dns.rcode_stub` / `dns.edns_facade` | static_signature | NXDOMAIN / EDNS OPT facade |
+| `dns.case_encoding_mismatch` / `dns.stock_payload` | static_signature | Corroboration-gated (0x20 case + stock TXT/SOA lure) |
+
+Full strategy narrative, probe flow, and non-destructive policy: [`udp/DNS.md`](udp/DNS.md).
+
+### NTP RFC 5905 non-compliance (basic probe)
+
+NTP uses **static_signature** only (UDP/123; no auth/state axis). Prefer RFC facade
+tells over banner IOCs alone — see [`udp/NTP.md`](udp/NTP.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `ntp.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across distinct xmt) |
+| `ntp.framing` / `ntp.mode_facade` / `ntp.org_echo` / `ntp.stratum_facade` | static_signature | High fidelity RFC tells |
+| `ntp.zeroed_clock_metrics` / `ntp.epoch_zero` / `ntp.stock_refid` | static_signature | Corroboration-gated (sparse metrics · epoch stamps · lure refid) |
+
+Full strategy narrative, probe flow, and non-destructive policy: [`udp/NTP.md`](udp/NTP.md).
+
+### Memcached ASCII non-compliance (basic probe)
+
+Memcached uses **static_signature** only (TCP ASCII; no auth/state axis). Prefer
+framing / ERROR / canned-stats tells over banner IOCs alone — see
+[`MEMCACHED.md`](MEMCACHED.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `memcached.stats_clone` | static_signature | Decisive when hit (bitwise-identical `stats` replies) |
+| `memcached.version_framing` / `memcached.stats_framing` / `memcached.unknown_command` | static_signature | High fidelity ASCII tells |
+| `memcached.get_miss` / `memcached.flush_stub` / `memcached.noreply_facade` | static_signature | Miss END · bare verbosity · noreply quiet |
+| `memcached.stock_version` | static_signature | Stock VERSION lure (generic tokens corroboration-gated) |
+
+Full strategy narrative, probe flow, and non-destructive policy: [`MEMCACHED.md`](MEMCACHED.md).
+
 ### Redis RESP non-compliance (basic probe)
 
 Redis uses all three basic strategies. Prefer RESP facade / state tells over banner
@@ -107,6 +165,22 @@ strategy narrative and probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
 | `elasticsearch.root_framing` | static_signature | Non-speaker / malformed root document |
 
 Full indicator list, ports, safe-mode, and non-destructive policy: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+
+### Docker Engine API non-compliance (basic probe)
+
+Docker uses **static_signature** only (read-only Engine HTTP API on **2375** /
+lab **12375**; no auth/state axis). Prefer path/method/info facade tells over
+banner IOCs alone — full strategy narrative and probe flow: [`DOCKER.md`](DOCKER.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `docker.ping_framing` | static_signature | Non-speaker / `/_ping` body is not plain-text `OK` |
+| `docker.version_framing` | static_signature | Non-speaker / thin `/version` lacking Engine shape beyond `ApiVersion`+`Version` |
+| `docker.path_facade` / `method_stub` / `info_stub` | static_signature | High-fidelity API non-compliance |
+| `docker.stock_version` | static_signature | Stock `ApiVersion` / `Version` / `GitCommit` lure (`ApiVersion` `1.0` and other common values are corroboration-gated, not decisive alone) |
+| `docker.tls_hint_mismatch` | static_signature | Deferred — TLS Engine API **2376** out of scope (always skipped) |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`DOCKER.md`](DOCKER.md).
 
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 

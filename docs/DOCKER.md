@@ -24,9 +24,11 @@ Docker activates **one** of the three basic scoring strategies
 Detection philosophy:
 
 1. **Baseline speakership** — `GET /_ping` must return plain-text **OK**;
-   `GET /version` must return parseable Docker version JSON (`ApiVersion` +
-   `Version`). Connection failure skips the suite; non-version `/version`
-   skips deep probes after framing.
+   `GET /version` must return parseable Docker version JSON with Engine shape
+   beyond bare `ApiVersion` + `Version` (at least two additional version-document
+   fields). Thin `{"ApiVersion","Version"}` stubs are **not** speakers.
+   Connection failure skips the suite; non-version `/version` skips deep probes
+   after framing.
 2. **Path and method fidelity** — real daemons 404 unknown routes and do not
    treat DELETE/PUT on `/_ping` as a successful ping. Stubs that return **200**
    version/info JSON (or ping **OK**) for every verb/path are the core tell.
@@ -34,8 +36,9 @@ Detection philosophy:
    container/image counts, `Driver`, `Name`, …), not a thin echo of `/version`.
 4. **Lure metadata last** — decisive lure tokens (canned `GitCommit` like
    `deadbeef`, absurd/frozen version strings) score alone. Generic still-common
-   `ApiVersion` / `Version` values set `requires_corroboration` unless mixed
-   with a decisive token on the same version document.
+   `ApiVersion` / `Version` values (including historically common `ApiVersion`
+   **1.0**) set `requires_corroboration` unless mixed with a decisive token on
+   the same version document — they are never decisive alone.
 
 ## Non-destructive policy
 
@@ -79,13 +82,13 @@ All indicators are category **`static_signature`**.
 | ID | Strategy role | Trigger |
 |----|---------------|---------|
 | `docker.ping_framing` | Speakership | `GET /_ping` is not HTTP 200 with plain-text body `OK` (optional trailing newline allowed). |
-| `docker.version_framing` | Speakership | `GET /version` is not parseable Docker version JSON (`ApiVersion` + `Version` strings). |
+| `docker.version_framing` | Speakership | `GET /version` is not parseable Docker version JSON with Engine shape beyond bare `ApiVersion` + `Version` strings (requires additional version-document fields). |
 
 ### Lure metadata
 
 | ID | Strategy role | Trigger |
 |----|---------------|---------|
-| `docker.stock_version` | Lure banner | `ApiVersion` / `Version` / `GitCommit` match stock lure tokens. **Decisive** alone: canned commits (`deadbeef`, `0000000`, …), absurd/frozen version strings (`0.0.0`, `honeypot`, …). **Corroboration-gated** alone: common still-deployed `ApiVersion` (`1.40`, `1.41`, …) or `Version` (`18.09.0`, `20.10.0`, …). A decisive token on the same version document lifts the gate. Product-named honeypot IOCs are **not** used as decisive signals by themselves. |
+| `docker.stock_version` | Lure banner | `ApiVersion` / `Version` / `GitCommit` match stock lure tokens. **Decisive** alone: canned commits (`deadbeef`, `0000000`, …), absurd/frozen version strings (`0.0.0`, `honeypot`, …). **Corroboration-gated** alone: common still-deployed `ApiVersion` (`1.0`, `1.40`, `1.41`, …) or `Version` (`18.09.0`, `20.10.0`, …) — `ApiVersion` **1.0** is never decisive by itself. A decisive token on the same version document lifts the gate. Product-named honeypot IOCs are **not** used as decisive signals by themselves. |
 
 ### Path / method / endpoint facades
 

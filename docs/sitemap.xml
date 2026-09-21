@@ -26,12 +26,42 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/udp/DNS.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/udp/NTP.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/udp/TFTP.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://mziqudhd92.github.io/honeypot-auditor/REDIS.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/DOCKER.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/IPP.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/MEMCACHED.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>

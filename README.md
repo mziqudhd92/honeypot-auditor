@@ -63,7 +63,7 @@ Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ```
-  [ BASIC ]  passive intel · Nmap NSE · SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/MQTT/SNMP/Elasticsearch/SMTP/VNC/SIP
+  [ BASIC ]  passive intel · Nmap NSE · SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/MQTT/SNMP/DNS/NTP/TFTP/Elasticsearch/Docker/IPP/Memcached/SMTP/VNC/SIP
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
              · co-tenancy buffet detect · latency · latency-under-load · egress bait
              (flag: --deep · more intrusive · same authorization rules)
@@ -256,11 +256,11 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 
 ## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-**21** protocol engines in the current version. Each uses up to **3** probe
+**27** protocol engines in the current version. Each uses up to **3** probe
 strategies (arbitrary auth · state non-persistence · static signature). The
 **Strategies** column is how many of those three are active for that protocol in
 this release — not Shodan, co-tenancy, or individual indicator checks
-(**45** active strategy slots across all protocols).
+(**51** active strategy slots across all protocols).
 
 Default preset (`--preset both`) probes IANA well-known ports **and** common
 lab/docker aliases on the same faces. Override ports with `-p` / `--ports`.
@@ -277,7 +277,13 @@ Closed faces are skipped, not scored.
 | Redis | 6379 · 6379 | 3 |
 | MQTT | 1883 · 11883 | 3 |
 | SNMP | 161 · 1161 (UDP) | 2 |
+| DNS | 53 · 15353 (UDP) | 1 |
+| NTP | 123 · 1123 (UDP) | 1 |
+| TFTP | 69 · 1069 (UDP) | 1 |
 | Elasticsearch | 9200 · 19200 | 1 |
+| Docker | 2375 · 12375 | 1 |
+| IPP / CUPS | 631 · 1631 | 1 |
+| Memcached | 11211 · 21211 | 1 |
 | SMB | 445 · 1445 | 2 |
 | VNC | 5900 · 5000 | 2 |
 | MySQL | 3306 · 3306 | 2 |
@@ -290,7 +296,7 @@ Closed faces are skipped, not scored.
 | Git | 9418 · 9418 | 1 |
 | HTTP proxy | 3128 · 8080 | 1 |
 
-`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `9200`/`19200` → Elasticsearch, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
+`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `53`/`15353` → DNS (UDP), `123`/`1123` → NTP (UDP), `69`/`1069` → TFTP (UDP), `9200`/`19200` → Elasticsearch, `2375`/`12375` → Docker, `631`/`1631` → IPP, `11211`/`21211` → Memcached, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
 The POP3 engine checks response framing, pre-authentication state boundaries (STAT), optional CAPA sampling, identical auth-failed `-ERR` blankets, stock lure banners, unknown-command handling, and repeated synthetic logins. It never lists, reads, retrieves, or deletes mail; see [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.html) and [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.html) (CAPA).
 
@@ -298,9 +304,21 @@ The IMAP engine pairs with POP3 for Exchange/mail skins (qeeqbox, OpenCanary-cla
 
 The SNMP engine speaks community SNMPv1/v2c over UDP and scores RFC non-compliance (any-community GetResponse, request-id mismatch, invalid version facade, success on missing OID, BER framing, stock sysDescr, GetNext stubs, wrong `sysObjectID`/`sysUpTime` ASN.1 types, OID-name mismatches, canned identical replies). Never sends SetRequest or walks. See [`docs/SNMP.md`](docs/SNMP.md), [RFC 1157](https://www.rfc-editor.org/rfc/rfc1157.html), and [RFC 3416](https://www.rfc-editor.org/rfc/rfc3416.html).
 
+The DNS engine speaks UDP/53 (lab **15353**) and scores RFC non-compliance under **static_signature** only (header framing, txid echo, illegal OPCODE facade, question echo, RCODE stub on `.invalid`, response clone, corroboration-gated 0x20 case mismatch, EDNS OPT facade, stock TXT/SOA lure). Never sends AXFR/IXFR/ANY floods or updates. See [`docs/udp/DNS.md`](docs/udp/DNS.md) and [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035.html).
+
+The NTP engine speaks UDP/123 (lab **1123**) and scores RFC 5905 non-compliance under **static_signature** only (framing, mode/VN facade, originate echo, stratum facade, response clone, corroboration-gated zeroed clock metrics / epoch-zero / stock refid). Never sends monlist or mode-7 control queries. See [`docs/udp/NTP.md`](docs/udp/NTP.md) and [RFC 5905](https://www.rfc-editor.org/rfc/rfc5905.html).
+
+The TFTP engine speaks RFC 1350 over UDP/69 (lab 1069) with a light RFC 2347 `blksize` probe under **static_signature** only: TID `fixed_source_port`, opcode/error/mode/WRQ facades, option blindness, corroboration-gated stock ERROR/DATA lures. Never uploads DATA or completes a write. See [`docs/udp/TFTP.md`](docs/udp/TFTP.md), [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350.html), and [RFC 2347](https://www.rfc-editor.org/rfc/rfc2347.html).
+
+The IPP/CUPS engine speaks HTTP (with TLS fallback) on **631** / lab **1631** and scores CUPS/IPP non-compliance under **static_signature** only (root framing, stock Server, path/method stubs, open `/admin`, frozen Date, IPP Content-Type framing, ghost-printer `successful-ok`, request-id echo, identical IPP replies, illegal operation façade, stock HTML lure). Never submits print jobs. See [`docs/IPP.md`](docs/IPP.md).
+
+The Memcached engine speaks the ASCII text protocol on **11211** / lab **21211** and scores protocol non-compliance under **static_signature** only (VERSION/stats framing, unknown-command ERROR, get-miss END, canned stats clone, stock VERSION lure, bare-verbosity flush-stub stand-in, noreply façade). Never sends `flush_all` or writes values. See [`docs/MEMCACHED.md`](docs/MEMCACHED.md).
+
 The Redis engine speaks RESP on TCP/6379 with **protocol non-compliance** detection: dual random `AUTH` (decisive when both `+OK`), reconnect key persistence + `DBSIZE` coherence, plus split static tells (`PING` stub, `COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP`, missing/mismatched `ECHO`/`SELECT`, OpenCanary AUTH+NOAUTH wall, `TYPE`/`INCR` facades, wrong-arity `GET`, QUIT zombie). Never sends `FLUSHALL`/`FLUSHDB`/`CONFIG SET`/`SCRIPT LOAD`; probe keys use an `hpaudit_` prefix and are deleted. See [`docs/REDIS.md`](docs/REDIS.md) and the [Redis protocol spec](https://redis.io/docs/reference/protocol-spec/).
 
 The Elasticsearch engine speaks the HTTP JSON API on **9200** / lab **19200** and scores API non-compliance under **static_signature** only (root framing, stock cluster metadata/uuid, missing-index **200**, unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and `/_cat/health` shape facades, non-JSON Content-Type, `X-Elastic-Product` mismatch). Never creates indices, bulks, or searches real data. Strategies and probe flow: [`docs/ELASTICSEARCH.md`](docs/ELASTICSEARCH.md).
+
+The Docker Engine API probe speaks the plain HTTP Engine API on **2375** / lab **12375** and scores API non-compliance under **static_signature** only (`/_ping` framing, `/version` Engine shape, path/method facades, thin `/info` stubs, stock version lure metadata). Read-only only — never create/start/exec/pull. TLS **2376** is out of scope. See [`docs/DOCKER.md`](docs/DOCKER.md).
 
 The MQTT engine speaks OASIS MQTT v3.1.1 with **behavioral** honeypot detection (not banner IOCs): dual synthetic CONNECT credentials when anonymous is rejected, SUBSCRIBE-without-CONNECT, two-client pub/sub bus canary (granted SUBACK + poll window), hollow `session_present` resume, keep-alive zombie sockets (PINGRESP-after-expiry only; lab-oriented), plus conformance checks (protocol-name facade, empty clientId + `clean_session=0`, QoS1 PUBACK packet-id, PINGRESP). Ports **8883** and lab **18883** use implicit TLS (MQTTS). It never publishes retained traffic or Will messages. See [`docs/MQTT.md`](docs/MQTT.md) and the [MQTT 3.1.1 specification](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html).
 
