@@ -153,9 +153,6 @@ honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16 \
 
 # benchmark lab · cowrie + dionaea in docker
 ./scripts/benchmark-lab.sh
-
-# real-service baseline · expect Likely Real Host (not a honeypot)
-./scripts/real-services-lab.sh
 ```
 
 ---
@@ -334,12 +331,8 @@ The SIP engine speaks SIP/2.0 on **5060** (UDP with TCP fallback) with transacti
 
 ```bash
 make install && make test-cov && make lint && make security
-# honeypot faces (expect Suspected/Confirmed)
 docker compose -f deploy/docker-compose.benchmark.yml up -d
 ./scripts/benchmark-lab.sh
-# production-like faces (expect Likely Real Host / score ~0)
-docker compose -f deploy/docker-compose.real-services.yml up -d
-./scripts/real-services-lab.sh
 ```
 
 Re-record the animated demos → [docs/demo/README.md](docs/demo/README.md)

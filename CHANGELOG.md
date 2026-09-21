@@ -32,11 +32,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
-- Real-service Docker baseline lab (`deploy/docker-compose.real-services.yml` +
-  `scripts/real-services-lab.sh`) for nginx/Redis/Postgres/MySQL/Memcached/ES/
-  Mosquitto/CoreDNS/chrony/Mongo/OpenSSH(+SFTP)/Squid/Samba/vsftpd/telnet/
-  tftpd/Dovecot POP3/Postfix — expect **Likely Real Host**. TFTP is probed
-  in-network (Docker Desktop UDP TID NAT workaround)
 - Second detection-hardening wave against deception skins: `memcached
   .version_stats_coherence` (VERSION command vs `STAT version` lie — decisive),
   `memcached.ttl_enforcement` (VALUE served past a 1s TTL inside a ≥1.4s

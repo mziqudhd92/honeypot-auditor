@@ -55,10 +55,6 @@ honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16 --confirm-authori
 
 # Public IP requires explicit ack; SSH 22 only: -p 22
 honeypot-auditor --target 203.0.113.10 -p 22 --confirm-authorized
-
-# Real-service Docker baseline (expect Likely Real Host)
-# docker compose -f deploy/docker-compose.real-services.yml up -d
-# ./scripts/real-services-lab.sh
 ```
 
 ## Agent instructions

@@ -104,9 +104,8 @@ src/honeypot_auditor/   CLI, analyzer, banner (figlet header)
     recon.py            Shodan + Nmap
     deep/               --deep axes (behavior, coherence, stack, FSM, temporal load, …)
 tests/                  pytest suite (test_ssh.py, test_telnet.py, …)
-deploy/                 docker-compose.benchmark.yml (Cowrie + Dionaea);
-                        docker-compose.real-services.yml (production-like baseline)
-scripts/                demo + benchmark + real-services-lab helpers
+deploy/                 docker-compose.benchmark.yml (Cowrie + Dionaea)
+scripts/                demo + benchmark helpers
 docs/                   GitHub Pages site + llms/agents briefs
 ```
 
