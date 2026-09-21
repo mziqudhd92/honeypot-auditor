@@ -22,6 +22,11 @@ from honeypot_auditor.probes.common import (
 _SIP_SKIP = (
     ("sip.user_agent", "SIP User-Agent matches a default template", "static_signature"),
     (
+        "sip.via_coherence",
+        "SIP response Via lacks received/rport or branch echo",
+        "static_signature",
+    ),
+    (
         "sip.arbitrary_auth",
         "SIP REGISTER accepts fake Digest or reuses nonce/realm",
         "arbitrary_auth",
@@ -37,6 +42,12 @@ _STATUS_RE = re.compile(r"^SIP/2\.0\s+(\d{3})", re.IGNORECASE | re.MULTILINE)
 _WWW_AUTH_RE = re.compile(r"(?im)^WWW-Authenticate:\s*(.+)$")
 _NONCE_RE = re.compile(r'nonce\s*=\s*"([^"]+)"', re.IGNORECASE)
 _REALM_RE = re.compile(r'realm\s*=\s*"([^"]+)"', re.IGNORECASE)
+
+# OPTIONS Via sent-by is 0.0.0.0:5060 with ;rport, so a conformant response
+# Via must echo our branch and add received=<src-ip> / rport=<src-port>
+# (RFC 3261 §8.2.6.2, RFC 3581 §4).
+_VIA_BRANCH_TOKEN = "z9hg4bkhpaudit"
+_RPORT_ECHO_RE = re.compile(r"rport\s*=\s*\d+", re.IGNORECASE)
 
 
 def _sip_exchange(host: str, port: int, payload: bytes) -> tuple[bytes, str]:
@@ -70,6 +81,30 @@ def _parse_challenge(text: str) -> tuple[str, str]:
         nonce_m.group(1) if nonce_m else "",
         realm_m.group(1) if realm_m else "",
     )
+
+
+def _via_assessment(text: str) -> tuple[bool, str]:
+    """Score the response Via against the request's sent-by/branch/rport.
+
+    The request Via sent-by is 0.0.0.0:5060 (never the real source), so a
+    conformant server must copy the Via and add received=<src-ip> plus
+    rport=<src-port> because the request carried ;rport. Verbatim echoes and
+    missing Via headers are skin tells.
+    """
+    via = _header(text, "Via")
+    if not via:
+        return True, "response carries no Via header to echo the request path"
+    low = via.lower()
+    missing: list[str] = []
+    if _VIA_BRANCH_TOKEN not in low:
+        missing.append("branch echo")
+    if "received=" not in low:
+        missing.append("received=<source-ip>")
+    if not _RPORT_ECHO_RE.search(low):
+        missing.append("rport=<source-port>")
+    if missing:
+        return True, f"response Via lacks {' and '.join(missing)}: {via!r}"
+    return False, f"Via echoes branch with received/rport: {via!r}"
 
 
 def _options(host: str, call_id: str, cseq: int = 1) -> bytes:
@@ -132,6 +167,7 @@ def probe_sip(host: str, port: int) -> list[Indicator]:
 
     ua = _header(text, "User-Agent") or _header(text, "Server")
     ua_hit = bool(ua) and any(tell in ua.lower() for tell in SIP_UA_TELLS)
+    via_hit, via_detail = _via_assessment(text)
 
     if is_safe_mode():
         out: list[Indicator] = []
@@ -267,6 +303,21 @@ def probe_sip(host: str, port: int) -> list[Indicator]:
             protocol="sip",
             detail=f"User-Agent: {ua or '(missing)'}",
             evidence=text[:600],
+        ),
+        Indicator(
+            id="sip.via_coherence",
+            title="SIP response Via lacks received/rport or branch echo",
+            category="static_signature",
+            triggered=via_hit,
+            protocol="sip",
+            detail=via_detail,
+            evidence=(_header(text, "Via") or "(missing)")[:200],
+            requires_corroboration=True if via_hit else False,
+            fidelity="high",
+            remediation=(
+                "Copy the request Via into responses and add received=/rport= "
+                "when sent-by differs from the source (RFC 3261 §8.2.6.2, RFC 3581)"
+            ),
         ),
         Indicator(
             id="sip.arbitrary_auth",

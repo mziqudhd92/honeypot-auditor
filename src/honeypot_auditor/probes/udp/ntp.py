@@ -62,6 +62,11 @@ _NTP_SKIP = (
         "static_signature",
     ),
     (
+        "ntp.clock_metadata",
+        "NTP precision/poll metadata is implausible for a serving clock",
+        "static_signature",
+    ),
+    (
         "ntp.response_clone",
         "NTP returns bitwise-identical replies for distinct requests",
         "static_signature",
@@ -393,6 +398,24 @@ def probe_ntp(host: str, port: int) -> list[Indicator]:
     else:
         stratum_detail = f"stratum {base_msg.stratum} ok"
 
+    # --- clock metadata plausibility (gated) ---
+    # Precision is a signed log2-seconds exponent; synchronized servers report
+    # roughly -30..-6. Poll is a signed exponent bounded 3..17 by RFC 5905
+    # (lenient 0..17 here). Canned replies ship raw bytes that violate both.
+    precision_bad = not (-30 <= base_msg.precision <= 1)
+    poll_bad = not (0 <= base_msg.poll <= 17)
+    clock_hit = precision_bad or poll_bad
+    clock_bits = []
+    if precision_bad:
+        clock_bits.append(f"precision exponent {base_msg.precision} outside [-30, 1]")
+    if poll_bad:
+        clock_bits.append(f"poll exponent {base_msg.poll} outside [0, 17]")
+    clock_detail = (
+        "; ".join(clock_bits)
+        if clock_bits
+        else f"precision={base_msg.precision} poll={base_msg.poll} plausible"
+    )
+
     # --- response clone (second distinct xmt) ---
     clone_req = build_client_request()
     clone_ex, _clone_msg, clone_err = _exchange(host, port, clone_req)
@@ -560,6 +583,24 @@ def probe_ntp(host: str, port: int) -> list[Indicator]:
             evidence=f"stratum={base_msg.stratum} refid={base_msg.reference_id!r}",
             remediation="Use stratum 1–15 when synchronized; stratum 0 only with kiss codes",
             fidelity="high" if stratum_hit else "medium",
+        ),
+        Indicator(
+            id="ntp.clock_metadata",
+            title="NTP precision/poll metadata is implausible for a serving clock",
+            category="static_signature",
+            triggered=clock_hit,
+            protocol="ntp",
+            detail=clock_detail,
+            evidence=(
+                f"precision={base_msg.precision} poll={base_msg.poll} "
+                f"stratum={base_msg.stratum}"
+            ),
+            remediation=(
+                "Report a plausible signed precision exponent (−30..−6) and poll "
+                "exponent within 3..17 (RFC 5905 §7.3)"
+            ),
+            requires_corroboration=True,
+            fidelity="medium",
         ),
         Indicator(
             id="ntp.response_clone",

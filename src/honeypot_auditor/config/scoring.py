@@ -94,7 +94,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "or static nonce/realm across sessions"
         ),
         "state_nonpersist": "CSeq / Call-ID binding not monotonic after re-REGISTER",
-        "static_signature": "default User-Agent template",
+        "static_signature": "default User-Agent template · Via received/rport coherence",
     },
     "vnc": {
         "arbitrary_auth": "",
@@ -139,7 +139,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": (
             "header framing · txid echo · illegal OPCODE facade · question echo · "
             "RCODE stub on .invalid · response clone · 0x20 case mismatch · "
-            "EDNS OPT facade · stock TXT/SOA lure"
+            "EDNS OPT facade · message-length incoherence · stock TXT/SOA lure"
         ),
     },
     "ntp": {
@@ -149,7 +149,8 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "state_nonpersist": "transmit/receive/reference timestamps fail monotonicity across exchanges",
         "static_signature": (
             "framing · mode/VN facade · originate echo · stratum facade · "
-            "bitwise-identical canned replies · zeroed clock metrics · epoch-zero · stock refid"
+            "bitwise-identical canned replies · zeroed clock metrics · epoch-zero · "
+            "implausible precision/poll metadata · stock refid"
         ),
     },
     "elasticsearch": {
@@ -182,8 +183,8 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "state_nonpersist": "probe-key set then reconnect get miss / stats ignore write",
         "static_signature": (
             "VERSION framing · STAT/END framing · unknown-command ERROR · "
-            "get-miss END · canned stats clone · stock VERSION lure · "
-            "bare verbosity flush-stub stand-in · noreply facade"
+            "get-miss END · gets/CAS token facade · canned stats clone · "
+            "stock VERSION lure · bare verbosity flush-stub stand-in · noreply facade"
         ),
     },
     "mysql": {

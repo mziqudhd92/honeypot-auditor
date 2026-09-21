@@ -28,6 +28,7 @@ _NTP_IDS = (
     "ntp.mode_facade",
     "ntp.org_echo",
     "ntp.stratum_facade",
+    "ntp.clock_metadata",
     "ntp.response_clone",
     "ntp.zeroed_clock_metrics",
     "ntp.epoch_zero",
@@ -773,3 +774,41 @@ def test_ntp_no_monlist_or_mode7_in_probe_requests():
         assert pkt.mode != 7
         assert call["payload"][0] & 0x07 != 7
         assert pkt.mode == ntp._MODE_CLIENT
+
+
+def test_ntp_clock_metadata_implausible():
+    """Raw canned precision byte (0x20 ⇒ 2^32 s) → gated clock_metadata hit."""
+
+    def reply(host, port, payload):
+        del host, port
+        parsed = ntp.parse_ntp_packet(payload)
+        assert parsed is not None
+        return ntp.build_ntp_packet(
+            li=0,
+            vn=4,
+            mode=ntp._MODE_SERVER,
+            stratum=2,
+            poll=6,
+            precision=0x20,  # canned byte: +32 exponent ≈ 136 years
+            root_delay=0x100,
+            root_dispersion=0x50,
+            reference_id=b"GPS\x00",
+            reference_timestamp=_NOW,
+            originate_timestamp=parsed.transmit_timestamp,
+            receive_timestamp=_NOW,
+            transmit_timestamp=_NOW,
+        )
+
+    trx = _scripted_from_callable(reply)
+    with trx.patch():
+        inds = ntp.probe_ntp("127.0.0.1", 123)
+    by_id = {i.id: i for i in inds}
+    meta = by_id["ntp.clock_metadata"]
+    assert meta.triggered
+    assert meta.requires_corroboration is True
+    assert meta.fidelity == "medium"
+    # Isolation: only the metadata field is off.
+    assert not by_id["ntp.org_echo"].triggered
+    assert not by_id["ntp.mode_facade"].triggered
+    assert not by_id["ntp.stratum_facade"].triggered
+    assert "precision" in meta.detail

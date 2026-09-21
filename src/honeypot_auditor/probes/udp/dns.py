@@ -96,6 +96,11 @@ _DNS_SKIP = (
         "static_signature",
     ),
     (
+        "dns.length_incoherence",
+        "DNS message length disagrees with its declared sections",
+        "static_signature",
+    ),
+    (
         "dns.stock_payload",
         "DNS answer/authority rdata matches a stock honeypot lure",
         "static_signature",
@@ -144,6 +149,7 @@ class DnsMessage:
     additionals: tuple[DnsRR, ...]
     has_opt: bool
     raw_question: bytes
+    end_pos: int = -1
 
 
 def pack_header(
@@ -331,6 +337,7 @@ def parse_dns_message(data: bytes) -> DnsMessage | None:
         additionals=additionals,
         has_opt=has_opt,
         raw_question=raw_question,
+        end_pos=pos,
     )
 
 
@@ -717,6 +724,27 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
     # stock always gated in v1 (weak lure tokens).
     stock_requires = True
 
+    # --- message length vs declared sections (trailing slack) ---
+    # A conformant encoder emits exactly header + question + declared sections;
+    # trailing pad bytes or miscounted section lengths are canned-responder tells
+    # (BIND/Unbound never pad unless an EDNS0 PAD option was requested).
+    slack_notes: list[str] = []
+    slack_hit = False
+    for label, ex in (("base", base_ex), ("clone", clone_ex)):
+        if not ex.data:
+            continue
+        m = parse_dns_message(ex.data)
+        if m is None or m.end_pos < 0:
+            continue
+        slack = len(ex.data) - m.end_pos
+        if slack > 0:
+            slack_hit = True
+            slack_notes.append(
+                f"{label}: {slack} trailing byte(s) (len={len(ex.data)} parsed={m.end_pos})"
+            )
+        else:
+            slack_notes.append(f"{label}: exact length")
+
     # --- arbitrary auth: two entropy-varied private-label / bogus-TLD queries ---
     # Exchanges so far: base, facade, clone, edns (=4). Auth + state add ≤3 → total ≤7.
     auth_q1, auth_q2 = _auth_qnames()
@@ -920,6 +948,20 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
                 remediation="Accept or ignore a valid OPT without FORMERR (RFC 6891)",
                 fidelity="high",
             )
+        ),
+        Indicator(
+            id="dns.length_incoherence",
+            title="DNS message length disagrees with its declared sections",
+            category="static_signature",
+            triggered=slack_hit,
+            protocol="dns",
+            detail="; ".join(slack_notes) if slack_notes else "message lengths not evaluated",
+            evidence=f"base_len={len(base_ex.data)} clone_len={len(clone_ex.data or b'')}",
+            remediation=(
+                "Encode responses with byte-exact section lengths; never pad or "
+                "miscount ANCOUNT/ARCOUNT payloads (RFC 1035 §4.1)"
+            ),
+            fidelity="high" if slack_hit else "medium",
         ),
         Indicator(
             id="dns.stock_payload",

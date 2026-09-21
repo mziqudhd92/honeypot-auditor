@@ -19,6 +19,7 @@ _MC_IDS = {
     "memcached.stats_framing",
     "memcached.unknown_command",
     "memcached.get_miss",
+    "memcached.cas_facade",
     "memcached.stats_clone",
     "memcached.stock_version",
     "memcached.flush_stub",
@@ -116,6 +117,7 @@ def test_memcached_compliant_server_triggers_nothing(mock_pause, mock_creds, moc
         b"ERROR\r\n",  # binary/SASL as ASCII ERROR
         _LIVE_STATS_2,  # state stats_before
         b"ERROR\r\n",  # state set rejected
+        b"ERROR\r\n",  # cas set rejected (write-rejecting server)
     )
     inds = mc.probe_memcached("127.0.0.1", 11211)
     by_id = {i.id: i for i in inds}
@@ -146,6 +148,7 @@ def test_memcached_stub_signatures(mock_pause, mock_creds, mock_hex, mock_tcp):
         b"ERROR\r\n",
         _CANNED_STATS,
         b"ERROR\r\n",
+        b"ERROR\r\n",  # cas set rejected
     )
     inds = mc.probe_memcached("127.0.0.1", 11211)
     by_id = {i.id: i for i in inds}
@@ -178,6 +181,7 @@ def test_memcached_version_framing_malformed(mock_pause, mock_creds, mock_tcp):
         b"ERROR\r\n",
         _LIVE_STATS_2,
         b"ERROR\r\n",
+        b"ERROR\r\n",  # cas set rejected
     )
     inds = mc.probe_memcached("127.0.0.1", 11211)
     by_id = {i.id: i for i in inds}
@@ -202,6 +206,7 @@ def test_memcached_stats_framing_malformed(mock_pause, mock_creds, mock_hex, moc
         b"ERROR\r\n",
         _LIVE_STATS_2,
         b"ERROR\r\n",
+        b"ERROR\r\n",  # cas set rejected
     )
     inds = mc.probe_memcached("127.0.0.1", 11211)
     by_id = {i.id: i for i in inds}
@@ -226,6 +231,7 @@ def test_memcached_decisive_stock_version(mock_pause, mock_creds, mock_hex, mock
         b"ERROR\r\n",
         _LIVE_STATS_2,
         b"ERROR\r\n",
+        b"ERROR\r\n",  # cas set rejected
     )
     inds = mc.probe_memcached("127.0.0.1", 11211)
     stock = {i.id: i for i in inds}["memcached.stock_version"]
@@ -282,6 +288,7 @@ def test_memcached_arbitrary_auth_dual_set(mock_pause, mock_creds, mock_hex, moc
         b"ERROR\r\n",  # binary mishandled as ASCII ERROR
         _LIVE_STATS_2,  # state stats_before
         b"ERROR\r\n",  # state set rejected (keep state clean)
+        b"ERROR\r\n",  # cas set rejected
     )
     inds = mc.probe_memcached("127.0.0.1", 11211)
     auth = {i.id: i for i in inds}["memcached.arbitrary_auth"]
@@ -305,9 +312,68 @@ def test_memcached_state_nonpersist_get_miss(mock_pause, mock_creds, mock_hex, m
         _LIVE_STATS_1,  # stats_after identical → also stats-ignore
         b"END\r\n",  # get miss after STORED
         b"DELETED\r\n",  # cleanup delete
+        b"STORED\r\n",  # cas set stored
+        b"VALUE hpa_c_deadbeef 0 1 9\r\nz\r\nEND\r\n",  # gets with cas_unique
+        b"DELETED\r\n",  # cas cleanup delete
     )
     inds = mc.probe_memcached("127.0.0.1", 11211)
     state = {i.id: i for i in inds}["memcached.state_nonpersist"]
     assert state.triggered
     assert state.category == "state_nonpersist"
     assert "miss" in state.detail.lower() or "END" in state.detail
+
+
+@patch.object(mc, "tcp_transact")
+@patch.object(mc.secrets, "token_hex", return_value="deadbeef")
+@patch.object(mc, "entropy_varied_creds", return_value=_FIXED_CREDS)
+@patch.object(mc, "jittered_reconnect_pause", return_value=0.0)
+def test_memcached_cas_facade_missing_token(mock_pause, mock_creds, mock_hex, mock_tcp):
+    """gets on a just-stored key replying the 3-token get shape → cas_facade."""
+    mock_tcp.side_effect = _static_then(
+        b"ERROR\r\n",  # auth set1
+        b"ERROR\r\n",  # auth set2
+        b"ERROR\r\n",  # binary
+        _LIVE_STATS_1,  # stats_before
+        b"STORED\r\n",  # state set
+        _LIVE_STATS_2,  # stats_after advanced
+        b"VALUE hpa_s_deadbeef 0 1\r\ny\r\nEND\r\n",  # state get persists
+        b"DELETED\r\n",  # state cleanup delete
+        b"STORED\r\n",  # cas set stored
+        b"VALUE hpa_c_deadbeef 0 1\r\nz\r\nEND\r\n",  # gets without cas_unique
+        b"DELETED\r\n",  # cas cleanup delete
+    )
+    inds = mc.probe_memcached("127.0.0.1", 11211)
+    cas = {i.id: i for i in inds}["memcached.cas_facade"]
+    assert cas.triggered
+    assert not cas.skipped
+    assert cas.fidelity == "high"
+    assert not cas.requires_corroboration
+    assert "cas_unique" in cas.detail
+    # Isolation: server otherwise behaves (state persists, stats advance).
+    assert not {i.id: i for i in inds}["memcached.state_nonpersist"].triggered
+    assert not {i.id: i for i in inds}["memcached.stats_clone"].triggered
+
+
+@patch.object(mc, "tcp_transact")
+@patch.object(mc.secrets, "token_hex", return_value="deadbeef")
+@patch.object(mc, "entropy_varied_creds", return_value=_FIXED_CREDS)
+@patch.object(mc, "jittered_reconnect_pause", return_value=0.0)
+def test_memcached_cas_ok_with_token(mock_pause, mock_creds, mock_hex, mock_tcp):
+    """gets carrying the mandatory numeric cas_unique must stay clean."""
+    mock_tcp.side_effect = _static_then(
+        b"ERROR\r\n",  # auth set1
+        b"ERROR\r\n",  # auth set2
+        b"ERROR\r\n",  # binary
+        _LIVE_STATS_1,  # stats_before
+        b"STORED\r\n",  # state set
+        _LIVE_STATS_2,  # stats_after advanced
+        b"VALUE hpa_s_deadbeef 0 1\r\ny\r\nEND\r\n",  # state get persists
+        b"DELETED\r\n",  # state cleanup delete
+        b"STORED\r\n",  # cas set stored
+        b"VALUE hpa_c_deadbeef 0 1 9\r\nz\r\nEND\r\n",  # gets with cas_unique
+        b"DELETED\r\n",  # cas cleanup delete
+    )
+    inds = mc.probe_memcached("127.0.0.1", 11211)
+    cas = {i.id: i for i in inds}["memcached.cas_facade"]
+    assert not cas.triggered
+    assert not cas.skipped

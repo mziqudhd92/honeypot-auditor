@@ -19,7 +19,7 @@ NTP activates **all three** basic scoring strategies
 | Strategy | Why it applies to NTP |
 |----------|------------------------|
 | **arbitrary_auth** | Mode-3 burst still served with uniform mode-4 replies and **no** KoD `RATE`/`DENY` (RFC 5905 §7.4). Indicator: `ntp.kod_absent`. |
-| **static_signature** | Framing, mode/VN facade, originate echo, stratum facade, response clone, zeroed metrics, epoch-zero timestamps, stock refid lures. |
+| **static_signature** | Framing, mode/VN facade, originate echo, stratum facade, response clone, zeroed metrics, epoch-zero timestamps, implausible precision/poll metadata, stock refid lures. |
 | **state_nonpersist** | Transmit / receive / reference timestamps fail monotonicity across exchanges (frozen or go backwards). Indicator: `ntp.state_nonpersist`. |
 
 Detection philosophy:
@@ -93,6 +93,7 @@ mode-3 VN=4 client (random xmt)  ──►  ≥48-byte NTP framing
 | `ntp.mode_facade` | static_signature | high when hit | no | Reply mode ≠ 4, and/or an invalid VN=0 client request still receives a mode-4 server reply. |
 | `ntp.org_echo` | static_signature | high when hit | no | Reply originate timestamp ≠ client transmit timestamp (RFC 5905 §7.3). |
 | `ntp.stratum_facade` | static_signature | high when hit | no | Stratum 0 without a kiss-o'-death ASCII refid, or stratum ≥ 16 as a serving reply. |
+| `ntp.clock_metadata` | static_signature | medium | **yes** | Precision exponent outside −30..1 or poll exponent outside 0..17 — raw canned bytes (e.g. precision `0x20` ≈ 2³² s, poll `0xFF`) no real clock produces. |
 | `ntp.response_clone` | static_signature | **decisive** when hit | no | Two mode-3 requests with distinct transmit timestamps receive **bitwise-identical** UDP payloads. |
 | `ntp.zeroed_clock_metrics` | static_signature | medium | **yes** | `root_delay`, `root_dispersion`, and `reference_timestamp` are all zero (real unsynced hosts can look sparse). |
 | `ntp.epoch_zero` | static_signature | medium | **yes** | Reference, receive, or transmit timestamp seconds field is NTP epoch (0) or Unix epoch in NTP form (`2208988800`). |

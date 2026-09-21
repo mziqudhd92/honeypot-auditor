@@ -60,6 +60,11 @@ _MC_SKIP = (
         "static_signature",
     ),
     (
+        "memcached.cas_facade",
+        "Memcached gets reply lacks the mandatory CAS token",
+        "static_signature",
+    ),
+    (
         "memcached.stats_clone",
         "Memcached returns bitwise-identical stats replies",
         "static_signature",
@@ -449,6 +454,48 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
             state_detail = f"{state_detail}; pause_{rtt_note}"
         _mc_call(host, port, f"delete {state_key}")
 
+    # --- gets/CAS token facade ---
+    # 'gets <key>' on a stored key must reply 'VALUE <key> <flags> <bytes>
+    # <cas_unique>' — the trailing numeric CAS token is mandatory. Skins that
+    # only implement 'get' emit the 3-token get shape under gets.
+    cas_key = f"hpa_c_{secrets.token_hex(4)}"
+    cas_set_raw, cas_set_err = _mc_set(host, port, cas_key, b"z", exptime=5)
+    cas_skipped = False
+    cas_hit = False
+    cas_detail = "gets/CAS semantics not evaluated"
+    cas_err = ""
+    if (cas_set_err and not cas_set_raw) or not _is_stored(cas_set_raw):
+        cas_skipped = True
+        cas_err = cas_set_err or ""
+        cas_detail = (
+            closed_reason(cas_set_err)
+            if cas_set_err
+            else f"set rejected before gets/CAS check "
+            f"({_first_token(_decode(cas_set_raw)) or 'empty'})"
+        )
+    else:
+        gets_raw, gets_err = _mc_call(host, port, f"gets {cas_key}")
+        gets_text = _decode(gets_raw)
+        line = gets_text.strip().splitlines()[0].strip() if gets_text.strip() else ""
+        tokens = line.split()
+        if not line and gets_err:
+            cas_skipped = True
+            cas_err = gets_err
+            cas_detail = closed_reason(gets_err)
+        elif tokens and tokens[0].upper() == "VALUE":
+            if len(tokens) < 5 or not tokens[4].isdigit():
+                cas_hit = True
+                cas_detail = f"gets VALUE reply lacks numeric cas_unique token: {line!r}"
+            else:
+                cas_detail = f"gets VALUE carries cas_unique {tokens[4]}"
+        elif line.upper() == "END":
+            # Just-stored key invisible to gets: state lie, scored by
+            # state_nonpersist — noted here without double-counting.
+            cas_detail = f"gets returned END for just-stored key {cas_key}"
+        else:
+            cas_detail = f"gets reply {line!r} (not scored)"
+        _mc_call(host, port, f"delete {cas_key}")
+
     return [
         _ind(
             id="memcached.arbitrary_auth",
@@ -533,6 +580,22 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
             evidence=get_text[:160],
             fidelity="high" if get_miss_hit else "medium",
             remediation="Return END\\r\\n for get misses; never invent VALUE bodies",
+        ),
+        _ind(
+            id="memcached.cas_facade",
+            title="Memcached gets reply lacks the mandatory CAS token",
+            category="static_signature",
+            triggered=cas_hit,
+            skipped=cas_skipped,
+            skip_reason=cas_detail if cas_skipped else "",
+            error=cas_err if cas_skipped else "",
+            detail=cas_detail,
+            evidence=_decode(gets_raw)[:160] if not cas_skipped else "",
+            fidelity="high" if cas_hit else "medium",
+            remediation=(
+                "Reply to 'gets' with 'VALUE <key> <flags> <bytes> <cas_unique>'; "
+                "the numeric CAS token is mandatory"
+            ),
         ),
         _ind(
             id="memcached.stats_clone",

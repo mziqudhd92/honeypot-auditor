@@ -10,7 +10,8 @@ _CREDS = (("user_low", "pass_low"), ("user_HIGH_entropy_xx", "pass_HIGH_entropy_
 
 _OPTS_OK = (
     b"SIP/2.0 200 OK\r\n"
-    b"Via: SIP/2.0/UDP 0.0.0.0:5060\r\n"
+    b"Via: SIP/2.0/UDP 0.0.0.0:5060;branch=z9hG4bKhpaudit;"
+    b"received=198.51.100.7;rport=51515\r\n"
     b"User-Agent: Asterisk PBX\r\n"
     b"Content-Length: 0\r\n"
     b"\r\n"
@@ -41,6 +42,7 @@ def test_sip_probe(mock_udp):
         inds = sip.probe_sip("127.0.0.1", 5060)
     assert {i.id for i in inds} == {
         "sip.user_agent",
+        "sip.via_coherence",
         "sip.arbitrary_auth",
         "sip.state_nonpersist",
     }
@@ -107,3 +109,43 @@ def test_sip_state_canned_identical_register(mock_udp):
         inds = sip.probe_sip("127.0.0.1", 5060)
     by_id = {i.id: i for i in inds}
     assert by_id["sip.state_nonpersist"].triggered
+
+
+@patch.object(sip, "udp_transact")
+def test_sip_via_coherence_verbatim_echo_gated(mock_udp):
+    """Skin echoes the request Via verbatim (no received/rport) → gated hit."""
+    verbatim = (
+        b"SIP/2.0 200 OK\r\n"
+        b"Via: SIP/2.0/UDP 0.0.0.0:5060;branch=z9hG4bKhpaudit;rport\r\n"
+        b"User-Agent: Asterisk PBX\r\n"
+        b"Content-Length: 0\r\n"
+        b"\r\n"
+    )
+    mock_udp.return_value = (verbatim, "")
+    with (
+        patch.object(sip, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(sip, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = sip.probe_sip("127.0.0.1", 5060)
+    by_id = {i.id: i for i in inds}
+    via = by_id["sip.via_coherence"]
+    assert via.triggered
+    assert via.requires_corroboration is True
+    # The branch was echoed; only received/rport are listed as missing.
+    assert "received=<source-ip>" in via.detail
+    assert "rport=<source-port>" in via.detail
+    assert "branch echo" not in via.detail
+
+
+@patch.object(sip, "udp_transact")
+def test_sip_via_coherence_conformant_clean(mock_udp):
+    """Branch echo plus received=/rport= additions stay clean."""
+    mock_udp.return_value = (_OPTS_OK, "")
+    with (
+        patch.object(sip, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(sip, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = sip.probe_sip("127.0.0.1", 5060)
+    by_id = {i.id: i for i in inds}
+    assert not by_id["sip.via_coherence"].triggered
+    assert not by_id["sip.via_coherence"].skipped

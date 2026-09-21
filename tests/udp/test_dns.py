@@ -22,6 +22,7 @@ _DNS_IDS = (
     "dns.response_clone",
     "dns.case_encoding_mismatch",
     "dns.edns_facade",
+    "dns.length_incoherence",
     "dns.stock_payload",
 )
 
@@ -468,3 +469,33 @@ def test_dns_arbitrary_auth_and_state_hits():
     by_id = {i.id: i for i in inds}
     assert by_id["dns.arbitrary_auth"].triggered
     assert by_id["dns.state_nonpersist"].triggered
+
+
+def test_dns_length_incoherence_on_trailing_pad():
+    """Conformant-shaped replies with trailing pad bytes → length_incoherence."""
+
+    def side_effect(host, port, payload, *, connected=False, **kwargs):
+        del host, connected, kwargs
+        msg = dns.parse_dns_message(payload)
+        assert msg is not None
+        if msg.opcode != dns.OPCODE_QUERY:
+            return _err()
+        body = _nxdomain_reply(msg)
+        if msg.has_opt:
+            body = dns.attach_additional(body, (dns.build_opt_rr(udp_payload=1232),))
+        # Canned-responder tell: declared sections end before the payload does.
+        return _ok(body + b"\x00\x00\x00\x00", port=port)
+
+    with patch.object(dns, "udp_exchange", side_effect=side_effect):
+        inds = dns.probe_dns("127.0.0.1", 53)
+    by_id = {i.id: i for i in inds}
+    slack = by_id["dns.length_incoherence"]
+    assert slack.triggered
+    assert not slack.skipped
+    assert slack.fidelity == "high"
+    assert not slack.requires_corroboration
+    # Isolation: padding alone does not fire the other static tells.
+    assert not by_id["dns.txid"].triggered
+    assert not by_id["dns.question_echo"].triggered
+    assert not by_id["dns.rcode_stub"].triggered
+    assert "trailing byte" in slack.detail

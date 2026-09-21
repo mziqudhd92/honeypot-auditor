@@ -19,6 +19,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Detection hardening against honeypot/deception skins that pass the expanded
+  strategy checks: `dns.length_incoherence` (trailing bytes after declared
+  sections — conformant encoders are byte-exact), `ntp.clock_metadata`
+  (implausible precision/poll exponents, gated), `memcached.cas_facade`
+  (`gets` VALUE reply missing the mandatory `cas_unique` token), and
+  `sip.via_coherence` (response Via lacking `received=`/`rport=` echo or our
+  branch, gated)
 - TFTP UDP engine on ports 69/1069: TID `fixed_source_port`, opcode/error/mode/WRQ
   facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`, plus
   `tid_reuse` (`state_nonpersist`), `response_clone`, and `no_retransmit`

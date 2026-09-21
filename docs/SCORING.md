@@ -106,7 +106,7 @@ tells over banner IOCs alone — see [`udp/DNS.md`](udp/DNS.md).
 | `dns.state_nonpersist` | state_nonpersist | Frozen SOA serial · identical answer · AA/TTL contradiction |
 | `dns.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across txids) |
 | `dns.header_framing` / `dns.txid` / `dns.header_facade` / `dns.question_echo` | static_signature | High fidelity RFC tells |
-| `dns.rcode_stub` / `dns.edns_facade` | static_signature | NXDOMAIN / EDNS OPT facade |
+| `dns.rcode_stub` / `dns.edns_facade` / `dns.length_incoherence` | static_signature | NXDOMAIN / EDNS OPT facade / trailing bytes after declared sections |
 | `dns.case_encoding_mismatch` / `dns.stock_payload` | static_signature | Corroboration-gated (0x20 case + stock TXT/SOA lure) |
 
 Full strategy narrative, probe flow, and non-destructive policy: [`udp/DNS.md`](udp/DNS.md).
@@ -122,7 +122,7 @@ tells over banner IOCs alone — see [`udp/NTP.md`](udp/NTP.md).
 | `ntp.state_nonpersist` | state_nonpersist | Transmit/receive/reference timestamps fail monotonicity |
 | `ntp.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across distinct xmt) |
 | `ntp.framing` / `ntp.mode_facade` / `ntp.org_echo` / `ntp.stratum_facade` | static_signature | High fidelity RFC tells |
-| `ntp.zeroed_clock_metrics` / `ntp.epoch_zero` / `ntp.stock_refid` | static_signature | Corroboration-gated (sparse metrics · epoch stamps · lure refid) |
+| `ntp.zeroed_clock_metrics` / `ntp.epoch_zero` / `ntp.stock_refid` / `ntp.clock_metadata` | static_signature | Corroboration-gated (sparse metrics · epoch stamps · lure refid · implausible precision/poll) |
 
 Full strategy narrative, probe flow, and non-destructive policy: [`udp/NTP.md`](udp/NTP.md).
 
@@ -137,7 +137,7 @@ auth / state tells over banner IOCs alone — see [`MEMCACHED.md`](MEMCACHED.md)
 | `memcached.state_nonpersist` | state_nonpersist | Probe-key set then reconnect get miss / stats ignore write |
 | `memcached.stats_clone` | static_signature | Decisive when hit (bitwise-identical `stats` replies) |
 | `memcached.version_framing` / `memcached.stats_framing` / `memcached.unknown_command` | static_signature | High fidelity ASCII tells |
-| `memcached.get_miss` / `memcached.flush_stub` / `memcached.noreply_facade` | static_signature | Miss END · bare verbosity · noreply quiet |
+| `memcached.get_miss` / `memcached.cas_facade` / `memcached.flush_stub` / `memcached.noreply_facade` | static_signature | Miss END · gets/CAS token · bare verbosity · noreply quiet |
 | `memcached.stock_version` | static_signature | Stock VERSION lure (generic tokens corroboration-gated) |
 
 Probe-key `set`/`delete` allowed; **never** `flush_all`. Full strategy narrative,

@@ -20,7 +20,7 @@ Memcached activates **all three** basic scoring strategies
 |----------|-----------------------------|
 | **arbitrary_auth** | Two entropy-varied ASCII `set` writes both `STORED` (optional binary/SASL mishandling as corroborating evidence). Indicator: `memcached.arbitrary_auth`. |
 | **state_nonpersist** | Probe-key `set` then reconnect `get` miss / `stats` ignore the write. Indicator: `memcached.state_nonpersist`. |
-| **static_signature** | Version/stats framing, unknown-command ERROR fidelity, get-miss END, canned stats clones, stock VERSION strings, verbosity/noreply façades. |
+| **static_signature** | Version/stats framing, unknown-command ERROR fidelity, get-miss END, gets/CAS façade, canned stats clones, stock VERSION strings, verbosity/noreply façades. |
 
 Detection philosophy:
 
@@ -100,6 +100,7 @@ version  ──►  ASCII speakership (+ version_framing / stock_version)
 | `memcached.stats_framing` | `stats` reply lacks `STAT`/`END` shape (or answers with `VERSION`/`OK` only). |
 | `memcached.unknown_command` | Garbage command (`foo`) returns `OK`/`VERSION`/… instead of `ERROR`. |
 | `memcached.get_miss` | `get` of a fresh missing key returns `VALUE` instead of bare `END`. |
+| `memcached.cas_facade` | `gets` of a just-stored probe key returns a `VALUE` line without the mandatory numeric `cas_unique` token (skins implement `get` only). An `END` there is left to `state_nonpersist`. |
 | `memcached.stats_clone` | Two independent `stats` replies are **bitwise-identical**. Fidelity **decisive** when hit. |
 | `memcached.stock_version` | `VERSION` token matches a stock honeypot lure. Generic/common versions are corroboration-gated; decisive lure tokens score alone. |
 | `memcached.flush_stub` | Bare `verbosity` (no level) returns success instead of `ERROR` — non-destructive stand-in for flush-accept stubs. **Never sends `flush_all`.** |

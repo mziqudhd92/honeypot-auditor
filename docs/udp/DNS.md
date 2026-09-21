@@ -20,7 +20,7 @@ DNS activates **all three** basic scoring strategies
 | Strategy | Why it applies to DNS |
 |----------|------------------------|
 | **arbitrary_auth** | Two entropy-varied private-label / bogus-TLD queries both return **NOERROR** with answers/SOA (open-resolver / static SOA façade). Indicator: `dns.arbitrary_auth`. |
-| **static_signature** | Protocol-facade failures: header framing, txid, OPCODE/QR, question echo, RCODE stubs, response clones, 0x20 case, EDNS mishandling, stock lure TXT/SOA. |
+| **static_signature** | Protocol-facade failures: header framing, txid, OPCODE/QR, question echo, RCODE stubs, response clones, 0x20 case, EDNS mishandling, message-length incoherence, stock lure TXT/SOA. |
 | **state_nonpersist** | Re-query of the baseline name shows frozen SOA serial, bitwise-identical answer payload (ignoring txid), or AA/TTL contradiction. Indicator: `dns.state_nonpersist`. |
 
 Detection philosophy:
@@ -98,6 +98,7 @@ A QUERY hPaUdIt-<n>.iNvAlId  ──►  header framing (QR=1 speaker)
 | `dns.response_clone` | static_signature | decisive | no | Two QUERYs with distinct IDs receive **bitwise-identical** UDP payloads. |
 | `dns.case_encoding_mismatch` | static_signature | high | **yes** (gated) | Question QNAME casing was rewritten (typically fully lowercased). Alone is weak — some real forwarders lowercase; needs another ungated DNS tell to stand alone in scoring. |
 | `dns.edns_facade` | static_signature | high | no | A **valid** OPT RR yields FORMERR or an unparseable reply. Timeout → skip. Mere OPT absence in a normal reply is **not** a hit. |
+| `dns.length_incoherence` | static_signature | high | no | Parseable response leaves trailing bytes after its declared sections — conformant encoders (BIND/Unbound) emit byte-exact messages and never pad unless EDNS0 `PAD` was requested. |
 | `dns.stock_payload` | static_signature | medium | **yes** (gated) | Answer/authority TXT or SOA rdata matches stock lure tokens (`honeypot`, `dionaea`, `opencanary`, `conpot`, `dns honeypot`, …). |
 
 ## Safe mode
