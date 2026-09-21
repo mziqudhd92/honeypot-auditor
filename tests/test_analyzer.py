@@ -488,13 +488,24 @@ def test_protocol_strategy_matrix_statuses():
             triggered=True,
             protocol="http:80",
         ),
+        Indicator(
+            id="mysql.banner",
+            title="m",
+            category="static_signature",
+            triggered=True,
+            protocol="mysql:3306",
+        ),
     ]
-    rows = {r["protocol"]: r for r in protocol_strategy_matrix(inds, {"ssh": [22], "http": [80]})}
+    rows = {
+        r["protocol"]: r
+        for r in protocol_strategy_matrix(inds, {"ssh": [22], "http": [80], "mysql": [3306]})
+    }
     assert rows["ssh"]["arbitrary_auth"]["status"] == "hit"
     assert rows["ssh"]["state_nonpersist"]["status"] == "clean"
     assert rows["ssh"]["static_signature"]["status"] == "skip"
-    assert rows["http"]["arbitrary_auth"]["status"] == "n/a"
+    assert rows["http"]["arbitrary_auth"]["status"] == "skip"
     assert rows["http"]["static_signature"]["status"] == "hit"
+    assert rows["mysql"]["arbitrary_auth"]["status"] == "n/a"
 
 
 def test_ssh_banner_signature():

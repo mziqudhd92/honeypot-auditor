@@ -98,16 +98,38 @@ class MockUDPTransceiver:
         del timeout, max_bytes
         return self._next(host, peer_port, payload, connected=False)
 
+    def udp_exchange_with_retransmit_watch(
+        self,
+        host: str,
+        port: int,
+        payload: bytes,
+        *,
+        retransmit_wait: float | None = None,
+        connected: bool = False,
+        timeout: float | None = None,
+        max_bytes: int = 4096,
+    ) -> tuple[UdpExchange, UdpExchange]:
+        del retransmit_wait, timeout, max_bytes
+        first = self._next(host, port, payload, connected=connected)
+        # Idle listen: no payload sent; still consumes the next scripted reply.
+        second = self._next(host, port, b"", connected=connected)
+        return first, second
+
     @contextmanager
     def patch(self, target: str = "honeypot_auditor.netutil") -> Iterator[MockUDPTransceiver]:
-        """Patch ``udp_exchange`` / ``udp_exchange_to`` on ``target`` (module path).
+        """Patch UDP exchange helpers on ``target`` (module path).
 
         Uses ``create=True`` so protocol modules that only import ``udp_exchange``
-        (e.g. DNS/NTP) still patch cleanly.
+        (e.g. DNS/NTP/TFTP) still patch cleanly.
         """
         with (
             patch(f"{target}.udp_exchange", side_effect=self.udp_exchange, create=True),
             patch(f"{target}.udp_exchange_to", side_effect=self.udp_exchange_to, create=True),
+            patch(
+                f"{target}.udp_exchange_with_retransmit_watch",
+                side_effect=self.udp_exchange_with_retransmit_watch,
+                create=True,
+            ),
         ):
             yield self
 
