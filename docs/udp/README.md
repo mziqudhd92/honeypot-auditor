@@ -44,6 +44,7 @@ tests/udp/
 | Call | Role |
 |------|------|
 | `udp_exchange(host, port, payload, *, connected=False)` | Preferred: returns `UdpExchange` (`data`, `peer_host`, `peer_port`, `rtt_ms`, `error`). |
+| `udp_exchange_with_retransmit_watch(...)` | Same as exchange, then idle-listen on the local socket (TFTP OACK one-shot detection). |
 | `udp_exchange_to(host, peer_port, payload)` | Follow-up to a learned peer port (TFTP TID). Unconnected. |
 | `udp_transact(host, port, payload)` | Back-compat `(data, error)` wrapper for SNMP/SIP. |
 

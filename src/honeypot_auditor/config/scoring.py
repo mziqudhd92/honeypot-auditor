@@ -211,10 +211,11 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "tftp": {
         "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "state_nonpersist": "TID reuse across independent RRQs",
         "static_signature": (
             "TID fixed_source_port · opcode/error/mode/WRQ facades · "
-            "RFC 2347 option blindness · stock ERROR/DATA lure"
+            "RFC 2347 option blindness · response clone · no OACK/DATA retransmit · "
+            "stock ERROR/DATA lure"
         ),
     },
 }

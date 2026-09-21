@@ -78,15 +78,18 @@ Full strategy narrative, probe flow, and non-destructive policy: [`SNMP.md`](SNM
 
 ### TFTP RFC non-compliance (basic probe)
 
-TFTP uses **static_signature** only (RFC 1350 / light RFC 2347 over UDP; no
-auth/state axis). Prefer TID / opcode / option facade tells over lure strings
-alone — see [`udp/TFTP.md`](udp/TFTP.md).
+TFTP uses **static_signature** + **state_nonpersist** (RFC 1350 / light RFC 2347
+over UDP; no auth axis). Prefer TID / opcode / option / retransmit facade tells
+over lure strings alone — see [`udp/TFTP.md`](udp/TFTP.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
 | `tftp.fixed_source_port` | static_signature | High when reply `peer_port == dst_port` (no distinct server TID) |
+| `tftp.tid_reuse` | state_nonpersist | High when independent RRQs reuse the same ephemeral server TID |
 | `tftp.opcode_facade` / `tftp.error_stub` / `tftp.mode_facade` / `tftp.wrq_stub` | static_signature | Missing-file / illegal-mode / WRQ DATA facades |
 | `tftp.option_blindness` | static_signature | RRQ+`blksize` choke (`ERROR 0` empty) instead of OACK / proper ERROR |
+| `tftp.response_clone` | static_signature | Canned identical DATA/ACK (or stubby ERROR) for distinct RRQs |
+| `tftp.no_retransmit` | static_signature | OACK/DATA never retransmitted while ACK withheld |
 | `tftp.stock_payload` | static_signature | Stock ERROR/DATA lure tokens (corroboration-gated) |
 | `tftp.framing` | static_signature | Non-speaker / unparseable TFTP reply |
 
