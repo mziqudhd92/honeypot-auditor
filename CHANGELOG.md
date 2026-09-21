@@ -19,6 +19,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Second detection-hardening wave against deception skins: `memcached
+  .version_stats_coherence` (VERSION command vs `STAT version` lie — decisive),
+  `memcached.ttl_enforcement` (VALUE served past a 1s TTL inside a ≥1.4s
+  reconnect window; expiry-attributed misses stay clean), `sip.cseq_echo`
+  (per-transaction CSeq echo with randomized branch, gated),
+  `elasticsearch.content_negotiation` (JSON-only reply to
+  `Accept: application/yaml`, gated), `http.chunked_premature` (status line
+  returned before an unterminated chunked body completes, gated), and
+  `tftp.block_size_violation` (DATA block >512 bytes; only blksize=512 is
+  ever requested)
 - Detection hardening against honeypot/deception skins that pass the expanded
   strategy checks: `dns.length_incoherence` (trailing bytes after declared
   sections — conformant encoders are byte-exact), `ntp.clock_metadata`

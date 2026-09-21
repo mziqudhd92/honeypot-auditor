@@ -65,7 +65,10 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     "http": {
         "arbitrary_auth": "two entropy-varied Basic/login pairs both 200 on protected path",
         "state_nonpersist": "session cookie / POST body not retained across reconnect",
-        "static_signature": "empty PUT 405 · GET / → index.html login skin · 407 Via localhost",
+        "static_signature": (
+            "empty PUT 405 · GET / → index.html login skin · 407 Via localhost · "
+            "reply-before-body on unterminated chunked POST"
+        ),
     },
     "pop3": {
         "arbitrary_auth": "two random USER/PASS pairs",
@@ -94,7 +97,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "or static nonce/realm across sessions"
         ),
         "state_nonpersist": "CSeq / Call-ID binding not monotonic after re-REGISTER",
-        "static_signature": "default User-Agent template · Via received/rport coherence",
+        "static_signature": "default User-Agent template · Via received/rport coherence · CSeq echo",
     },
     "vnc": {
         "arbitrary_auth": "",
@@ -160,7 +163,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "root framing · stock cluster/version/tagline/uuid · missing-index 200 · "
             "unknown-path root facade · DELETE/PUT/HEAD method stubs · "
             "/_cluster/health and /_cat/health shape facades · non-JSON Content-Type · "
-            "X-Elastic-Product mismatch"
+            "Accept: yaml negotiation ignored · X-Elastic-Product mismatch"
         ),
     },
     "ipp": {
@@ -180,11 +183,14 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "arbitrary_auth": (
             "two entropy-varied ASCII set/auth accepted · binary/SASL frame mishandled"
         ),
-        "state_nonpersist": "probe-key set then reconnect get miss / stats ignore write",
+        "state_nonpersist": (
+            "probe-key set then reconnect get miss / stats ignore write / TTL never enforced"
+        ),
         "static_signature": (
             "VERSION framing · STAT/END framing · unknown-command ERROR · "
             "get-miss END · gets/CAS token facade · canned stats clone · "
-            "stock VERSION lure · bare verbosity flush-stub stand-in · noreply facade"
+            "VERSION-vs-stats version lie · stock VERSION lure · "
+            "bare verbosity flush-stub stand-in · noreply facade"
         ),
     },
     "mysql": {
@@ -228,7 +234,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": (
             "TID fixed_source_port · opcode/error/mode/WRQ facades · "
             "RFC 2347 option blindness · response clone · no OACK/DATA retransmit · "
-            "stock ERROR/DATA lure"
+            "DATA block >512 without negotiated blksize · stock ERROR/DATA lure"
         ),
     },
 }

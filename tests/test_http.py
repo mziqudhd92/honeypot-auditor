@@ -49,6 +49,7 @@ def test_http_skipped_on_closed_port(mock_tcp):
         "http.arbitrary_auth",
         "http.state_nonpersist",
         "http.malformed_200",
+        "http.chunked_premature",
         "http.dynamic_headers",
         "http.method_stub",
         "http.login_skin",
@@ -344,3 +345,60 @@ def test_http_state_cookie_not_honored(mock_tcp, _no_requests):
         inds = http.probe_http("127.0.0.1", 80)
     by_id = {i.id: i for i in inds}
     assert by_id["http.state_nonpersist"].triggered
+
+
+@patch.object(http, "optional_import", return_value=None)
+@patch.object(http, "tcp_transact")
+def test_http_chunked_premature_reply(mock_tcp, _no_requests):
+    """Immediate 200 to an unterminated chunked POST → gated premature-reply hit."""
+    mock_tcp.side_effect = _tcp_scripted(
+        {
+            b"Transfer-Encoding: chunked": (
+                b"HTTP/1.1 200 OK\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+                "",
+            ),
+            b"POST /": (
+                b"HTTP/1.1 404 Not Found\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+                "",
+            ),
+        },
+        default=(b"", "timed out"),
+    )
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
+    by_id = {i.id: i for i in inds}
+    chunked = by_id["http.chunked_premature"]
+    assert chunked.triggered
+    assert chunked.requires_corroboration is True
+    assert "terminal chunk" in chunked.detail
+    # Isolation: the malformed-POST probe got a 404, not a canned 200.
+    assert not by_id["http.malformed_200"].triggered
+
+
+@patch.object(http, "optional_import", return_value=None)
+@patch.object(http, "tcp_transact")
+def test_http_chunked_wait_is_clean(mock_tcp, _no_requests):
+    """A server that waits for the terminal chunk (read timeout) stays clean."""
+    mock_tcp.side_effect = _tcp_scripted(
+        {
+            b"Transfer-Encoding: chunked": (b"", "timed out"),
+            b"POST /": (
+                b"HTTP/1.1 404 Not Found\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+                "",
+            ),
+        },
+        default=(b"", "timed out"),
+    )
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
+    by_id = {i.id: i for i in inds}
+    chunked = by_id["http.chunked_premature"]
+    assert not chunked.triggered
+    assert not chunked.skipped
+    assert "waited" in chunked.detail

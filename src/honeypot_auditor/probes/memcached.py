@@ -2,9 +2,10 @@
 
 Strategies: arbitrary auth (dual entropy-varied ASCII ``set`` acceptance +
 binary/SASL frame evidence) · state non-persistence (set then reconnect get
-miss / stats ignore write) · static signature (VERSION/stats framing ·
-unknown-command ERROR fidelity · get-miss END · canned stats clones · stock
-VERSION lures · verbosity/noreply façades).
+miss / stats ignore write / TTL never enforced) · static signature
+(VERSION/stats framing · unknown-command ERROR fidelity · get-miss END ·
+gets/CAS token facade · canned stats clones · VERSION-vs-stats version lie ·
+stock VERSION lures · verbosity/noreply façades).
 
 Never sends flush_all, stats reset, or slab reassign. Probe keys use an
 ``hpa_`` prefix, short TTL, and are deleted after checks when STORED.
@@ -17,6 +18,7 @@ from __future__ import annotations
 import re
 import secrets
 import struct
+import time
 
 from honeypot_auditor.models import Indicator
 from honeypot_auditor.netutil import closed_reason, tcp_transact
@@ -68,6 +70,16 @@ _MC_SKIP = (
         "memcached.stats_clone",
         "Memcached returns bitwise-identical stats replies",
         "static_signature",
+    ),
+    (
+        "memcached.version_stats_coherence",
+        "Memcached VERSION command disagrees with its stats version",
+        "static_signature",
+    ),
+    (
+        "memcached.ttl_enforcement",
+        "Memcached serves a probe key after its TTL has elapsed",
+        "state_nonpersist",
     ),
     (
         "memcached.stock_version",
@@ -223,6 +235,14 @@ def _parse_version_token(raw: bytes) -> str:
     return m.group(1) if m else ""
 
 
+_STATS_VERSION_RE = re.compile(r"(?im)^STAT version (\S+)")
+
+
+def _stats_version_token(raw: bytes) -> str:
+    m = _STATS_VERSION_RE.search(_decode(raw))
+    return m.group(1) if m else ""
+
+
 def _is_stats_framed(raw: bytes) -> bool:
     text = _decode(raw)
     if not text.strip():
@@ -345,6 +365,32 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
     if stats1_err and not stats1_raw:
         stats_framing_hit = False
 
+    # --- VERSION command vs STAT version coherence ---
+    # A real memcached can never disagree with itself; skins hardcode the two
+    # code paths independently.
+    stats_ver = _stats_version_token(stats1_raw)
+    vs_hit = False
+    if stats1_err and not stats1_raw:
+        vs_skipped = True
+        vs_detail = closed_reason(stats1_err)
+        vs_err = stats1_err
+    elif not ver_token or not stats_ver:
+        vs_skipped = True
+        vs_detail = (
+            f"version not advertised on both channels "
+            f"(VERSION={ver_token!r}, STAT version={stats_ver!r})"
+        )
+        vs_err = ""
+    else:
+        vs_skipped = False
+        vs_err = ""
+        if ver_token.lower() != stats_ver.lower():
+            vs_hit = True
+            vs_detail = f"VERSION {ver_token!r} but STAT version {stats_ver!r}"
+        else:
+            vs_hit = False
+            vs_detail = f"VERSION and STAT version agree ({ver_token})"
+
     unknown_hit = bool(unknown_raw) and not _is_error(unknown_raw)
     get_text = _decode(get_raw)
     get_miss_hit = bool(get_raw) and (
@@ -410,13 +456,21 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
     )
 
     # --- state_nonpersist: set → pause → get miss / stats ignore ---
+    # The key carries a 1s TTL and the pause window is ≥1.4s, so a real server
+    # must have expired it by the get: a miss then is clean TTL behaviour, while
+    # a VALUE after the window is an expiry-ignoring skin (ttl_enforcement).
+    # A miss *inside* the window is still the classic state lie.
     state_key = f"hpa_s_{secrets.token_hex(4)}"
     stats_before, _ = _mc_call(host, port, "stats")
-    state_set_raw, state_set_err = _mc_set(host, port, state_key, b"y", exptime=30)
+    t_state_set = time.monotonic()
+    state_set_raw, state_set_err = _mc_set(host, port, state_key, b"y", exptime=1)
     state_skipped = False
     state_hit = False
     state_detail = "state persistence not evaluated"
     state_err = ""
+    ttl_hit = False
+    ttl_skipped = True
+    ttl_detail = "TTL enforcement not evaluated"
     if state_set_err and not state_set_raw:
         state_skipped = True
         state_err = state_set_err
@@ -428,19 +482,37 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
             f"({_first_token(_decode(state_set_raw)) or 'empty'})"
         )
     else:
+        ttl_skipped = False
         stats_after, _ = _mc_call(host, port, "stats")
-        pause_s = jittered_reconnect_pause()
+        pause_s = jittered_reconnect_pause(min_ms=1400, max_ms=2200)
         got_raw, got_err = _mc_call(host, port, f"get {state_key}")
+        elapsed_s = max(0.0, time.monotonic() - t_state_set)
+        expired_window = elapsed_s >= 1.0
         notes: list[str] = []
         if got_err and not got_raw:
             notes.append(f"get after reconnect failed: {closed_reason(got_err)}")
         elif _is_get_miss(got_raw):
-            notes.append(f"get {state_key} returned END miss after STORED")
-        stats_ignore = (
-            bool(stats_before)
-            and bool(stats_after)
-            and stats_before == stats_after
-        )
+            if expired_window:
+                ttl_detail = (
+                    f"key gone ~{elapsed_s:.1f}s after a 1s-TTL set "
+                    f"(expiry honored)"
+                )
+            else:
+                notes.append(f"get {state_key} returned END miss after STORED")
+                ttl_detail = (
+                    f"key missing {elapsed_s:.1f}s after STORED (inside TTL window; "
+                    f"scored as state lie, not expiry)"
+                )
+        else:
+            if expired_window:
+                ttl_hit = True
+                ttl_detail = (
+                    f"get returned VALUE ~{elapsed_s:.1f}s after a 1s-TTL set "
+                    f"(expiry ignored)"
+                )
+            else:
+                ttl_detail = f"key alive {elapsed_s:.1f}s after set (inside TTL window)"
+        stats_ignore = bool(stats_before) and bool(stats_after) and stats_before == stats_after
         if stats_ignore:
             notes.append("stats reply unchanged after successful set (write ignored)")
         state_hit = bool(notes)
@@ -521,6 +593,23 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
             detail=state_detail,
             fidelity="high" if state_hit else "medium",
             remediation="Persist set values across connections; advance stats on writes",
+        ),
+        _ind(
+            id="memcached.ttl_enforcement",
+            title="Memcached serves a probe key after its TTL has elapsed",
+            category="state_nonpersist",
+            triggered=ttl_hit,
+            skipped=ttl_skipped,
+            skip_reason=state_detail if ttl_skipped else "",
+            error=state_err if ttl_skipped else "",
+            detail=ttl_detail,
+            evidence=(
+                f"exptime=1; set_get_elapsed_s={elapsed_s:.1f}"
+                if not ttl_skipped
+                else "exptime=1; set_get_elapsed_s=n/a"
+            ),
+            fidelity="high" if ttl_hit else "medium",
+            remediation="Honor item exptime: keys past their TTL must not be served",
         ),
         _ind(
             id="memcached.version_framing",
@@ -618,6 +707,19 @@ def probe_memcached(host: str, port: int) -> list[Indicator]:
             ),
             fidelity="decisive" if clone_hit else "medium",
             remediation="Advance counters (cmd_get, uptime, connections) between stats replies",
+        ),
+        _ind(
+            id="memcached.version_stats_coherence",
+            title="Memcached VERSION command disagrees with its stats version",
+            category="static_signature",
+            triggered=vs_hit,
+            skipped=vs_skipped,
+            skip_reason=vs_detail if vs_skipped else "",
+            error=vs_err if vs_skipped else "",
+            detail=vs_detail,
+            evidence=f"VERSION={ver_token!r}; STAT version={stats_ver!r}",
+            fidelity="decisive" if vs_hit else "medium",
+            remediation="Report the same build version on 'version' and 'stats'",
         ),
         _ind(
             id="memcached.stock_version",

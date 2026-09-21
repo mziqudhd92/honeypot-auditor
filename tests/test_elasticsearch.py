@@ -67,6 +67,7 @@ _ES_IDS = {
     "elasticsearch.cluster_health_stub",
     "elasticsearch.cat_stub",
     "elasticsearch.content_type",
+    "elasticsearch.content_negotiation",
     "elasticsearch.product_header",
 }
 
@@ -77,6 +78,7 @@ def _conformant_tcp(host, port, payload=b"", **kwargs):
     text = payload.decode("latin-1", "replace")
     first = text.split("\r\n", 1)[0]
     has_auth = "authorization:" in text.lower()
+    wants_yaml = "accept: application/yaml" in text.lower()
     if first.startswith("GET / HTTP/") or first.startswith("HEAD / HTTP/"):
         if has_auth and first.startswith("GET /"):
             return (
@@ -92,6 +94,23 @@ def _conformant_tcp(host, port, payload=b"", **kwargs):
                 ),
                 "",
             )
+        if wants_yaml and first.startswith("GET /"):
+            # Real ES natively serves YAML via Accept negotiation.
+            yaml_root = (
+                b"---\n"
+                b'name: "node-prod-1"\n'
+                b'cluster_name: "prod-logs-eu"\n'
+                b'cluster_uuid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"\n'
+                b'version:\n  number: "8.12.2"\n'
+                b'tagline: "You Know, for Search"\n'
+            )
+            head = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: application/yaml\r\n"
+                "X-Elastic-Product: Elasticsearch\r\n"
+                f"Content-Length: {len(yaml_root)}\r\n\r\n"
+            ).encode()
+            return head + yaml_root, ""
         body = b"" if first.startswith("HEAD ") else None
         raw = _http_bytes(
             200,
@@ -158,7 +177,7 @@ def test_es_conformant_cluster_is_clean():
         inds = es.probe_elasticsearch("127.0.0.1", 9200)
     assert {i.id for i in inds} == _ES_IDS
     assert not any(ind.triggered for ind in inds)
-    assert len(inds) == 11
+    assert len(inds) == len(_ES_IDS)
 
 
 def test_es_honeypot_tells_fire():
@@ -414,7 +433,7 @@ def test_es_head_body_is_method_stub():
 def test_es_connection_error_skips_suite():
     with patch.object(es, "tcp_transact", return_value=(b"", "Connection refused")):
         inds = es.probe_elasticsearch("127.0.0.1", 9200)
-    assert len(inds) == 11
+    assert len(inds) == len(_ES_IDS)
     assert {i.id for i in inds} == _ES_IDS
     assert all(ind.skipped for ind in inds)
 
@@ -429,7 +448,7 @@ def test_es_non_speaker_triggers_framing():
     by_id = {ind.id: ind for ind in inds}
     assert by_id["elasticsearch.root_framing"].triggered
     assert all(i.skipped or i.id == "elasticsearch.root_framing" for i in inds)
-    assert len(inds) == 11
+    assert len(inds) == len(_ES_IDS)
 
 
 def test_es_safe_mode_handshake_only():
@@ -448,7 +467,7 @@ def test_es_safe_mode_handshake_only():
     finally:
         settings.safe_mode = old
     by_id = {ind.id: ind for ind in inds}
-    assert len(inds) == 11
+    assert len(inds) == len(_ES_IDS)
     assert {i.id for i in inds} == _ES_IDS
     assert not by_id["elasticsearch.root_framing"].triggered
     assert by_id["elasticsearch.arbitrary_auth"].skipped
@@ -501,3 +520,78 @@ def test_es_state_nonpersist_version_mismatch():
     assert state.triggered
     assert state.category == "state_nonpersist"
     assert "version" in state.detail
+
+
+def test_es_yaml_negotiation_json_only_skin():
+    """JSON-only reply to Accept: application/yaml → gated content_negotiation hit."""
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        del host, port
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET / HTTP/") or first.startswith("HEAD / HTTP/"):
+            if "authorization:" in text.lower():
+                return (
+                    _http_bytes(
+                        401,
+                        {
+                            "error": {
+                                "type": "security_exception",
+                                "reason": "unable to authenticate user",
+                            },
+                            "status": 401,
+                        },
+                    ),
+                    "",
+                )
+            # Skin: same JSON root regardless of Accept.
+            return (
+                _http_bytes(200, _ROOT, headers={"X-Elastic-Product": "Elasticsearch"}),
+                "",
+            )
+        if first.startswith("GET /hpa-audit-"):
+            return (
+                _http_bytes(
+                    404,
+                    {"error": {"type": "index_not_found_exception", "reason": "no such index"}},
+                ),
+                "",
+            )
+        if first.startswith("GET /_hpa_nonexistent_"):
+            return (_http_bytes(400, {"error": {"type": "invalid_index_name_exception"}}), "")
+        if first.startswith("GET /_nodes"):
+            return _http_bytes(200, _NODES), ""
+        if first.startswith("GET /_cluster/health"):
+            return _http_bytes(200, _HEALTH), ""
+        if first.startswith("GET /_cat/health"):
+            return _http_bytes(200, [{"epoch": "1", "cluster": "prod-logs-eu", "status": "yellow"}]), ""
+        if first.startswith("DELETE /") or first.startswith("PUT /"):
+            return (_http_bytes(405, {"error": {"type": "method_not_allowed"}}), "")
+        return b"", "unexpected"
+
+    with (
+        patch.object(es, "tcp_transact", side_effect=fake_tcp),
+        patch.object(es, "entropy_varied_creds", return_value=_FIXED_CREDS),
+        patch.object(es, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    by_id = {i.id: i for i in inds}
+    yaml_ind = by_id["elasticsearch.content_negotiation"]
+    assert yaml_ind.triggered
+    assert not yaml_ind.skipped
+    assert yaml_ind.requires_corroboration is True
+    assert "JSON" in yaml_ind.detail
+
+
+def test_es_yaml_negotiation_conformant_is_clean():
+    with (
+        patch.object(es, "tcp_transact", side_effect=_conformant_tcp),
+        patch.object(es, "entropy_varied_creds", return_value=_FIXED_CREDS),
+        patch.object(es, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = es.probe_elasticsearch("127.0.0.1", 9200)
+    by_id = {i.id: i for i in inds}
+    yaml_ind = by_id["elasticsearch.content_negotiation"]
+    assert not yaml_ind.triggered
+    assert not yaml_ind.skipped
+    assert "yaml honored" in yaml_ind.detail

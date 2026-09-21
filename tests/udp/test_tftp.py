@@ -394,3 +394,32 @@ def test_tftp_ports_in_presets():
     both = probe_port_map("both")
     assert 69 in both["tftp"]
     assert 1069 in both["tftp"]
+
+
+def test_tftp_block_size_violation_on_oversized_data():
+    """>512-byte DATA without a larger negotiated blksize → block_size_violation."""
+    big = _reply(_data(1, b"A" * 600), peer_port=_TID)
+    replies = [
+        big,  # baseline missing-file RRQ answered with a 600B DATA block
+        _second_rrq(),
+        _reply(_error(tftp.ERR_ILLEGAL_OPERATION, "Illegal TFTP operation")),
+        _reply(_ack(0)),
+        *_opt_pair(_reply(_oack()), _reply(_oack())),
+    ]
+    inds, _mock = _run(replies)
+    by_id = {i.id: i for i in inds}
+    block = by_id["tftp.block_size_violation"]
+    assert block.triggered
+    assert not block.skipped
+    assert block.fidelity == "high"
+    assert not block.requires_corroboration
+    assert "600" in block.detail
+    # The oversized DATA is also an opcode facade, but the two stay independent.
+    assert by_id["tftp.opcode_facade"].triggered
+
+
+def test_tftp_block_size_clean_when_no_oversized_data():
+    inds, _mock = _run(_conformant_replies())
+    block = {i.id: i for i in inds}["tftp.block_size_violation"]
+    assert not block.triggered
+    assert not block.skipped

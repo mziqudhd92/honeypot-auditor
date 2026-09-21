@@ -19,7 +19,7 @@ TFTP activates **two** of the three basic scoring strategies
 | Strategy | Why it applies to TFTP |
 |----------|------------------------|
 | **arbitrary_auth** | **Empty.** RFC 1350 has no credential exchange; we do not invent password probes. |
-| **static_signature** | TID source-port, opcode/error/mode/WRQ facades, RFC 2347 option blindness, response clone, no OACK/DATA retransmit, stock lure tokens in ERROR/DATA. |
+| **static_signature** | TID source-port, opcode/error/mode/WRQ facades, RFC 2347 option blindness, response clone, no OACK/DATA retransmit, DATA blocks over 512 bytes without a larger negotiated `blksize`, stock lure tokens in ERROR/DATA. |
 | **state_nonpersist** | Server TID reused across independent missing-file RRQs (real tftpd allocates a new TID per transfer). |
 
 Detection philosophy:
@@ -29,7 +29,8 @@ Detection philosophy:
 3. **Second RRQ** — distinct filename: detect TID reuse (`state_nonpersist`) and canned identical DATA/stub ERROR clones (`response_clone`). Normal identical “File not found” ERROR is **not** scored as a clone.
 4. **Opcode / error / mode / WRQ** — missing files and illegal modes must not serve DATA; WRQ must not return DATA.
 5. **Options + retransmit** — RRQ + `blksize=512` expects OACK or a proper ERROR. On OACK/DATA, withhold ACK briefly; one-shot stubs that never retransmit score `no_retransmit`. Then ACK OACK (no DATA upload).
-6. **Lure text last** — stock tokens in ERROR/DATA corroborate; weak strings are gated.
+6. **Block-size arithmetic** — RFC 1350 caps DATA payloads at 512 bytes and the only `blksize` we ever request is 512, so any served DATA block over 512 bytes scores `block_size_violation` outright.
+7. **Lure text last** — stock tokens in ERROR/DATA corroborate; weak strings are gated.
 
 ## Non-destructive policy
 
@@ -85,6 +86,7 @@ Option OACK uses `udp_exchange_with_retransmit_watch` then `udp_exchange_to`
 | `tftp.tid_reuse` | **state_nonpersist** | high | no | Two independent RRQs reuse the same ephemeral server TID (`peer_port` equal and ≠ dst). |
 | `tftp.response_clone` | static_signature | high | no | Bitwise-identical DATA/ACK (or stubby ERROR 0/empty / out-of-range) for distinct missing-file RRQs. Normal identical “File not found” is **not** a hit. |
 | `tftp.no_retransmit` | static_signature | high | no | OACK or DATA from optioned RRQ is not retransmitted while ACK is withheld. |
+| `tftp.block_size_violation` | static_signature | high | no | Any served DATA block exceeds 512 bytes (only `blksize=512` is ever requested; RFC 1350 §5 caps blocks at 512). |
 | `tftp.stock_payload` | static_signature | medium | **yes** | ERROR message or DATA block matches stock lure tokens (`honeypot`, `conpot`, `tftp stub`, …). |
 
 ## Safe mode

@@ -43,6 +43,7 @@ def test_sip_probe(mock_udp):
     assert {i.id for i in inds} == {
         "sip.user_agent",
         "sip.via_coherence",
+        "sip.cseq_echo",
         "sip.arbitrary_auth",
         "sip.state_nonpersist",
     }
@@ -149,3 +150,62 @@ def test_sip_via_coherence_conformant_clean(mock_udp):
     by_id = {i.id: i for i in inds}
     assert not by_id["sip.via_coherence"].triggered
     assert not by_id["sip.via_coherence"].skipped
+
+
+def _opts_ok(cseq: int) -> bytes:
+    return (
+        "SIP/2.0 200 OK\r\n"
+        "Via: SIP/2.0/UDP 0.0.0.0:5060;branch=z9hG4bKhpauditdeadbeef;"
+        "received=198.51.100.7;rport=51515\r\n"
+        f"CSeq: {cseq} OPTIONS\r\n"
+        "User-Agent: Asterisk PBX\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n"
+    ).encode()
+
+
+@patch.object(sip, "udp_transact")
+def test_sip_cseq_echo_wrong_number_gated(mock_udp):
+    """Skin echoes a canned 'CSeq: 1 OPTIONS' for every transaction → gated hit."""
+    wrong = _opts_ok(1)  # canned echo; requests carry 7 and 9
+    mock_udp.side_effect = [
+        (wrong, ""),
+        (wrong, ""),
+        (_REG_200, ""),
+        (_REG_200, ""),
+        (_REG_200, ""),
+        (_REG_200, ""),
+    ]
+    with (
+        patch.object(sip, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(sip, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = sip.probe_sip("127.0.0.1", 5060)
+    by_id = {i.id: i for i in inds}
+    cseq = by_id["sip.cseq_echo"]
+    assert cseq.triggered
+    assert cseq.requires_corroboration is True
+    assert "!= request" in cseq.detail
+    # Isolation: Via handling is conformant in these replies.
+    assert not by_id["sip.via_coherence"].triggered
+
+
+@patch.object(sip, "udp_transact")
+def test_sip_cseq_echo_conformant_clean(mock_udp):
+    """Per-transaction CSeq echoes (7 then 9) stay clean."""
+    mock_udp.side_effect = [
+        (_opts_ok(7), ""),
+        (_opts_ok(9), ""),
+        (_REG_200, ""),
+        (_REG_200, ""),
+        (_REG_200, ""),
+        (_REG_200, ""),
+    ]
+    with (
+        patch.object(sip, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(sip, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = sip.probe_sip("127.0.0.1", 5060)
+    by_id = {i.id: i for i in inds}
+    assert not by_id["sip.cseq_echo"].triggered
+    assert not by_id["sip.cseq_echo"].skipped

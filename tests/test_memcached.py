@@ -15,12 +15,14 @@ from honeypot_auditor.settings import settings
 _MC_IDS = {
     "memcached.arbitrary_auth",
     "memcached.state_nonpersist",
+    "memcached.ttl_enforcement",
     "memcached.version_framing",
     "memcached.stats_framing",
     "memcached.unknown_command",
     "memcached.get_miss",
     "memcached.cas_facade",
     "memcached.stats_clone",
+    "memcached.version_stats_coherence",
     "memcached.stock_version",
     "memcached.flush_stub",
     "memcached.noreply_facade",
@@ -377,3 +379,145 @@ def test_memcached_cas_ok_with_token(mock_pause, mock_creds, mock_hex, mock_tcp)
     cas = {i.id: i for i in inds}["memcached.cas_facade"]
     assert not cas.triggered
     assert not cas.skipped
+
+
+# stats carrying a version that disagrees with the VERSION command above
+_MISMATCH_STATS = (
+    b"STAT pid 4242\r\n"
+    b"STAT uptime 3600\r\n"
+    b"STAT version 1.4.15\r\n"
+    b"END\r\n"
+)
+_MISMATCH_STATS_2 = (
+    b"STAT pid 4242\r\n"
+    b"STAT uptime 3601\r\n"
+    b"STAT version 1.4.15\r\n"
+    b"END\r\n"
+)
+_NO_VERSION_STATS = b"STAT pid 4242\r\nSTAT uptime 3600\r\nEND\r\n"
+_NO_VERSION_STATS_2 = b"STAT pid 4242\r\nSTAT uptime 3601\r\nEND\r\n"
+
+
+@patch.object(mc, "tcp_transact")
+@patch.object(mc.secrets, "token_hex", return_value="deadbeef")
+@patch.object(mc, "entropy_varied_creds", return_value=_FIXED_CREDS)
+@patch.object(mc, "jittered_reconnect_pause", return_value=0.0)
+def test_memcached_version_stats_mismatch_decisive(mock_pause, mock_creds, mock_hex, mock_tcp):
+    """VERSION 1.6.23 while stats says 1.4.15 → decisive coherence hit."""
+    mock_tcp.side_effect = _calls(
+        _version("1.6.23"),
+        _MISMATCH_STATS,  # stats1: STAT version 1.4.15
+        b"ERROR\r\n",  # foo
+        b"END\r\n",  # get miss
+        _MISMATCH_STATS_2,  # stats2 (advanced counters, same lie)
+        b"ERROR\r\n",  # verbosity
+        b"",  # noreply quiet
+        b"ERROR\r\n",  # auth set1
+        b"ERROR\r\n",  # auth set2
+        b"ERROR\r\n",  # binary
+        _LIVE_STATS_2,  # stats_before
+        b"ERROR\r\n",  # state set rejected
+        b"ERROR\r\n",  # cas set rejected
+    )
+    inds = mc.probe_memcached("127.0.0.1", 11211)
+    by_id = {i.id: i for i in inds}
+    vs = by_id["memcached.version_stats_coherence"]
+    assert vs.triggered
+    assert not vs.skipped
+    assert vs.fidelity == "decisive"
+    assert not vs.requires_corroboration
+    assert "1.4.15" in vs.detail and "1.6.23" in vs.detail
+    # Isolation: stats replies differ (no clone); state/ttl skipped on reject.
+    assert not by_id["memcached.stats_clone"].triggered
+    assert by_id["memcached.state_nonpersist"].skipped
+    assert by_id["memcached.ttl_enforcement"].skipped
+
+
+@patch.object(mc, "tcp_transact")
+@patch.object(mc.secrets, "token_hex", return_value="deadbeef")
+@patch.object(mc, "entropy_varied_creds", return_value=_FIXED_CREDS)
+@patch.object(mc, "jittered_reconnect_pause", return_value=0.0)
+def test_memcached_version_stats_skips_when_partial(mock_pause, mock_creds, mock_hex, mock_tcp):
+    """Stats without a STAT version line is inconclusive, not a hit."""
+    mock_tcp.side_effect = _calls(
+        _version("1.6.23"),
+        _NO_VERSION_STATS,
+        b"ERROR\r\n",
+        b"END\r\n",
+        _NO_VERSION_STATS_2,
+        b"ERROR\r\n",
+        b"",
+        b"ERROR\r\n",
+        b"ERROR\r\n",
+        b"ERROR\r\n",
+        _LIVE_STATS_2,
+        b"ERROR\r\n",
+        b"ERROR\r\n",
+    )
+    inds = mc.probe_memcached("127.0.0.1", 11211)
+    vs = {i.id: i for i in inds}["memcached.version_stats_coherence"]
+    assert not vs.triggered
+    assert vs.skipped
+
+
+@patch.object(mc, "tcp_transact")
+@patch.object(mc.time, "monotonic", side_effect=[0.0, 5.0])
+@patch.object(mc.secrets, "token_hex", return_value="deadbeef")
+@patch.object(mc, "entropy_varied_creds", return_value=_FIXED_CREDS)
+@patch.object(mc, "jittered_reconnect_pause", return_value=0.0)
+def test_memcached_ttl_ignored_after_window(mock_pause, mock_creds, mock_hex, _mono, mock_tcp):
+    """VALUE served ~5s after a 1s-TTL set → expiry-ignoring skin."""
+    mock_tcp.side_effect = _static_then(
+        b"ERROR\r\n",  # auth set1
+        b"ERROR\r\n",  # auth set2
+        b"ERROR\r\n",  # binary
+        _LIVE_STATS_1,  # stats_before
+        b"STORED\r\n",  # state set (exptime=1)
+        _LIVE_STATS_2,  # stats_after advanced
+        b"VALUE hpa_s_deadbeef 0 1\r\ny\r\nEND\r\n",  # get: VALUE past window
+        b"DELETED\r\n",  # state cleanup delete
+        b"STORED\r\n",  # cas set stored
+        b"VALUE hpa_c_deadbeef 0 1 9\r\nz\r\nEND\r\n",  # gets with cas_unique
+        b"DELETED\r\n",  # cas cleanup delete
+    )
+    inds = mc.probe_memcached("127.0.0.1", 11211)
+    by_id = {i.id: i for i in inds}
+    ttl = by_id["memcached.ttl_enforcement"]
+    assert ttl.triggered
+    assert not ttl.skipped
+    assert ttl.fidelity == "high"
+    assert "expiry ignored" in ttl.detail
+    # Isolation: key persists (state ok) and stats advance (no clone).
+    assert not by_id["memcached.state_nonpersist"].triggered
+    assert not by_id["memcached.stats_clone"].triggered
+    assert not by_id["memcached.cas_facade"].triggered
+
+
+@patch.object(mc, "tcp_transact")
+@patch.object(mc.time, "monotonic", side_effect=[0.0, 5.0])
+@patch.object(mc.secrets, "token_hex", return_value="deadbeef")
+@patch.object(mc, "entropy_varied_creds", return_value=_FIXED_CREDS)
+@patch.object(mc, "jittered_reconnect_pause", return_value=0.0)
+def test_memcached_ttl_expiry_is_clean(mock_pause, mock_creds, mock_hex, _mono, mock_tcp):
+    """A miss after the TTL window is legitimate expiry — neither ttl nor state hit."""
+    mock_tcp.side_effect = _static_then(
+        b"ERROR\r\n",  # auth set1
+        b"ERROR\r\n",  # auth set2
+        b"ERROR\r\n",  # binary
+        _LIVE_STATS_1,  # stats_before
+        b"STORED\r\n",  # state set (exptime=1)
+        _LIVE_STATS_2,  # stats_after advanced
+        b"END\r\n",  # get: expired per TTL
+        b"DELETED\r\n",  # state cleanup delete
+        b"STORED\r\n",  # cas set stored
+        b"VALUE hpa_c_deadbeef 0 1 9\r\nz\r\nEND\r\n",
+        b"DELETED\r\n",
+    )
+    inds = mc.probe_memcached("127.0.0.1", 11211)
+    by_id = {i.id: i for i in inds}
+    ttl = by_id["memcached.ttl_enforcement"]
+    assert not ttl.triggered
+    assert not ttl.skipped
+    assert "expiry honored" in ttl.detail
+    # Expiry-attributed miss must NOT double as a state lie.
+    assert not by_id["memcached.state_nonpersist"].triggered

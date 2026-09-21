@@ -102,9 +102,17 @@ version  ──►  ASCII speakership (+ version_framing / stock_version)
 | `memcached.get_miss` | `get` of a fresh missing key returns `VALUE` instead of bare `END`. |
 | `memcached.cas_facade` | `gets` of a just-stored probe key returns a `VALUE` line without the mandatory numeric `cas_unique` token (skins implement `get` only). An `END` there is left to `state_nonpersist`. |
 | `memcached.stats_clone` | Two independent `stats` replies are **bitwise-identical**. Fidelity **decisive** when hit. |
+| `memcached.version_stats_coherence` | `version` token disagrees with the `STAT version` line — a real server cannot disagree with itself. Fidelity **decisive** when hit. |
 | `memcached.stock_version` | `VERSION` token matches a stock honeypot lure. Generic/common versions are corroboration-gated; decisive lure tokens score alone. |
 | `memcached.flush_stub` | Bare `verbosity` (no level) returns success instead of `ERROR` — non-destructive stand-in for flush-accept stubs. **Never sends `flush_all`.** |
 | `memcached.noreply_facade` | `verbosity 0 noreply` still returns a body (`OK`/…) instead of staying quiet. |
+
+### State / TTL conformance
+
+| ID | Trigger |
+|----|---------|
+| `memcached.state_nonpersist` | Probe key vanishes across reconnect (inside its TTL window) or `stats` ignore a successful write. |
+| `memcached.ttl_enforcement` | `get` still returns `VALUE` after the 1-second TTL window has elapsed — dict-backed skins never expire keys. A miss *inside* the window is scored as the state lie instead; a miss after it is clean expiry. |
 
 ## Safe mode
 

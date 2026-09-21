@@ -1,7 +1,8 @@
 """SIP fingerprint engine.
 
 Strategies: arbitrary auth (Digest façade / static nonce), state non-persistence
-(CSeq/Call-ID binding), static signature (default User-Agent template).
+(CSeq/Call-ID binding), static signature (default User-Agent template, Via
+received/rport coherence, response CSeq echo).
 """
 
 from __future__ import annotations
@@ -27,6 +28,11 @@ _SIP_SKIP = (
         "static_signature",
     ),
     (
+        "sip.cseq_echo",
+        "SIP response CSeq does not echo the request transaction",
+        "static_signature",
+    ),
+    (
         "sip.arbitrary_auth",
         "SIP REGISTER accepts fake Digest or reuses nonce/realm",
         "arbitrary_auth",
@@ -42,10 +48,13 @@ _STATUS_RE = re.compile(r"^SIP/2\.0\s+(\d{3})", re.IGNORECASE | re.MULTILINE)
 _WWW_AUTH_RE = re.compile(r"(?im)^WWW-Authenticate:\s*(.+)$")
 _NONCE_RE = re.compile(r'nonce\s*=\s*"([^"]+)"', re.IGNORECASE)
 _REALM_RE = re.compile(r'realm\s*=\s*"([^"]+)"', re.IGNORECASE)
+_CSEQ_RE = re.compile(r"(?im)^CSeq:\s*(\d+)\s+(\S+)")
 
 # OPTIONS Via sent-by is 0.0.0.0:5060 with ;rport, so a conformant response
 # Via must echo our branch and add received=<src-ip> / rport=<src-port>
-# (RFC 3261 §8.2.6.2, RFC 3581 §4).
+# (RFC 3261 §8.2.6.2, RFC 3581 §4). The branch keeps a fixed prefix so the
+# substring check still matches while remaining unique per transaction.
+_VIA_BRANCH_PREFIX = "z9hG4bKhpaudit"
 _VIA_BRANCH_TOKEN = "z9hg4bkhpaudit"
 _RPORT_ECHO_RE = re.compile(r"rport\s*=\s*\d+", re.IGNORECASE)
 
@@ -107,10 +116,31 @@ def _via_assessment(text: str) -> tuple[bool, str]:
     return False, f"Via echoes branch with received/rport: {via!r}"
 
 
+def _cseq_assessment(responses: list[tuple[str, int]]) -> tuple[bool, str]:
+    """Score response CSeq echo (RFC 3261 §8.2.6.2: must equal the request's).
+
+    Each entry is (response_text, request_cseq). Skins replaying one canned 200
+    echo the wrong sequence number or omit CSeq entirely.
+    """
+    notes: list[str] = []
+    for text, want in responses:
+        if not text:
+            continue
+        got = _CSEQ_RE.search(text)
+        if not got:
+            notes.append(f"CSeq header missing (request was {want} OPTIONS)")
+        elif int(got.group(1)) != want or got.group(2).upper() != "OPTIONS":
+            notes.append(f"response CSeq {got.group(1)} {got.group(2)} != request {want} OPTIONS")
+    if notes:
+        return True, "; ".join(notes)
+    checked = len([1 for t, _ in responses if t])
+    return False, f"CSeq echoed on {checked} OPTIONS response(s)"
+
+
 def _options(host: str, call_id: str, cseq: int = 1) -> bytes:
     return (
         f"OPTIONS sip:{host} SIP/2.0\r\n"
-        f"Via: SIP/2.0/UDP 0.0.0.0:5060;branch=z9hG4bKhpaudit;rport\r\n"
+        f"Via: SIP/2.0/UDP 0.0.0.0:5060;branch={_VIA_BRANCH_PREFIX}{secrets.token_hex(3)};rport\r\n"
         f"From: <sip:auditor@invalid>;tag=hpaudit\r\n"
         f"To: <sip:{host}>\r\n"
         f"Call-ID: {call_id}\r\n"
@@ -157,7 +187,9 @@ def _register(
 
 def probe_sip(host: str, port: int) -> list[Indicator]:
     call_id = f"hpaudit-{secrets.token_hex(6)}"
-    raw, err = _sip_exchange(host, port, _options(host, call_id))
+    # Distinct CSeq numbers per OPTIONS transaction so a canned single-response
+    # skin cannot pass the CSeq echo check by accident.
+    raw, err = _sip_exchange(host, port, _options(host, call_id, cseq=7))
     if err and not raw:
         return skip_suite(_SIP_SKIP, closed_reason(err), protocol="sip", error=err)
 
@@ -200,13 +232,14 @@ def probe_sip(host: str, port: int) -> list[Indicator]:
     if opt_nonce or opt_realm:
         challenges.append((opt_nonce, opt_realm))
 
-    # Second OPTIONS/REGISTER challenge observation (fresh Call-ID).
+    # Second OPTIONS/REGISTER challenge observation (fresh Call-ID, new CSeq).
     call_id2 = f"hpaudit-{secrets.token_hex(6)}"
-    raw_opt2, _ = _sip_exchange(host, port, _options(host, call_id2, cseq=1))
+    raw_opt2, _ = _sip_exchange(host, port, _options(host, call_id2, cseq=9))
     text_opt2 = raw_opt2.decode("latin-1", "replace")
     n2, r2 = _parse_challenge(text_opt2)
     if n2 or r2:
         challenges.append((n2, r2))
+    cseq_hit, cseq_detail = _cseq_assessment([(text, 7), (text_opt2, 9)])
 
     reg_ok = 0
     reg_notes: list[str] = []
@@ -317,6 +350,25 @@ def probe_sip(host: str, port: int) -> list[Indicator]:
             remediation=(
                 "Copy the request Via into responses and add received=/rport= "
                 "when sent-by differs from the source (RFC 3261 §8.2.6.2, RFC 3581)"
+            ),
+        ),
+        Indicator(
+            id="sip.cseq_echo",
+            title="SIP response CSeq does not echo the request transaction",
+            category="static_signature",
+            triggered=cseq_hit,
+            protocol="sip",
+            detail=cseq_detail,
+            evidence="; ".join(
+                (m.group(0) if (m := _CSEQ_RE.search(t)) else "(missing)")
+                for t, _ in ((text, 7), (text_opt2, 9))
+                if t
+            ),
+            requires_corroboration=True if cseq_hit else False,
+            fidelity="high",
+            remediation=(
+                "Echo the request CSeq number and method in every response "
+                "(RFC 3261 §8.2.6.2)"
             ),
         ),
         Indicator(

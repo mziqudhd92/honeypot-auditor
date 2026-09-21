@@ -90,6 +90,7 @@ over lure strings alone — see [`udp/TFTP.md`](udp/TFTP.md).
 | `tftp.option_blindness` | static_signature | RRQ+`blksize` choke (`ERROR 0` empty) instead of OACK / proper ERROR |
 | `tftp.response_clone` | static_signature | Canned identical DATA/ACK (or stubby ERROR) for distinct RRQs |
 | `tftp.no_retransmit` | static_signature | OACK/DATA never retransmitted while ACK withheld |
+| `tftp.block_size_violation` | static_signature | DATA block over 512 bytes without a larger negotiated blksize |
 | `tftp.stock_payload` | static_signature | Stock ERROR/DATA lure tokens (corroboration-gated) |
 | `tftp.framing` | static_signature | Non-speaker / unparseable TFTP reply |
 
@@ -138,6 +139,8 @@ auth / state tells over banner IOCs alone — see [`MEMCACHED.md`](MEMCACHED.md)
 | `memcached.stats_clone` | static_signature | Decisive when hit (bitwise-identical `stats` replies) |
 | `memcached.version_framing` / `memcached.stats_framing` / `memcached.unknown_command` | static_signature | High fidelity ASCII tells |
 | `memcached.get_miss` / `memcached.cas_facade` / `memcached.flush_stub` / `memcached.noreply_facade` | static_signature | Miss END · gets/CAS token · bare verbosity · noreply quiet |
+| `memcached.version_stats_coherence` | static_signature | **Decisive** when hit — `version` token disagrees with `STAT version` |
+| `memcached.ttl_enforcement` | state_nonpersist | `VALUE` served after the 1s TTL window (dict skins never expire keys) |
 | `memcached.stock_version` | static_signature | Stock VERSION lure (generic tokens corroboration-gated) |
 
 Probe-key `set`/`delete` allowed; **never** `flush_all`. Full strategy narrative,
@@ -173,6 +176,7 @@ probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
 | `elasticsearch.missing_index_ok` / `path_facade` / `method_stub` | static_signature | High-fidelity API non-compliance |
 | `elasticsearch.cluster_health_stub` / `cat_stub` | static_signature | Health/cat endpoints echo root instead of proper shapes |
 | `elasticsearch.content_type` / `product_header` | static_signature | Wrong Content-Type; modern version without `X-Elastic-Product` |
+| `elasticsearch.content_negotiation` | static_signature | JSON-only reply to `Accept: application/yaml` (gated) |
 | `elasticsearch.stock_cluster` | static_signature | Stock cluster_name / version / tagline / uuid (may be corroboration-gated) |
 | `elasticsearch.root_framing` | static_signature | Non-speaker / malformed root document |
 

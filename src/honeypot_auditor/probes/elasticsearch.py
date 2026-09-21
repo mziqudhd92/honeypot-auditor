@@ -86,6 +86,11 @@ _ES_SKIP = (
         "static_signature",
     ),
     (
+        "elasticsearch.content_negotiation",
+        "Elasticsearch ignores an Accept: application/yaml request",
+        "static_signature",
+    ),
+    (
         "elasticsearch.product_header",
         "Elasticsearch product header is missing or inconsistent with version",
         "static_signature",
@@ -669,6 +674,35 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
         else:
             cat_detail = f"_cat/health status={cat_status}"
 
+    # --- Accept: application/yaml content negotiation ---
+    # Real Elasticsearch (and OpenSearch) natively serves YAML/SMILE/CBOR via
+    # Accept; JSON-only replies to a YAML request are hand-rolled HTTP skins.
+    # Gated: JSON-normalizing front proxies in front of real clusters exist.
+    y_status, y_hdrs, y_body, y_err = _http_exchange(
+        host, port, "GET", "/", extra_headers={"Accept": "application/yaml"}
+    )
+    yaml_skipped = bool(y_err) and y_status == 0 and not y_body
+    yaml_hit = False
+    yaml_detail = "yaml negotiation not evaluated"
+    if not yaml_skipped:
+        yct = y_hdrs.get("content-type", "")
+        looks_yaml = "yaml" in yct.lower() or y_body.lstrip().startswith(b"---")
+        looks_json = "json" in yct.lower() or _parse_json(y_body) is not None
+        if y_status == 200 and looks_yaml and not looks_json:
+            yaml_detail = f"yaml honored (Content-Type={yct!r})"
+        elif y_status == 200 and looks_json:
+            yaml_hit = True
+            yaml_detail = (
+                f"Accept: application/yaml answered with JSON "
+                f"(Content-Type={yct!r}, {len(y_body)}B body)"
+            )
+        elif y_status == 406:
+            yaml_skipped = True
+            yaml_detail = "406 to yaml negotiation (strict gatekeeper; not scored)"
+        else:
+            yaml_skipped = True
+            yaml_detail = f"yaml negotiation status={y_status} (not scored)"
+
     # --- X-Elastic-Product vs claimed version (7.14+) ---
     product = headers.get("x-elastic-product", "")
     ver = _major_minor_patch(_version_number(root))
@@ -909,6 +943,24 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
             evidence=f"Content-Type={ctype}",
             remediation="Serve application/json (or ES vendor JSON) for API responses",
             fidelity="medium",
+        ),
+        Indicator(
+            id="elasticsearch.content_negotiation",
+            title="Elasticsearch ignores an Accept: application/yaml request",
+            category="static_signature",
+            triggered=yaml_hit,
+            skipped=yaml_skipped,
+            skip_reason=yaml_detail if yaml_skipped else "",
+            error=y_err if yaml_skipped else "",
+            protocol="elasticsearch",
+            detail=yaml_detail,
+            evidence=y_body[:200].decode("utf-8", "replace") if y_body else "",
+            requires_corroboration=True if yaml_hit else False,
+            fidelity="high",
+            remediation=(
+                "Honor Accept: application/yaml (and SMILE/CBOR) content "
+                "negotiation on API endpoints"
+            ),
         ),
         Indicator(
             id="elasticsearch.product_header",

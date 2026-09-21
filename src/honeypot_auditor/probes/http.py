@@ -49,6 +49,11 @@ _HTTP_SKIP = (
         "state_nonpersist",
     ),
     ("http.malformed_200", "HTTP static 200 OK on malformed POST", "static_signature"),
+    (
+        "http.chunked_premature",
+        "HTTP answers before an unterminated chunked body completes",
+        "static_signature",
+    ),
     ("http.dynamic_headers", "HTTP missing dynamic Date header", "static_signature"),
     ("http.method_stub", "HTTP PUT/DELETE returns empty 405", "static_signature"),
     ("http.login_skin", "HTTP / redirects to a stock login form", "static_signature"),
@@ -321,6 +326,48 @@ def probe_http(host: str, port: int) -> list[Indicator]:
         wildcard_host_hit = bool(wh_text) and " 200 " in wh_first
         wildcard_detail = wh_first or "(no response)"
 
+    # --- premature reply to an unterminated chunked POST (gated) ---
+    # The framing so far is legal but the terminal 0-chunk never arrives; a
+    # conformant server must keep waiting (surfaces as our read timeout), so
+    # any full HTTP status line back is a reply-before-body-reading skin.
+    # Gated: 100-continue/408-happy intermediaries exist in front of real apps.
+    chunked_hit = False
+    chunked_detail = "chunked premature reply not evaluated (TLS face)"
+    chunked_first = ""
+    if not tls:
+        chunked_req = (
+            b"POST / HTTP/1.1\r\n"
+            b"Host: " + host.encode("ascii", "replace") + b"\r\n"
+            b"Content-Type: application/x-www-form-urlencoded\r\n"
+            b"Transfer-Encoding: chunked\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+            b"5\r\nhpa=1\r\n"
+        )
+        chunked_raw, chunked_err = tcp_transact(
+            host, port, chunked_req, recv_first=False
+        )
+        chunked_first = (
+            chunked_raw.decode("latin-1", "replace").split("\r\n", 1)[0]
+            if chunked_raw
+            else ""
+        )
+        if chunked_first.startswith("HTTP/"):
+            chunked_hit = True
+            chunked_detail = (
+                f"replied {chunked_first[:60]} before the terminal chunk arrived"
+            )
+        elif chunked_raw:
+            chunked_detail = (
+                f"non-HTTP bytes before terminal chunk ({len(chunked_raw)}B)"
+            )
+        elif chunked_err:
+            chunked_detail = (
+                "no reply before timeout (server waited for terminal chunk; ok)"
+            )
+        else:
+            chunked_detail = "no reply (inconclusive)"
+
     corroborating_http = static_http_face or login_skin or method_stub or static_200
     header_order_trigger = header_order_hit and corroborating_http and not proxy_result.detected
 
@@ -459,6 +506,21 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             protocol="http",
             detail=first or "(no status line)",
             evidence=text[:600],
+        ),
+        Indicator(
+            id="http.chunked_premature",
+            title="HTTP answers before an unterminated chunked body completes",
+            category="static_signature",
+            triggered=chunked_hit,
+            protocol="http",
+            detail=chunked_detail,
+            evidence=chunked_first[:120],
+            requires_corroboration=True if chunked_hit else False,
+            fidelity="high",
+            remediation=(
+                "Read the full request body (wait for the terminal 0-chunk) "
+                "before emitting a final HTTP status"
+            ),
         ),
         Indicator(
             id="http.dynamic_headers",
