@@ -1,5 +1,9 @@
 def match_http_proxy_lure(text: str) -> str | None:
-    """407 with Via localhost, frozen squid 3.3.8, X-Squid-Error, or ISA deny phrase."""
+    """407 with Via localhost, frozen squid 3.3.8, or ISA deny phrase.
+
+    Real Squid emits ``X-Squid-Error`` on every error page — that header alone
+    is not a lure tell.
+    """
     blob = text or ""
     if not blob.strip():
         return None
@@ -9,8 +13,6 @@ def match_http_proxy_lure(text: str) -> str | None:
         hits.append("Via: localhost")
     if "squid/3.3.8" in low:
         hits.append("frozen squid/3.3.8")
-    if "x-squid-error" in low:
-        hits.append("X-Squid-Error")
     if "web proxy service is denied" in low:
         hits.append("ISA proxy deny phrase")
     return "; ".join(hits) if hits else None

@@ -1,15 +1,18 @@
 """HTTP fingerprint engine.
 
-Strategies: static signature (empty PUT 405, GET / → index.html login skin,
-407 Via localhost, framework 404+session cookie, silent TCP accept/tarpit).
-When GET / returns an empty 404, up to five common admin paths are probed once
-each for a stock login skin (phpMyAdmin /admin /login). Arbitrary auth and state
-non-persistence are not on the basic path. Server banner strings are
-operator-configurable; login skin and empty 405 are the source-hardcoded tells.
+Strategies: arbitrary auth (entropy-varied Basic only after an anonymous
+401/403), state non-persistence (cookie replay rejected, POST body not
+retained), static signature (empty PUT 405, GET / → index.html login skin,
+407 Via localhost, 2xx before an unterminated chunked body completes,
+framework 404+session cookie, silent TCP accept/tarpit). When GET / returns an empty 404,
+up to five common admin paths are probed once each for a stock login skin
+(phpMyAdmin /admin /login). Server banner strings are operator-configurable;
+login skin and empty 405 are the source-hardcoded tells.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 import warnings
 
@@ -25,7 +28,12 @@ from honeypot_auditor.httpwire import parse_header_map as _parse_headers
 from honeypot_auditor.httpwire import parse_header_names
 from honeypot_auditor.models import Indicator, optional_import
 from honeypot_auditor.netutil import closed_reason, tcp_transact
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    entropy_varied_creds,
+    is_safe_mode,
+    jittered_reconnect_pause,
+    skip_suite,
+)
 from honeypot_auditor.proxy_detect import detect_proxy_from_headers
 from honeypot_auditor.proxy_transport import configure_requests_proxy, create_connection
 from honeypot_auditor.settings import settings
@@ -35,7 +43,18 @@ warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 _log = logging.getLogger(__name__)
 
 _HTTP_SKIP = (
+    ("http.arbitrary_auth", "HTTP accepts two entropy-varied Basic pairs on a protected path", "arbitrary_auth"),
+    (
+        "http.state_nonpersist",
+        "HTTP session cookie / POST body is not retained across reconnect",
+        "state_nonpersist",
+    ),
     ("http.malformed_200", "HTTP static 200 OK on malformed POST", "static_signature"),
+    (
+        "http.chunked_premature",
+        "HTTP answers before an unterminated chunked body completes",
+        "static_signature",
+    ),
     ("http.dynamic_headers", "HTTP missing dynamic Date header", "static_signature"),
     ("http.method_stub", "HTTP PUT/DELETE returns empty 405", "static_signature"),
     ("http.login_skin", "HTTP / redirects to a stock login form", "static_signature"),
@@ -48,6 +67,7 @@ _HTTP_SKIP = (
 
 # Follow-up paths when GET / is a bare 404 (common low-interaction HTTP faces).
 _ADMIN_LOGIN_PATHS = ("/phpmyadmin/", "/phpMyAdmin/", "/pma/", "/admin/", "/login")
+_PROTECTED_PATHS = ("/admin", "/login")
 
 
 def _dynamic_header_detail(
@@ -95,6 +115,13 @@ _TLS_PORTS = frozenset({443, 8443})
 
 def _scheme(port: int) -> str:
     return "https" if port in _TLS_PORTS else "http"
+
+
+def _status_code(first: str) -> int:
+    parts = (first or "").split()
+    if len(parts) >= 2 and parts[1].isdigit():
+        return int(parts[1])
+    return 0
 
 
 def _tcp_accepts(host: str, port: int) -> bool:
@@ -307,10 +334,207 @@ def probe_http(host: str, port: int) -> list[Indicator]:
         wildcard_host_hit = bool(wh_text) and " 200 " in wh_first
         wildcard_detail = wh_first or "(no response)"
 
+    # --- premature 2xx to an unterminated chunked POST (gated) ---
+    # The framing so far is legal but the terminal 0-chunk never arrives.
+    # A final 2xx before that chunk means the handler answered without reading
+    # the body. 4xx/5xx may be sent before the body is consumed (RFC 9112) and
+    # are not scored. TLS faces skip the plaintext probe.
+    chunked_hit = False
+    chunked_skipped = bool(tls)
+    chunked_detail = "chunked premature reply not evaluated (TLS face)"
+    chunked_first = ""
+    if not tls:
+        chunked_req = (
+            b"POST / HTTP/1.1\r\n"
+            b"Host: " + host.encode("ascii", "replace") + b"\r\n"
+            b"Content-Type: application/x-www-form-urlencoded\r\n"
+            b"Transfer-Encoding: chunked\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+            b"5\r\nhpa=1\r\n"
+        )
+        chunked_raw, chunked_err = tcp_transact(
+            host, port, chunked_req, recv_first=False
+        )
+        chunked_first = (
+            chunked_raw.decode("latin-1", "replace").split("\r\n", 1)[0]
+            if chunked_raw
+            else ""
+        )
+        chunked_code = _status_code(chunked_first)
+        if 200 <= chunked_code < 300:
+            chunked_hit = True
+            chunked_detail = (
+                f"replied {chunked_first[:60]} before the terminal chunk arrived"
+            )
+        elif chunked_code:
+            chunked_detail = (
+                f"status {chunked_code} before the terminal chunk is an error "
+                f"response (not scored)"
+            )
+        elif chunked_raw:
+            chunked_detail = (
+                f"non-HTTP bytes before terminal chunk ({len(chunked_raw)}B)"
+            )
+        elif chunked_err:
+            chunked_detail = (
+                "no reply before timeout (server waited for terminal chunk; ok)"
+            )
+        else:
+            chunked_detail = "no reply (inconclusive)"
+
     corroborating_http = static_http_face or login_skin or method_stub or static_200
     header_order_trigger = header_order_hit and corroborating_http and not proxy_result.detected
 
+    # --- arbitrary auth: two entropy-varied Basic on /admin or /login ---
+    auth_hit = False
+    auth_detail = "protected-path Basic not accepted for both credential shapes"
+    auth_evidence = ""
+    state_hit = False
+    state_detail = "session/POST state looks retained"
+    state_evidence = ""
+    if not tls:
+        low, high = entropy_varied_creds()
+        protected_path = _PROTECTED_PATHS[0]
+        auth_ok = 0
+        notes: list[str] = []
+        anon_req = (
+            b"GET " + protected_path.encode("ascii") + b" HTTP/1.1\r\n"
+            b"Host: " + host.encode("ascii", "replace") + b"\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+        )
+        anon_raw, _ = tcp_transact(host, port, anon_req, recv_first=False)
+        anon_first = (
+            anon_raw.decode("latin-1", "replace").split("\r\n", 1)[0] if anon_raw else ""
+        )
+        anon_code = _status_code(anon_first)
+        if anon_code not in (401, 403):
+            auth_detail = (
+                f"anonymous GET {protected_path} returned {anon_code or 'no-status'}; "
+                f"not an authentication challenge"
+            )
+            auth_evidence = anon_first[:80]
+        else:
+            notes.append(f"anonymous {protected_path}: {anon_code}")
+        for idx, (user, password) in enumerate((low, high)):
+            if anon_code not in (401, 403):
+                break
+            token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
+            # Optional header casing permutation as evidence only.
+            auth_name = b"Authorization" if idx == 0 else b"authorization"
+            areq = (
+                b"GET " + protected_path.encode("ascii") + b" HTTP/1.1\r\n"
+                b"Host: " + host.encode("ascii", "replace") + b"\r\n"
+                + auth_name + b": Basic " + token.encode("ascii") + b"\r\n"
+                b"Connection: close\r\n"
+                b"\r\n"
+            )
+            araw, _ = tcp_transact(host, port, areq, recv_first=False)
+            afirst = araw.decode("latin-1", "replace").split("\r\n", 1)[0] if araw else ""
+            if " 200 " in afirst:
+                auth_ok += 1
+                notes.append(f"{user}@{protected_path}: 200")
+            else:
+                notes.append(f"{user}@{protected_path}: {afirst[:40] or 'no-status'}")
+        if anon_code in (401, 403):
+            auth_hit = auth_ok >= 2
+            auth_detail = (
+                f"anonymous GET {protected_path} was {anon_code}; two entropy-varied Basic "
+                f"pairs both returned 200"
+                if auth_hit
+                else "; ".join(notes)
+            )
+            auth_evidence = "; ".join(notes)
+
+        # --- state: cookie honor / POST body retention ---
+        cookie = ""
+        for hk, hv in (get_headers or header_map).items():
+            if hk.lower() == "set-cookie":
+                cookie = hv.split(";", 1)[0].strip()
+                break
+        if not cookie and text:
+            for line in text.split("\r\n"):
+                if line.lower().startswith("set-cookie:"):
+                    cookie = line.split(":", 1)[1].split(";", 1)[0].strip()
+                    break
+
+        if cookie:
+            jittered_reconnect_pause()
+            creq = (
+                b"GET / HTTP/1.1\r\n"
+                b"Host: " + host.encode("ascii", "replace") + b"\r\n"
+                b"Cookie: " + cookie.encode("latin-1", "replace") + b"\r\n"
+                b"Connection: close\r\n"
+                b"\r\n"
+            )
+            craw, _ = tcp_transact(host, port, creq, recv_first=False)
+            ctext = craw.decode("latin-1", "replace")
+            # Not honored: new Set-Cookie / login skin again / 401 ignoring cookie.
+            c_first = ctext.split("\r\n", 1)[0] if ctext else ""
+            # A new Set-Cookie is normal session rotation. The lie is rejecting
+            # the cookie the server just issued.
+            if _status_code(c_first) in (401, 403):
+                state_hit = True
+                state_detail = "session cookie ignored (401/403 on reconnect)"
+            state_evidence = cookie[:80]
+        else:
+            # POST small body then GET — façade accepts POST but state vanishes.
+            post_body = b"hpa=1"
+            preq = (
+                b"POST / HTTP/1.1\r\n"
+                b"Host: " + host.encode("ascii", "replace") + b"\r\n"
+                b"Content-Type: application/x-www-form-urlencoded\r\n"
+                b"Content-Length: " + str(len(post_body)).encode("ascii") + b"\r\n"
+                b"Connection: close\r\n"
+                b"\r\n" + post_body
+            )
+            praw, _ = tcp_transact(host, port, preq, recv_first=False)
+            pfirst = praw.decode("latin-1", "replace").split("\r\n", 1)[0] if praw else ""
+            if any(code in pfirst for code in (" 200 ", " 201 ", " 204 ", " 302 ")):
+                jittered_reconnect_pause()
+                greq = (
+                    b"GET / HTTP/1.1\r\n"
+                    b"Host: " + host.encode("ascii", "replace") + b"\r\n"
+                    b"Connection: close\r\n"
+                    b"\r\n"
+                )
+                graw, _ = tcp_transact(host, port, greq, recv_first=False)
+                gtext = graw.decode("latin-1", "replace")
+                if post_body.decode() not in gtext and b"hpa" not in graw:
+                    # Accepted POST with no residual state is expected for static faces;
+                    # hit only when POST was 200 and GET is an identical canned page
+                    # (no session side-effect) *and* we previously saw a success facade.
+                    if praw and graw and _parse_headers(praw.decode("latin-1", "replace")) == _parse_headers(
+                        gtext
+                    ):
+                        state_hit = True
+                        state_detail = "POST body accepted then GET missed any session side-effect"
+                        state_evidence = pfirst[:80]
+
     indicators = [
+        Indicator(
+            id="http.arbitrary_auth",
+            title="HTTP accepts two entropy-varied Basic pairs on a protected path",
+            category="arbitrary_auth",
+            triggered=auth_hit,
+            protocol="http",
+            detail=auth_detail,
+            evidence=auth_evidence,
+            fidelity="decisive" if auth_hit else "medium",
+            remediation="Reject unknown Basic credentials on /admin and /login",
+        ),
+        Indicator(
+            id="http.state_nonpersist",
+            title="HTTP session cookie / POST body is not retained across reconnect",
+            category="state_nonpersist",
+            triggered=state_hit,
+            protocol="http",
+            detail=state_detail,
+            evidence=state_evidence,
+            fidelity="high" if state_hit else "medium",
+            remediation="Honor Set-Cookie sessions across reconnects; retain accepted POST state",
+        ),
         Indicator(
             id="http.malformed_200",
             title="HTTP static 200 OK on malformed POST",
@@ -319,6 +543,23 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             protocol="http",
             detail=first or "(no status line)",
             evidence=text[:600],
+        ),
+        Indicator(
+            id="http.chunked_premature",
+            title="HTTP answers before an unterminated chunked body completes",
+            category="static_signature",
+            triggered=chunked_hit,
+            skipped=chunked_skipped,
+            skip_reason=chunked_detail if chunked_skipped else "",
+            protocol="http",
+            detail=chunked_detail,
+            evidence=chunked_first[:120],
+            requires_corroboration=True if chunked_hit else False,
+            fidelity="high",
+            remediation=(
+                "Read the full request body (wait for the terminal 0-chunk) "
+                "before emitting a final HTTP status"
+            ),
         ),
         Indicator(
             id="http.dynamic_headers",

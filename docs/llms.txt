@@ -82,4 +82,6 @@ Always require authorization for non-private targets (`--confirm-authorized`). N
 - Elasticsearch probe guide (HTTP API non-compliance strategies): https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md
 - IPP/CUPS probe guide: https://mziqudhd92.github.io/honeypot-auditor/IPP.md
 - Memcached probe guide (ASCII non-compliance): https://mziqudhd92.github.io/honeypot-auditor/MEMCACHED.md
+- HTTP probe guide (decoy-web tells incl. chunked premature reply): https://mziqudhd92.github.io/honeypot-auditor/HTTP.md
+- SIP probe guide (transaction coherence: Via/CSeq echo, fake Digest): https://mziqudhd92.github.io/honeypot-auditor/SIP.md
 - Scoring reference: https://mziqudhd92.github.io/honeypot-auditor/SCORING.md

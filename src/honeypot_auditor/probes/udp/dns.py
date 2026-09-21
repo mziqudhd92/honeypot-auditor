@@ -1,22 +1,32 @@
 """DNS fingerprint engine (RFC 1035 + light RFC 6891 EDNS0).
 
-RFC non-compliance strategies (non-destructive QUERY only — never AXFR/ANY flood):
+RFC non-compliance strategies (non-destructive QUERY only — never AXFR/UPDATE/ANY flood):
+  · arbitrary_auth — two entropy-varied private-label / bogus-TLD queries both NOERROR
+  · state_nonpersist — bitwise-identical positive answer · answer-section SOA serial
+    frozen · AA/TTL contradiction (authority SOA on NXDOMAIN is not a freeze)
   · static_signature — header framing, txid echo, OPCODE facade, question echo,
     RCODE stub on .invalid, response clone, 0x20 case mismatch (gated),
     EDNS FORMERR on valid OPT, stock TXT/SOA lure tokens (gated)
 
-UDP/53 (lab 15353). See docs/udp/DNS.md.
+UDP/53 (lab 15353). See docs/udp/DNS.md. Budget ≤8 UDP exchanges.
 """
 
 from __future__ import annotations
 
+import re
 import secrets
 import struct
 from dataclasses import dataclass
 
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason, udp_exchange
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    entropy_varied_creds,
+    is_safe_mode,
+    jittered_reconnect_pause,
+    rtt_evidence,
+    skip_suite,
+)
 from honeypot_auditor.probes.udp._engine import UDPEngine
 
 OPCODE_QUERY = 0
@@ -32,9 +42,34 @@ CLASS_IN = 1
 
 RCODE_NOERROR = 0
 RCODE_FORMERR = 1
+RCODE_SERVFAIL = 2
 RCODE_NXDOMAIN = 3
+RCODE_NOTIMP = 4
+RCODE_REFUSED = 5
+
+# Illegal/reserved OPCODE replies that real resolvers emit (RFC 1035 §4.1.1).
+# Only NOERROR (answered as a normal QUERY) is a façade tell.
+_CLEAN_ILLEGAL_OPCODE_RCODES = frozenset(
+    {
+        RCODE_FORMERR,
+        RCODE_SERVFAIL,
+        RCODE_NXDOMAIN,
+        RCODE_NOTIMP,
+        RCODE_REFUSED,
+    }
+)
 
 _DNS_SKIP = (
+    (
+        "dns.arbitrary_auth",
+        "DNS returns NOERROR for two entropy-varied private-label queries",
+        "arbitrary_auth",
+    ),
+    (
+        "dns.state_nonpersist",
+        "DNS answer state is frozen or contradictory across re-query",
+        "state_nonpersist",
+    ),
     (
         "dns.header_framing",
         "DNS response header framing is invalid",
@@ -73,6 +108,11 @@ _DNS_SKIP = (
     (
         "dns.edns_facade",
         "DNS mishandles a valid EDNS0 OPT pseudo-RR",
+        "static_signature",
+    ),
+    (
+        "dns.length_incoherence",
+        "DNS message length disagrees with its declared sections",
         "static_signature",
     ),
     (
@@ -124,6 +164,8 @@ class DnsMessage:
     additionals: tuple[DnsRR, ...]
     has_opt: bool
     raw_question: bytes
+    authority: tuple[DnsRR, ...] = ()
+    end_pos: int = -1
 
 
 def pack_header(
@@ -281,11 +323,9 @@ def parse_dns_message(data: bytes) -> DnsMessage | None:
     answers, pos, _ = _parse_rrs(data, pos, ancount)
     if pos < 0:
         return None
-    _auth, pos, _ = _parse_rrs(data, pos, nscount)
+    authority, pos, _ = _parse_rrs(data, pos, nscount)
     if pos < 0:
         return None
-    # Fold authority into answers for stock scanning.
-    answers = answers + _auth
     additionals, pos, has_opt = _parse_rrs(data, pos, arcount)
     if pos < 0:
         return None
@@ -308,9 +348,11 @@ def parse_dns_message(data: bytes) -> DnsMessage | None:
         qtype=qtype,
         qclass=qclass,
         answers=answers,
+        authority=authority,
         additionals=additionals,
         has_opt=has_opt,
         raw_question=raw_question,
+        end_pos=pos,
     )
 
 
@@ -361,6 +403,7 @@ def build_response(
     aa: bool = False,
     ra: bool = True,
     answers: tuple[DnsRR, ...] = (),
+    authority: tuple[DnsRR, ...] = (),
     txid_override: int | None = None,
     qr: int = 1,
     echo_question: bool = True,
@@ -376,6 +419,7 @@ def build_response(
         question = b""
         qdcount = 0
     an_bytes = b"".join(_encode_rr(rr) for rr in answers)
+    ns_bytes = b"".join(_encode_rr(rr) for rr in authority)
     header = pack_header(
         txid,
         qr=qr,
@@ -386,8 +430,9 @@ def build_response(
         rcode=rcode,
         qdcount=qdcount,
         ancount=len(answers),
+        nscount=len(authority),
     )
-    return header + question + an_bytes
+    return header + question + an_bytes + ns_bytes
 
 
 def attach_additional(message: bytes, additionals: tuple[DnsRR, ...]) -> bytes:
@@ -442,6 +487,57 @@ def _rr_text(rr: DnsRR) -> str:
     if rr.rtype == TYPE_SOA:
         return rr.rdata.decode("utf-8", "replace")
     return rr.rdata.decode("utf-8", "replace")
+
+
+def _dns_label(token: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9-]", "", token.lower())[:20] or "hpa"
+    return f"hpa-{safe}-{secrets.token_hex(2)}"
+
+
+def _auth_qnames() -> tuple[str, str]:
+    low, high = entropy_varied_creds()
+    # Both names stay under .invalid. .test is a real internal zone in many labs.
+    return f"{_dns_label(low[0])}.invalid", f"{_dns_label(high[0])}.invalid"
+
+
+def _soa_serial(rr: DnsRR) -> int | None:
+    """Extract SOA SERIAL from wire rdata (skip two domain names, then u32)."""
+    if rr.rtype != TYPE_SOA or len(rr.rdata) < 22:
+        return None
+    pos = 0
+    data = rr.rdata
+    for _ in range(2):
+        while pos < len(data):
+            length = data[pos]
+            if length == 0:
+                pos += 1
+                break
+            if length & 0xC0 == 0xC0:
+                pos += 2
+                break
+            pos += 1 + length
+        else:
+            return None
+    if pos + 4 > len(data):
+        return None
+    return struct.unpack_from("!I", data, pos)[0]
+
+
+def _has_static_answer(msg: DnsMessage) -> bool:
+    """NOERROR with a positive answer section.
+
+    Authority SOA on NOERROR is NODATA, and on NXDOMAIN it is the negative
+    cache. Neither is a fabricated answer.
+    """
+    if msg.rcode != RCODE_NOERROR or msg.ancount <= 0:
+        return False
+    return any(rr.rtype != TYPE_OPT for rr in msg.answers)
+
+
+def _payload_sans_txid(data: bytes) -> bytes:
+    if len(data) < 2:
+        return data
+    return data[2:]
 
 
 def probe_dns(host: str, port: int) -> list[Indicator]:
@@ -566,16 +662,17 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
 
     # --- stock lure in answers ---
     lure_match = ""
-    for rr in base_msg.answers:
+    for rr in (*base_msg.answers, *base_msg.authority):
         lure_match = _stock_hit(_rr_text(rr))
         if lure_match:
             break
     stock_hit = bool(lure_match)
 
     # --- illegal OPCODE facade ---
-    # Conformant resolvers typically *drop* reserved OPCODEs (surfaces as UDP
-    # timeout). That is a clean non-hit — not a skipped probe. Only score when
-    # the peer answers as a normal QUERY (or FORMERR, which we treat as ok).
+    # Conformant peers drop reserved OPCODEs (UDP timeout) or return FORMERR /
+    # NOTIMP / REFUSED. Public resolvers may also NXDOMAIN the QNAME. Only a
+    # NOERROR reply counts as "answered as a normal QUERY" — NOTIMP (8.8.8.8)
+    # and NXDOMAIN (1.1.1.1) must stay clean.
     fac_txid = (base_txid + 1) % 0x10000 or 1
     fac_payload = build_query(qname, txid=fac_txid, rd=True, opcode=OPCODE_ILLEGAL)
     fac_ex = _exchange(host, port, fac_payload)
@@ -583,16 +680,24 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
     facade_detail = "illegal OPCODE unanswered (ok)"
     if fac_ex.data:
         fac_msg = parse_dns_message(fac_ex.data)
-        if fac_msg is not None and fac_msg.qr == 1 and fac_msg.rcode != RCODE_FORMERR:
+        if fac_msg is not None and fac_msg.qr == 1 and fac_msg.rcode == RCODE_NOERROR:
             facade_hit = True
             facade_detail = (
                 f"illegal OPCODE={OPCODE_ILLEGAL} answered "
-                f"rcode={fac_msg.rcode} qr={fac_msg.qr}"
+                f"rcode=0 (NOERROR) qr=1"
             )
-        elif fac_msg is not None and fac_msg.rcode == RCODE_FORMERR:
-            facade_detail = "FORMERR for illegal OPCODE (ok)"
+        elif fac_msg is not None and fac_msg.rcode in _CLEAN_ILLEGAL_OPCODE_RCODES:
+            facade_detail = (
+                f"illegal OPCODE={OPCODE_ILLEGAL} answered "
+                f"rcode={fac_msg.rcode} (ok; not a QUERY success)"
+            )
         elif fac_msg is None:
             facade_detail = "unparseable reply to illegal OPCODE (inconclusive)"
+        elif fac_msg is not None:
+            facade_detail = (
+                f"illegal OPCODE={OPCODE_ILLEGAL} answered "
+                f"rcode={fac_msg.rcode} qr={fac_msg.qr} (ok)"
+            )
     elif fac_ex.error:
         facade_detail = f"illegal OPCODE unanswered ({closed_reason(fac_ex.error)}; ok)"
 
@@ -646,9 +751,117 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
     # stock always gated in v1 (weak lure tokens).
     stock_requires = True
 
-    rtt_note = f"baseline_rtt_ms={base_ex.rtt_ms:.2f}"
+    # --- message length vs declared sections (trailing slack) ---
+    # A conformant encoder emits exactly header + question + declared sections;
+    # trailing pad bytes or miscounted section lengths are canned-responder tells
+    # (BIND/Unbound never pad unless an EDNS0 PAD option was requested).
+    slack_notes: list[str] = []
+    slack_hit = False
+    for label, ex in (("base", base_ex), ("clone", clone_ex)):
+        if not ex.data:
+            continue
+        m = parse_dns_message(ex.data)
+        if m is None or m.end_pos < 0:
+            continue
+        slack = len(ex.data) - m.end_pos
+        if slack > 0:
+            slack_hit = True
+            slack_notes.append(
+                f"{label}: {slack} trailing byte(s) (len={len(ex.data)} parsed={m.end_pos})"
+            )
+        else:
+            slack_notes.append(f"{label}: exact length")
+
+    # --- arbitrary auth: two entropy-varied private-label / bogus-TLD queries ---
+    # Exchanges so far: base, facade, clone, edns (=4). Auth + state add ≤3 → total ≤7.
+    auth_q1, auth_q2 = _auth_qnames()
+    auth_ok = 0
+    auth_notes: list[str] = []
+    auth_rtts: list[float] = []
+    for aq in (auth_q1, auth_q2):
+        atxid = secrets.randbelow(0x10000) or 1
+        aex = _exchange(host, port, build_query(aq, txid=atxid, rd=True))
+        auth_rtts.append(aex.rtt_ms)
+        amsg = parse_dns_message(aex.data) if aex.data else None
+        if amsg is not None and amsg.qr == 1 and _has_static_answer(amsg):
+            auth_ok += 1
+            auth_notes.append(f"{aq}: NOERROR answers/SOA")
+        elif amsg is not None and amsg.rcode in (RCODE_NXDOMAIN, RCODE_REFUSED):
+            auth_notes.append(f"{aq}: rcode={amsg.rcode}")
+        elif amsg is not None:
+            auth_notes.append(f"{aq}: rcode={amsg.rcode} ancount={amsg.ancount}")
+        else:
+            auth_notes.append(f"{aq}: unanswered/unparseable")
+    auth_hit = auth_ok >= 2
+    auth_detail = (
+        "two entropy-varied private-label queries both returned NOERROR with answers/SOA"
+        if auth_hit
+        else "; ".join(auth_notes)
+    )
+
+    # --- state: re-query same baseline QNAME after jitter ---
+    jittered_reconnect_pause()
+    state_txid = (base_txid + 7) % 0x10000 or 7
+    state_ex = _exchange(host, port, build_query(qname, txid=state_txid, rd=True))
+    state_msg = parse_dns_message(state_ex.data) if state_ex.data else None
+    state_hit = False
+    state_detail = "re-query answer state looks dynamic"
+    if state_msg is not None and state_msg.qr == 1 and state_ex.data:
+        # Answer-section SOA only. Authority SOA on NXDOMAIN/NODATA is stable
+        # on every conforming resolver and is not a frozen-clock tell.
+        serials_a = [s for s in (_soa_serial(rr) for rr in base_msg.answers) if s is not None]
+        serials_b = [s for s in (_soa_serial(rr) for rr in state_msg.answers) if s is not None]
+        if serials_a and serials_b and serials_a[0] == serials_b[0]:
+            state_hit = True
+            state_detail = f"frozen SOA serial {serials_a[0]} across re-query"
+        elif (
+            (base_msg.ancount > 0 or bool(serials_a))
+            and _payload_sans_txid(base_ex.data) == _payload_sans_txid(state_ex.data)
+        ):
+            state_hit = True
+            state_detail = "bitwise-identical answer payload across re-query (ignoring txid)"
+        else:
+            # AA / TTL contradiction
+            ttls_a = [rr.ttl for rr in base_msg.answers if rr.rtype != TYPE_OPT]
+            ttls_b = [rr.ttl for rr in state_msg.answers if rr.rtype != TYPE_OPT]
+            aa_flip = base_msg.aa != state_msg.aa
+            ttl_up = bool(ttls_a and ttls_b and ttls_b[0] > ttls_a[0])
+            if aa_flip or ttl_up:
+                state_hit = True
+                state_detail = (
+                    f"AA/TTL contradiction: aa {base_msg.aa}->{state_msg.aa} "
+                    f"ttl {ttls_a[:1]}->{ttls_b[:1]}"
+                )
+    elif state_ex.error and not state_ex.data:
+        state_detail = f"re-query unanswered ({closed_reason(state_ex.error)})"
+
+    rtt_note = rtt_evidence(base_ex.rtt_ms, *auth_rtts, state_ex.rtt_ms) or (
+        f"baseline_rtt_ms={base_ex.rtt_ms:.2f}"
+    )
 
     return [
+        Indicator(
+            id="dns.arbitrary_auth",
+            title="DNS returns NOERROR for two entropy-varied private-label queries",
+            category="arbitrary_auth",
+            triggered=auth_hit,
+            protocol="dns",
+            detail=auth_detail,
+            evidence=f"{auth_q1};{auth_q2}",
+            remediation="Return NXDOMAIN/REFUSED for nonexistent private-label / reserved TLDs",
+            fidelity="decisive" if auth_hit else "medium",
+        ),
+        Indicator(
+            id="dns.state_nonpersist",
+            title="DNS answer state is frozen or contradictory across re-query",
+            category="state_nonpersist",
+            triggered=state_hit,
+            protocol="dns",
+            detail=state_detail,
+            evidence=rtt_note,
+            remediation="Advance SOA serials and vary TTLs; do not replay identical answer blobs",
+            fidelity="high" if state_hit else "medium",
+        ),
         Indicator(
             id="dns.header_framing",
             title="DNS response header framing is invalid",
@@ -679,7 +892,7 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
             protocol="dns",
             detail=facade_detail,
             evidence=fac_ex.data[:128].hex() if fac_ex.data else "",
-            remediation="Drop or FORMERR reserved/illegal OPCODEs",
+            remediation="Drop, FORMERR, or NOTIMP reserved/illegal OPCODEs",
             fidelity="high",
         ),
         Indicator(
@@ -765,6 +978,20 @@ def probe_dns(host: str, port: int) -> list[Indicator]:
             )
         ),
         Indicator(
+            id="dns.length_incoherence",
+            title="DNS message length disagrees with its declared sections",
+            category="static_signature",
+            triggered=slack_hit,
+            protocol="dns",
+            detail="; ".join(slack_notes) if slack_notes else "message lengths not evaluated",
+            evidence=f"base_len={len(base_ex.data)} clone_len={len(clone_ex.data or b'')}",
+            remediation=(
+                "Encode responses with byte-exact section lengths; never pad or "
+                "miscount ANCOUNT/ARCOUNT payloads (RFC 1035 §4.1)"
+            ),
+            fidelity="high" if slack_hit else "medium",
+        ),
+        Indicator(
             id="dns.stock_payload",
             title="DNS answer/authority rdata matches a stock honeypot lure",
             category="static_signature",
@@ -789,7 +1016,10 @@ __all__ = [
     "OPCODE_QUERY",
     "RCODE_FORMERR",
     "RCODE_NOERROR",
+    "RCODE_NOTIMP",
     "RCODE_NXDOMAIN",
+    "RCODE_REFUSED",
+    "RCODE_SERVFAIL",
     "TYPE_A",
     "TYPE_OPT",
     "TYPE_SOA",

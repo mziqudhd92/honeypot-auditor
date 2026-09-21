@@ -10,6 +10,8 @@ from honeypot_auditor.probes import PROBE_BY_PROTOCOL
 from honeypot_auditor.settings import settings
 
 _IPP_IDS = (
+    "ipp.arbitrary_auth",
+    "ipp.state_nonpersist",
     "ipp.root_framing",
     "ipp.server_header",
     "ipp.path_facade",
@@ -27,6 +29,7 @@ _IPP_IDS = (
 
 _DATE_A = "Wed, 01 Jan 2020 00:00:00 GMT"
 _DATE_B = "Thu, 02 Jan 2020 12:00:00 GMT"
+_FIXED_CREDS = (("probeuser10", "probepass79"), ("hpa_highentropyuser0001", "HighEntropyPassw0rd!!!!!!!!"))
 
 
 def _http_bytes(
@@ -83,6 +86,7 @@ def _conformant_tcp(host, port, payload=b"", **kwargs):
     if first.startswith("GET /printers"):
         return _http_bytes(200, _PRINTERS, headers={**base_hdrs, "Date": _DATE_B}), ""
     if first.startswith("GET /admin"):
+        # Reject both anon and bogus Basic (real CUPS challenges unknown creds).
         return (
             _http_bytes(
                 401,
@@ -144,7 +148,11 @@ def test_ipp_helper_shapes():
 
 
 def test_ipp_conformant_cups_is_clean():
-    with patch.object(ipp, "tcp_transact", side_effect=_conformant_tcp):
+    with (
+        patch.object(ipp, "tcp_transact", side_effect=_conformant_tcp),
+        patch.object(ipp, "entropy_varied_creds", return_value=_FIXED_CREDS),
+        patch.object(ipp, "jittered_reconnect_pause", return_value=0.0),
+    ):
         inds = ipp.probe_ipp("127.0.0.1", 631)
     assert {i.id for i in inds} == set(_IPP_IDS)
     assert not any(i.triggered for i in inds)
@@ -179,8 +187,11 @@ def test_ipp_safe_mode_framing_only():
         with patch.object(ipp, "tcp_transact", side_effect=_conformant_tcp):
             inds = ipp.probe_ipp("127.0.0.1", 631)
         by_id = {i.id: i for i in inds}
+        assert {i.id for i in inds} == set(_IPP_IDS)
         assert not by_id["ipp.root_framing"].triggered
         assert not by_id["ipp.root_framing"].skipped
+        assert by_id["ipp.arbitrary_auth"].skipped
+        assert by_id["ipp.state_nonpersist"].skipped
         assert all(i.skipped for i in inds if i.id != "ipp.root_framing")
     finally:
         settings.safe_mode = old
@@ -632,3 +643,67 @@ def test_ipp_registry_and_ports():
     both = probe_port_map("both")
     assert 631 in both["ipp"]
     assert 1631 in both["ipp"]
+
+
+def test_ipp_arbitrary_auth_dual_basic():
+    def _auth(host, port, payload=b"", **kwargs):
+        del host, port, kwargs
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        has_auth = "authorization:" in text.lower()
+        if first.startswith("GET /admin") and has_auth:
+            return (
+                _http_bytes(200, _ADMIN, headers={"Server": "CUPS/2.4.2", "Date": _DATE_B}),
+                "",
+            )
+        return _conformant_tcp("127.0.0.1", 631, payload)
+
+    with (
+        patch.object(ipp, "tcp_transact", side_effect=_auth),
+        patch.object(ipp, "entropy_varied_creds", return_value=_FIXED_CREDS),
+        patch.object(ipp, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = ipp.probe_ipp("127.0.0.1", 631)
+    auth = {i.id: i for i in inds}["ipp.arbitrary_auth"]
+    assert auth.triggered
+    assert auth.fidelity == "decisive"
+    assert auth.category == "arbitrary_auth"
+
+
+def test_ipp_state_nonpersist_illegal_op():
+    def _bad(host, port, payload=b"", **kwargs):
+        del host, port, kwargs
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("POST "):
+            _, _, body = payload.partition(b"\r\n\r\n")
+            rid = int.from_bytes(body[4:8], "big") if len(body) >= 8 else 1
+            op = int.from_bytes(body[2:4], "big") if len(body) >= 4 else 0
+            if op == 0x7FFF:
+                ipp_body = _ipp_reply(0x0000, rid)
+            else:
+                ipp_body = _ipp_reply(0x0406, rid)
+            return (
+                _http_bytes(
+                    200,
+                    ipp_body,
+                    headers={
+                        "Server": "CUPS/2.4.2",
+                        "Content-Type": "application/ipp",
+                        "Date": _DATE_B,
+                    },
+                ),
+                "",
+            )
+        return _conformant_tcp("127.0.0.1", 631, payload)
+
+    with (
+        patch.object(ipp, "tcp_transact", side_effect=_bad),
+        patch.object(ipp, "entropy_varied_creds", return_value=_FIXED_CREDS),
+        patch.object(ipp, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = ipp.probe_ipp("127.0.0.1", 631)
+    by_id = {i.id: i for i in inds}
+    assert by_id["ipp.illegal_op"].triggered
+    assert by_id["ipp.state_nonpersist"].triggered
+    assert by_id["ipp.state_nonpersist"].category == "state_nonpersist"

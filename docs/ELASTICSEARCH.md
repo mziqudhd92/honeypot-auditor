@@ -10,14 +10,14 @@ rely on banner IOC lists alone, and it never writes indices or searches data.
 
 ## Strategies
 
-Elasticsearch activates **one** of the three basic scoring strategies
+Elasticsearch activates **all three** basic scoring strategies
 (`PROTOCOL_STRATEGIES["elasticsearch"]`):
 
 | Strategy | Why it applies to Elasticsearch |
 |----------|----------------------------------|
-| **static_signature** | Primary axis. Decoy “ES” faces are almost always canned HTTP handlers: wrong root shape, stock `cluster_name` / `cluster_uuid` / version, **200** on missing indices, unknown paths that return the root JSON, DELETE/PUT/HEAD that ignore the verb, `/_cluster/health` and `/_cat/health` that echo root instead of health/cat shapes, non-JSON `Content-Type`, or missing `X-Elastic-Product` on modern versions. |
-| **arbitrary_auth** | **Not used** on the basic read-only path. No password spraying against `_security` / basic-auth realms (would be noisy and out of the non-destructive policy). |
-| **state_nonpersist** | **Not used.** There is no session resume, mailbox, or message bus to contradict — only request/response HTTP API fidelity. |
+| **arbitrary_auth** | Anonymous `GET /` is **401/403**, then two entropy-varied Basic headers both return the ES root. An already-open root (anonymous 200) is not a bypass. Indicator: `elasticsearch.arbitrary_auth`. |
+| **static_signature** | Decoy “ES” faces are almost always canned HTTP handlers: wrong root shape, stock `cluster_name` / `cluster_uuid` / version, **200** on missing indices, unknown paths that return the root JSON, DELETE/PUT/HEAD that ignore the verb, `/_cluster/health` and `/_cat/health` that echo root instead of health/cat shapes, non-JSON `Content-Type`, JSON-only replies to `Accept: application/yaml` (gated — real ES negotiates YAML natively), or missing `X-Elastic-Product` on modern versions. |
+| **state_nonpersist** | After reconnect, `GET /` cluster UUID/version mismatches `/_nodes` or `/_cluster/health`. Indicator: `elasticsearch.state_nonpersist`. |
 
 Detection philosophy:
 
@@ -31,8 +31,15 @@ Detection philosophy:
    (`status` ∈ green/yellow/red, node counts); `/_cat/health?format=json` must be
    a JSON **array** (or plain cat text), not the root object.
 4. **Transport headers** — JSON bodies should advertise a JSON `Content-Type`;
-   versions ≥ 7.14 should send `X-Elastic-Product: Elasticsearch`.
-5. **Lure metadata last** — decisive lure tokens (honeypot names, frozen EOL
+   versions ≥ 7.14 should send `X-Elastic-Product: Elasticsearch`. A `GET /`
+   with `Accept: application/yaml` must be answered in YAML (content
+   negotiation facade, corroboration-gated for JSON-normalizing proxies).
+5. **Dual Basic façade** — anonymous `GET /` must challenge (401/403) and both
+   entropy-varied Basic headers then return the ES root to score
+   `elasticsearch.arbitrary_auth`. An already-open anonymous root is not a bypass.
+6. **Cluster identity drift** — root metadata that contradicts `/_nodes` or
+   `/_cluster/health` after reconnect scores `elasticsearch.state_nonpersist`.
+7. **Lure metadata last** — decisive lure tokens (honeypot names, frozen EOL
    versions, canned UUIDs like `deadbeef`) score alone. Generic names
    (`elasticsearch`, `docker-cluster`, …), still-deployed release numbers
    (`7.17.0`, `8.0.0`, …), and short/truncated UUIDs set
@@ -44,9 +51,10 @@ Detection philosophy:
 | Allowed | Never done |
 |---------|------------|
 | `GET /` root cluster document | Index create / bulk index / delete-by-query |
+| `GET /` with two entropy-varied Basic headers | Password dictionary spray / `_security` user changes |
 | `GET /<random-index>` | Snapshot / ILM / security user changes |
 | `GET /_hpa_nonexistent_*` | `_search` / scroll that could hit real data |
-| `GET /_cluster/health` | Cluster settings / reroute writes |
+| `GET /_cluster/health`, `GET /_nodes` | Cluster settings / reroute writes |
 | `GET /_cat/health?format=json` | Cat APIs that dump index contents |
 | `DELETE` / `PUT` / `HEAD` on `/` only | Writes to named indices or templates |
 
@@ -66,20 +74,33 @@ GET /  ──►  root JSON framing (version + tagline/cluster)
         ├─ safe-mode ──► stop (framing only)
         │
         ├─ Content-Type JSON? → content_type
+        ├─ Accept: application/yaml → content_negotiation (gated)
         ├─ stock cluster/name/tagline/version/uuid → stock_cluster
         ├─ GET /hpa-audit-<token> → missing_index_ok
         ├─ GET /_hpa_nonexistent_* → path_facade
         ├─ DELETE / · PUT / · HEAD / → method_stub
         ├─ GET /_cluster/health → cluster_health_stub
         ├─ GET /_cat/health?format=json → cat_stub
-        └─ X-Elastic-Product vs version ≥ 7.14 → product_header
+        ├─ X-Elastic-Product vs version ≥ 7.14 → product_header
+        ├─ anon 401/403 then dual Basic on GET / → arbitrary_auth
+        └─ /_nodes + /_cluster/health vs root → state_nonpersist
 ```
 
 ## Indicators
 
-All indicators are category **`static_signature`**.
+### Arbitrary auth / Basic façade
 
-### Speakership / framing
+| ID | Category | Trigger |
+|----|----------|---------|
+| `elasticsearch.arbitrary_auth` | arbitrary_auth | Anonymous `GET /` challenged 401/403, then two entropy-varied Basic credentials both return the root. Fidelity **decisive** when hit. |
+
+### State non-persistence
+
+| ID | Category | Trigger |
+|----|----------|---------|
+| `elasticsearch.state_nonpersist` | state_nonpersist | After reconnect, root cluster UUID/version mismatches `/_nodes` or `/_cluster/health`. Fidelity **high** when hit. Denied/unavailable node/health endpoints are **skipped**. |
+
+### Speakership / framing (static_signature)
 
 | ID | Strategy role | Trigger |
 |----|---------------|---------|
@@ -106,13 +127,14 @@ All indicators are category **`static_signature`**.
 | ID | Strategy role | Trigger |
 |----|---------------|---------|
 | `elasticsearch.content_type` | Header facade | JSON root body served with a non-JSON `Content-Type` (e.g. `text/html`). |
+| `elasticsearch.content_negotiation` | Header facade | `Accept: application/yaml` still answered with JSON — real ES negotiates YAML natively (corroboration-gated for JSON-normalizing proxies; 406 is a skip). |
 | `elasticsearch.product_header` | Header facade | Claimed version ≥ 7.14 without `X-Elastic-Product: Elasticsearch`. Older versions that omit the header are **skipped** (inconclusive). |
 
 ## Safe mode
 
 `--safe-mode` / `safe_mode`: only root framing on `GET /` is evaluated.
-Missing-index, path, method, health, cat, Content-Type, product-header, and stock
-metadata probes are skipped.
+Missing-index, path, method, health, cat, Content-Type, yaml negotiation,
+product-header, stock metadata, dual-Basic auth, and state probes are skipped.
 
 ## Example
 
@@ -133,7 +155,8 @@ honeypot-auditor --target 127.0.0.1 -p 19200 -v
 
 ## Scoring
 
-`PROTOCOL_STRATEGIES["elasticsearch"]` activates **static_signature** only.
-High-signal examples when triggered: `missing_index_ok`, `path_facade`,
-`method_stub`, `cluster_health_stub`, `cat_stub` (`high`). Stock cluster names
-may require corroboration. See [`SCORING.md`](SCORING.md).
+`PROTOCOL_STRATEGIES["elasticsearch"]` activates **all three** basic strategies.
+High-signal examples when triggered: `elasticsearch.arbitrary_auth` (`decisive`);
+`elasticsearch.state_nonpersist`, `missing_index_ok`, `path_facade`, `method_stub`,
+`cluster_health_stub`, `cat_stub` (`high`). Stock cluster names may require
+corroboration. See [`SCORING.md`](SCORING.md).

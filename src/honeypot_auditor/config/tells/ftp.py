@@ -35,6 +35,8 @@ FTP_LURE_ACCOUNTS = (
 )
 
 FTP_SYST_TELLS = (
-    "215 UNIX Type: L8",
-    "215 UNIX Type: L8 version",
+    # Exact stock strings from low-interaction faces — bare "215 UNIX Type: L8"
+    # is the normal RFC 959 SYST reply on real vsftpd/proftpd and must not score.
+    "215 UNIX Type: L8 version: Pure-FTPd",
+    "215 UNIX emulation by Microsoft",
 )

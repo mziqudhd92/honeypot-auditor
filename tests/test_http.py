@@ -7,6 +7,19 @@ from unittest.mock import MagicMock, patch
 import honeypot_auditor.probes.http as http
 from honeypot_auditor.settings import settings
 
+_CREDS = (("user_low", "pass_low"), ("user_HIGH_entropy_xx", "pass_HIGH_entropy_yy"))
+
+
+def _tcp_scripted(replies_by_prefix: dict[bytes, tuple[bytes, str]], default: tuple[bytes, str]):
+    def _side_effect(host, port, payload, *args, **kwargs):
+        del host, port, args, kwargs
+        for prefix, reply in replies_by_prefix.items():
+            if payload.startswith(prefix) or prefix in payload:
+                return reply
+        return default
+
+    return _side_effect
+
 
 @patch.object(http, "optional_import", return_value=None)
 @patch.object(http, "tcp_transact")
@@ -15,7 +28,11 @@ def test_http_malformed_200(mock_tcp, _no_requests):
         b"HTTP/1.1 200 OK\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
         "",
     )
-    inds = http.probe_http("127.0.0.1", 80)
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
     by_id = {i.id: i for i in inds}
     assert by_id["http.malformed_200"].triggered
     assert not by_id["http.dynamic_headers"].triggered
@@ -29,7 +46,10 @@ def test_http_skipped_on_closed_port(mock_tcp):
     mock_tcp.return_value = (b"", "Connection refused")
     inds = http.probe_http("127.0.0.1", 80)
     assert {i.id for i in inds} == {
+        "http.arbitrary_auth",
+        "http.state_nonpersist",
         "http.malformed_200",
+        "http.chunked_premature",
         "http.dynamic_headers",
         "http.method_stub",
         "http.login_skin",
@@ -45,23 +65,38 @@ def test_http_skipped_on_closed_port(mock_tcp):
 @patch.object(http, "optional_import", return_value=None)
 @patch.object(http, "tcp_transact")
 def test_http_put_empty_405(mock_tcp, _no_requests):
-    mock_tcp.side_effect = [
-        (b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n", ""),
-        (b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n", ""),
-        (b"HTTP/1.1 405 Method Not Allowed\r\n\r\n", ""),
-        (b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n", ""),
-    ]
-    inds = http.probe_http("127.0.0.1", 80)
+    default = (b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n", "")
+    mock_tcp.side_effect = _tcp_scripted(
+        {
+            b"PUT ": (b"HTTP/1.1 405 Method Not Allowed\r\n\r\n", ""),
+            b"GET /admin": (b"HTTP/1.1 401 Unauthorized\r\n\r\n", ""),
+            b"POST ": (b"HTTP/1.1 405 Method Not Allowed\r\n\r\n", ""),
+        },
+        default,
+    )
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
     by_id = {i.id: i for i in inds}
     assert by_id["http.method_stub"].triggered
     assert not by_id["http.malformed_200"].triggered
+    assert not by_id["http.arbitrary_auth"].triggered
 
 
 @patch.object(http, "tcp_transact")
 def test_http_login_skin_redirect(mock_tcp):
-    mock_tcp.return_value = (
-        b"HTTP/1.1 200 OK\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\nServer: Apache/2.4.52 (Ubuntu)\r\n\r\n",
-        "",
+    mock_tcp.side_effect = _tcp_scripted(
+        {
+            b"GET /admin": (b"HTTP/1.1 401 Unauthorized\r\n\r\n", ""),
+            b"POST ": (b"HTTP/1.1 405 Method Not Allowed\r\n\r\n", ""),
+        },
+        (
+            b"HTTP/1.1 200 OK\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n"
+            b"Server: Apache/2.4.52 (Ubuntu)\r\n\r\n",
+            "",
+        ),
     )
     requests_mod = MagicMock()
     resp = MagicMock()
@@ -77,7 +112,11 @@ def test_http_login_skin_redirect(mock_tcp):
     put.content = b""
     requests_mod.get.return_value = resp
     requests_mod.put.return_value = put
-    with patch.object(http, "optional_import", return_value=requests_mod):
+    with (
+        patch.object(http, "optional_import", return_value=requests_mod),
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
         inds = http.probe_http("127.0.0.1", 80)
     by_id = {i.id: i for i in inds}
     assert by_id["http.login_skin"].triggered
@@ -104,6 +143,8 @@ def test_http_https_login_skin(mock_tcp):
     by_id = {i.id: i for i in inds}
     assert by_id["http.login_skin"].triggered
     assert by_id["http.method_stub"].triggered
+    assert by_id["http.chunked_premature"].skipped
+    assert not by_id["http.chunked_premature"].triggered
 
 
 def test_framework_404_session_helpers():
@@ -120,7 +161,10 @@ def test_framework_404_session_helpers():
 
 @patch.object(http, "tcp_transact")
 def test_http_framework_404_session_triggered(mock_tcp):
-    mock_tcp.return_value = (b"HTTP/1.1 400 Bad Request\r\n\r\n", "")
+    mock_tcp.side_effect = _tcp_scripted(
+        {b"GET /admin": (b"HTTP/1.1 401 Unauthorized\r\n\r\n", "")},
+        (b"HTTP/1.1 400 Bad Request\r\n\r\n", ""),
+    )
     requests_mod = MagicMock()
     resp = MagicMock()
     resp.status_code = 404
@@ -133,7 +177,6 @@ def test_http_framework_404_session_triggered(mock_tcp):
     put = MagicMock()
     put.status_code = 405
     put.content = b"nope"
-    # First GET / → 404; admin paths empty; no index.html form; PUT not empty 405
     requests_mod.get.side_effect = [
         resp,
         MagicMock(status_code=404, content=b""),
@@ -144,7 +187,11 @@ def test_http_framework_404_session_triggered(mock_tcp):
         MagicMock(status_code=404, content=b""),
     ]
     requests_mod.put.return_value = put
-    with patch.object(http, "optional_import", return_value=requests_mod):
+    with (
+        patch.object(http, "optional_import", return_value=requests_mod),
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
         inds = http.probe_http("127.0.0.1", 80)
     by_id = {i.id: i for i in inds}
     assert by_id["http.framework_404_session"].triggered
@@ -154,9 +201,12 @@ def test_http_framework_404_session_triggered(mock_tcp):
 
 @patch.object(http, "tcp_transact")
 def test_http_admin_path_login_skin_after_404(mock_tcp):
-    mock_tcp.return_value = (
-        b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
-        "",
+    mock_tcp.side_effect = _tcp_scripted(
+        {b"GET /admin": (b"HTTP/1.1 401 Unauthorized\r\n\r\n", "")},
+        (
+            b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+            "",
+        ),
     )
     requests_mod = MagicMock()
     root = MagicMock()
@@ -171,7 +221,11 @@ def test_http_admin_path_login_skin_after_404(mock_tcp):
     put.content = b"ok"
     requests_mod.get.side_effect = [root, admin]
     requests_mod.put.return_value = put
-    with patch.object(http, "optional_import", return_value=requests_mod):
+    with (
+        patch.object(http, "optional_import", return_value=requests_mod),
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
         inds = http.probe_http("127.0.0.1", 80)
     by_id = {i.id: i for i in inds}
     assert by_id["http.login_skin"].triggered
@@ -204,6 +258,8 @@ def test_http_safe_mode_handshake_only(mock_tcp):
     assert "Date present" in by_id["http.dynamic_headers"].detail
     assert by_id["http.framework_404_session"].skipped
     assert by_id["http.login_skin"].skipped
+    assert by_id["http.arbitrary_auth"].skipped
+    assert by_id["http.state_nonpersist"].skipped
 
 
 @patch.object(http, "optional_import", return_value=None)
@@ -231,3 +287,190 @@ def test_http_safe_mode_https(mock_import):
     by_id = {i.id: i for i in inds}
     assert not by_id["http.dynamic_headers"].triggered
     assert by_id["http.wildcard_host"].skipped
+    assert by_id["http.arbitrary_auth"].skipped
+
+
+@patch.object(http, "optional_import", return_value=None)
+@patch.object(http, "tcp_transact")
+def test_http_arbitrary_auth_basic_both_200(mock_tcp, _no_requests):
+    def side_effect(host, port, payload, *args, **kwargs):
+        del host, port, args, kwargs
+        if b"Authorization:" in payload or b"authorization:" in payload:
+            return (b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", "")
+        if payload.startswith(b"GET /admin"):
+            return (b"HTTP/1.1 401 Unauthorized\r\n\r\n", "")
+        if payload.startswith(b"PUT "):
+            return (b"HTTP/1.1 400 Bad Request\r\n\r\n", "")
+        if b"Transfer-Encoding: chunked" in payload:
+            return (b"", "timed out")
+        if payload.startswith(b"POST "):
+            return (b"HTTP/1.1 405 Method Not Allowed\r\n\r\n", "")
+        return (b"HTTP/1.1 400 Bad Request\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n", "")
+
+    mock_tcp.side_effect = side_effect
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
+    by_id = {i.id: i for i in inds}
+    assert by_id["http.arbitrary_auth"].triggered
+    assert "," not in (by_id["http.arbitrary_auth"].evidence or "")
+
+
+@patch.object(http, "optional_import", return_value=None)
+@patch.object(http, "tcp_transact")
+def test_http_state_cookie_not_honored(mock_tcp, _no_requests):
+    # Set-Cookie on the baseline malformed response feeds header_map for state check.
+    baseline = (
+        b"HTTP/1.1 400 Bad Request\r\n"
+        b"Date: Wed, 26 Aug 2026 00:00:00 GMT\r\n"
+        b"Set-Cookie: session=abc123; Path=/\r\n"
+        b"\r\n"
+    )
+    new_cookie = (
+        b"HTTP/1.1 401 Unauthorized\r\n"
+        b"Date: Wed, 26 Aug 2026 00:00:00 GMT\r\n"
+        b"Set-Cookie: session=NEVER; Path=/\r\n"
+        b"\r\n"
+    )
+
+    def side_effect(host, port, payload, *args, **kwargs):
+        del host, port, args, kwargs
+        if (
+            payload.startswith(b"GET /admin")
+            or b"Authorization:" in payload
+            or b"authorization:" in payload
+        ):
+            return (b"HTTP/1.1 401 Unauthorized\r\n\r\n", "")
+        if b"Cookie: session=abc123" in payload:
+            return (new_cookie, "")
+        return (baseline, "")
+
+    mock_tcp.side_effect = side_effect
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
+    by_id = {i.id: i for i in inds}
+    assert by_id["http.state_nonpersist"].triggered
+
+
+@patch.object(http, "optional_import", return_value=None)
+@patch.object(http, "tcp_transact")
+def test_http_state_cookie_rotation_is_clean(mock_tcp, _no_requests):
+    """Reissuing Set-Cookie on 200 is session rotation, not a state lie."""
+    baseline = (
+        b"HTTP/1.1 400 Bad Request\r\n"
+        b"Date: Wed, 26 Aug 2026 00:00:00 GMT\r\n"
+        b"Set-Cookie: session=abc123; Path=/\r\n"
+        b"\r\n"
+    )
+    rotated = (
+        b"HTTP/1.1 200 OK\r\n"
+        b"Date: Wed, 26 Aug 2026 00:00:00 GMT\r\n"
+        b"Set-Cookie: session=NEVER; Path=/\r\n"
+        b"\r\n"
+    )
+
+    def side_effect(host, port, payload, *args, **kwargs):
+        del host, port, args, kwargs
+        if b"Cookie: session=abc123" in payload:
+            return (rotated, "")
+        if payload.startswith(b"GET /admin"):
+            return (b"HTTP/1.1 404 Not Found\r\n\r\n", "")
+        return (baseline, "")
+
+    mock_tcp.side_effect = side_effect
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
+    assert not {i.id: i for i in inds}["http.state_nonpersist"].triggered
+
+
+@patch.object(http, "optional_import", return_value=None)
+@patch.object(http, "tcp_transact")
+def test_http_chunked_premature_reply(mock_tcp, _no_requests):
+    """Immediate 200 to an unterminated chunked POST → gated premature-reply hit."""
+    mock_tcp.side_effect = _tcp_scripted(
+        {
+            b"Transfer-Encoding: chunked": (
+                b"HTTP/1.1 200 OK\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+                "",
+            ),
+            b"POST /": (
+                b"HTTP/1.1 404 Not Found\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+                "",
+            ),
+        },
+        default=(b"", "timed out"),
+    )
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
+    by_id = {i.id: i for i in inds}
+    chunked = by_id["http.chunked_premature"]
+    assert chunked.triggered
+    assert chunked.requires_corroboration is True
+    assert "terminal chunk" in chunked.detail
+    # Isolation: the malformed-POST probe got a 404, not a canned 200.
+    assert not by_id["http.malformed_200"].triggered
+
+
+@patch.object(http, "optional_import", return_value=None)
+@patch.object(http, "tcp_transact")
+def test_http_chunked_error_status_is_clean(mock_tcp, _no_requests):
+    """4xx/5xx before the terminal chunk is allowed and must not score."""
+    mock_tcp.side_effect = _tcp_scripted(
+        {
+            b"Transfer-Encoding: chunked": (
+                b"HTTP/1.1 405 Method Not Allowed\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+                "",
+            ),
+            b"POST /": (
+                b"HTTP/1.1 404 Not Found\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+                "",
+            ),
+        },
+        default=(b"", "timed out"),
+    )
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
+    chunked = {i.id: i for i in inds}["http.chunked_premature"]
+    assert not chunked.triggered
+    assert not chunked.skipped
+    assert "not scored" in chunked.detail
+
+
+@patch.object(http, "optional_import", return_value=None)
+@patch.object(http, "tcp_transact")
+def test_http_chunked_wait_is_clean(mock_tcp, _no_requests):
+    """A server that waits for the terminal chunk (read timeout) stays clean."""
+    mock_tcp.side_effect = _tcp_scripted(
+        {
+            b"Transfer-Encoding: chunked": (b"", "timed out"),
+            b"POST /": (
+                b"HTTP/1.1 404 Not Found\r\nDate: Wed, 26 Aug 2026 00:00:00 GMT\r\n\r\n",
+                "",
+            ),
+        },
+        default=(b"", "timed out"),
+    )
+    with (
+        patch.object(http, "entropy_varied_creds", return_value=_CREDS),
+        patch.object(http, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = http.probe_http("127.0.0.1", 80)
+    by_id = {i.id: i for i in inds}
+    chunked = by_id["http.chunked_premature"]
+    assert not chunked.triggered
+    assert not chunked.skipped
+    assert "waited" in chunked.detail

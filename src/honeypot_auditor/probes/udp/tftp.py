@@ -2,7 +2,8 @@
 
 RFC non-compliance strategies (non-destructive RRQ/WRQ headers only — never DATA upload):
   · static_signature — TID source port, opcode/error/mode/WRQ facades,
-    option blindness, response clone, no OACK retransmit, stock ERROR/DATA lure
+    option blindness, response clone, no OACK retransmit, DATA block-size
+    arithmetic, stock ERROR/DATA lure
   · state_nonpersist — server TID reused across independent RRQs
 
 UDP/69 (lab 1069). See docs/udp/TFTP.md, RFC 1350, RFC 2347.
@@ -58,6 +59,11 @@ _TFTP_SKIP = (
     (
         "tftp.option_blindness",
         "TFTP chokes on RFC 2347 option negotiation",
+        "static_signature",
+    ),
+    (
+        "tftp.block_size_violation",
+        "TFTP DATA block exceeds 512 bytes without a larger negotiated blksize",
         "static_signature",
     ),
     (
@@ -546,6 +552,33 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
     stock_text, stock_token = _absorb_stock(stock_text, stock_token, opt_pkt)
     stock_hit = bool(stock_token)
 
+    # --- DATA block-size arithmetic (RFC 1350 §5: data ≤512 unless blksize
+    # negotiated; our only blksize request is 512, so >512 is always illegal) ---
+    opt_rexmit_pkt = parse_tftp(opt_rexmit.data) if opt_rexmit.data else None
+    data_blocks: list[tuple[str, int]] = []
+    for label, pkt in (
+        ("baseline", base_pkt),
+        ("second", second_pkt),
+        ("mode", mode_pkt),
+        ("wrq", wrq_pkt),
+        ("optioned", opt_pkt),
+        ("oack-retransmit", opt_rexmit_pkt),
+    ):
+        if pkt is not None and pkt.opcode == OP_DATA:
+            data_blocks.append((label, len(pkt.data)))
+    over_limit = [(lbl, n) for lbl, n in data_blocks if n > 512]
+    block_hit = bool(over_limit)
+    if over_limit:
+        lbl, n = over_limit[0]
+        block_detail = f"{lbl} RRQ served a {n}-byte DATA block (RFC 1350 cap is 512)"
+        block_evidence = f"{lbl}:{n}B"
+    elif data_blocks:
+        block_detail = f"max DATA payload {max(n for _, n in data_blocks)}/512 bytes (ok)"
+        block_evidence = ""
+    else:
+        block_detail = "no DATA blocks served (ok)"
+        block_evidence = ""
+
     if stock_token:
         stock_detail = f"stock lure token {stock_token!r} in TFTP payload"
     else:
@@ -618,6 +651,13 @@ def probe_tftp(host: str, port: int) -> list[Indicator]:
                 evidence=(opt_ex.data[:256].hex() if opt_ex.data else ""),
                 fidelity="high",
             )
+        ),
+        _ind(
+            _spec("tftp.block_size_violation"),
+            triggered=block_hit,
+            detail=block_detail,
+            evidence=block_evidence,
+            fidelity="high",
         ),
         (
             skipped_indicator(

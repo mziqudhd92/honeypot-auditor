@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import struct
 from unittest.mock import patch
 
 import honeypot_auditor.probes.udp.dns as dns
@@ -12,6 +13,8 @@ from honeypot_auditor.probes.udp import discover_udp_engines
 from honeypot_auditor.settings import settings
 
 _DNS_IDS = (
+    "dns.arbitrary_auth",
+    "dns.state_nonpersist",
     "dns.header_framing",
     "dns.txid",
     "dns.header_facade",
@@ -20,6 +23,7 @@ _DNS_IDS = (
     "dns.response_clone",
     "dns.case_encoding_mismatch",
     "dns.edns_facade",
+    "dns.length_incoherence",
     "dns.stock_payload",
 )
 
@@ -185,43 +189,60 @@ def test_dns_txid_isolated():
 
 
 def test_dns_header_facade_on_illegal_opcode():
-    """Illegal OPCODE still answered as a normal QUERY response."""
+    """Illegal OPCODE answered with NOERROR is a normal-QUERY façade."""
 
     def side_effect(host, port, payload, *, connected=False, **kwargs):
         del host, connected, kwargs
         msg = dns.parse_dns_message(payload)
         assert msg is not None
         if msg.opcode != dns.OPCODE_QUERY:
-            fake = dns.DnsMessage(
-                txid=msg.txid,
-                qr=0,
-                opcode=dns.OPCODE_QUERY,
-                aa=False,
-                tc=False,
-                rd=msg.rd,
-                ra=False,
-                rcode=0,
-                qdcount=msg.qdcount,
-                ancount=0,
-                nscount=0,
-                arcount=0,
-                question_name=msg.question_name or "hpaudit.invalid",
-                qtype=msg.qtype or dns.TYPE_A,
-                qclass=msg.qclass or dns.CLASS_IN,
-                answers=(),
-                additionals=(),
-                has_opt=False,
-                raw_question=msg.raw_question,
-            )
-            return _ok(_nxdomain_reply(fake), port=port)
+            return _ok(_noerror_a_reply(msg), port=port)
         return _ok(_nxdomain_reply(msg), port=port)
 
     with patch.object(dns, "udp_exchange", side_effect=side_effect):
         inds = dns.probe_dns("127.0.0.1", 53)
     by_id = {i.id: i for i in inds}
     assert by_id["dns.header_facade"].triggered
+    assert "NOERROR" in by_id["dns.header_facade"].detail
     assert not by_id["dns.header_framing"].triggered
     assert not by_id["dns.txid"].triggered
+
+
+def test_dns_illegal_opcode_notimp_is_clean():
+    """RFC 1035 NOTIMP for an unimplemented OPCODE is not a façade."""
+
+    def side_effect(host, port, payload, *, connected=False, **kwargs):
+        del host, connected, kwargs
+        msg = dns.parse_dns_message(payload)
+        assert msg is not None
+        if msg.opcode != dns.OPCODE_QUERY:
+            return _ok(
+                dns.build_response(msg, rcode=dns.RCODE_NOTIMP, aa=False, ra=True, answers=()),
+                port=port,
+            )
+        return _ok(_nxdomain_reply(msg), port=port)
+
+    with patch.object(dns, "udp_exchange", side_effect=side_effect):
+        inds = dns.probe_dns("127.0.0.1", 53)
+    by_id = {i.id: i for i in inds}
+    assert not by_id["dns.header_facade"].triggered
+    assert "rcode=4" in by_id["dns.header_facade"].detail
+
+
+def test_dns_illegal_opcode_nxdomain_is_clean():
+    """NXDOMAIN on the QNAME for an illegal OPCODE (Cloudflare-class) is clean."""
+
+    def side_effect(host, port, payload, *, connected=False, **kwargs):
+        del host, connected, kwargs
+        msg = dns.parse_dns_message(payload)
+        assert msg is not None
+        return _ok(_nxdomain_reply(msg), port=port)
+
+    with patch.object(dns, "udp_exchange", side_effect=side_effect):
+        inds = dns.probe_dns("127.0.0.1", 53)
+    by_id = {i.id: i for i in inds}
+    assert not by_id["dns.header_facade"].triggered
+    assert "rcode=3" in by_id["dns.header_facade"].detail
 
 
 def test_dns_question_echo_isolated():
@@ -351,6 +372,7 @@ def test_dns_case_encoding_mismatch_gated():
     assert by_id["dns.case_encoding_mismatch"].requires_corroboration is True
     assert not by_id["dns.txid"].triggered
     assert not by_id["dns.rcode_stub"].triggered
+    assert not by_id["dns.state_nonpersist"].triggered
 
 
 def test_dns_edns_facade_on_formerr():
@@ -423,11 +445,116 @@ def test_dns_registry_and_discovery():
     assert PROBE_BY_PROTOCOL["dns"] is dns.probe_dns
     assert "dns" in PROTOCOL_STRATEGIES
     row = PROTOCOL_STRATEGIES["dns"]
-    assert row["arbitrary_auth"] == ""
-    assert row["state_nonpersist"] == ""
+    assert "NOERROR" in row["arbitrary_auth"] or "private-label" in row["arbitrary_auth"]
+    assert "SOA" in row["state_nonpersist"] or "TTL" in row["state_nonpersist"]
     assert "txid" in row["static_signature"].lower() or "header" in row["static_signature"].lower()
     engines = discover_udp_engines()
     names = {e.name for e in engines}
     assert "dns" in names
     assert dns.UDP_ENGINE.name == "dns"
     assert dns.UDP_ENGINE.probe is dns.probe_dns
+
+
+def test_dns_arbitrary_auth_and_state_hits():
+    """Private-label NOERROR façade + frozen identical answers across re-query."""
+
+    def side_effect(host, port, payload, *, connected=False, **kwargs):
+        del host, connected, kwargs
+        msg = dns.parse_dns_message(payload)
+        assert msg is not None
+        if msg.opcode != dns.OPCODE_QUERY:
+            return _err()
+        q = (msg.question_name or "").lower()
+        # Auth probes use entropy-varied names under .invalid — serve static A.
+        if q.endswith(".invalid") and "hpa-" in q:
+            body = _noerror_a_reply(msg, rdata=b"\x0a\x00\x00\x01")
+            return _ok(body, port=port, rtt=1.0)
+        # Baseline / clone / state: also serve identical NOERROR A (frozen façade).
+        body = _noerror_a_reply(msg, rdata=b"\x0a\x00\x00\x01")
+        if msg.has_opt:
+            body = dns.attach_additional(body, (dns.build_opt_rr(udp_payload=1232),))
+        return _ok(body, port=port, rtt=1.0)
+
+    with (
+        patch.object(dns, "udp_exchange", side_effect=side_effect),
+        patch.object(dns, "jittered_reconnect_pause", return_value=0.0),
+        patch.object(
+            dns,
+            "entropy_varied_creds",
+            return_value=(("user_low", "pass_low"), ("user_HIGH_entropy_xx", "pass_HIGH_entropy_yy")),
+        ),
+    ):
+        inds = dns.probe_dns("127.0.0.1", 53)
+    by_id = {i.id: i for i in inds}
+    assert by_id["dns.arbitrary_auth"].triggered
+    assert "," not in (by_id["dns.arbitrary_auth"].evidence or "")
+    assert by_id["dns.state_nonpersist"].triggered
+
+
+def test_dns_nxdomain_authority_soa_is_not_a_state_lie():
+    """A stable SOA in the authority section of NXDOMAIN is negative caching."""
+
+    def side_effect(host, port, payload, *, connected=False, **kwargs):
+        del host, connected, kwargs
+        msg = dns.parse_dns_message(payload)
+        assert msg is not None
+        if msg.opcode != dns.OPCODE_QUERY:
+            return _err()
+        soa = dns.DnsRR(
+            name="invalid",
+            rtype=dns.TYPE_SOA,
+            rclass=dns.CLASS_IN,
+            ttl=1800,
+            rdata=(
+                dns.encode_qname("a.invalid")
+                + dns.encode_qname("ns.invalid")
+                + struct.pack("!IIIII", 2024010101, 7200, 1800, 1209600, 300)
+            ),
+        )
+        body = dns.build_response(
+            msg,
+            rcode=dns.RCODE_NXDOMAIN,
+            aa=False,
+            ra=True,
+            answers=(),
+            authority=(soa,),
+        )
+        if msg.has_opt:
+            body = dns.attach_additional(body, (dns.build_opt_rr(udp_payload=1232),))
+        return _ok(body, port=port)
+
+    with patch.object(dns, "udp_exchange", side_effect=side_effect):
+        inds = dns.probe_dns("127.0.0.1", 53)
+    by_id = {i.id: i for i in inds}
+    assert not by_id["dns.state_nonpersist"].triggered
+    assert not by_id["dns.arbitrary_auth"].triggered
+
+
+def test_dns_length_incoherence_on_trailing_pad():
+    """Conformant-shaped replies with trailing pad bytes → length_incoherence."""
+
+    def side_effect(host, port, payload, *, connected=False, **kwargs):
+        del host, connected, kwargs
+        msg = dns.parse_dns_message(payload)
+        assert msg is not None
+        if msg.opcode != dns.OPCODE_QUERY:
+            return _err()
+        body = _nxdomain_reply(msg)
+        if msg.has_opt:
+            body = dns.attach_additional(body, (dns.build_opt_rr(udp_payload=1232),))
+        # Canned-responder tell: declared sections end before the payload does.
+        return _ok(body + b"\x00\x00\x00\x00", port=port)
+
+    with patch.object(dns, "udp_exchange", side_effect=side_effect):
+        inds = dns.probe_dns("127.0.0.1", 53)
+    by_id = {i.id: i for i in inds}
+    slack = by_id["dns.length_incoherence"]
+    assert slack.triggered
+    assert not slack.skipped
+    assert slack.fidelity == "high"
+    assert not slack.requires_corroboration
+    # Isolation: padding alone does not fire the other static tells.
+    assert not by_id["dns.txid"].triggered
+    assert not by_id["dns.question_echo"].triggered
+    assert not by_id["dns.rcode_stub"].triggered
+    assert "trailing byte" in slack.detail

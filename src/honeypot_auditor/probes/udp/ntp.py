@@ -1,6 +1,9 @@
 """NTP fingerprint engine (RFC 5905 client/server modes).
 
 RFC non-compliance strategies (non-destructive mode-3 only — never monlist / mode-7):
+  · arbitrary_auth / kod_absent — mode-3 burst still served with uniform mode-4
+    (missing KoD RATE/DENY)
+  · state_nonpersist — transmit/receive timestamps frozen or move backwards
   · static_signature — framing, mode/VN facade, originate echo, stratum facade,
     canned bitwise-identical replies, zeroed clock metrics, epoch-zero timestamps,
     stock lure refids
@@ -19,10 +22,25 @@ from dataclasses import dataclass
 from honeypot_auditor import netutil
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    is_safe_mode,
+    jittered_reconnect_pause,
+    rtt_evidence,
+    skip_suite,
+)
 from honeypot_auditor.probes.udp._engine import UDPEngine
 
 _NTP_SKIP = (
+    (
+        "ntp.kod_absent",
+        "NTP mode-3 burst is served without KoD RATE/DENY",
+        "arbitrary_auth",
+    ),
+    (
+        "ntp.state_nonpersist",
+        "NTP timestamps fail monotonicity across exchanges",
+        "state_nonpersist",
+    ),
     (
         "ntp.framing",
         "NTP response framing is invalid",
@@ -41,6 +59,11 @@ _NTP_SKIP = (
     (
         "ntp.stratum_facade",
         "NTP stratum is invalid for a serving reply",
+        "static_signature",
+    ),
+    (
+        "ntp.clock_metadata",
+        "NTP precision/poll metadata is implausible for a serving clock",
         "static_signature",
     ),
     (
@@ -246,6 +269,38 @@ def _exchange(host: str, port: int, payload: bytes):
     return ex, parsed, ""
 
 
+def _is_rate_deny_kod(msg: NtpPacket) -> bool:
+    return (
+        msg.stratum == 0
+        and msg.mode == _MODE_SERVER
+        and msg.reference_id in (b"RATE", b"DENY")
+    )
+
+
+def _timestamps_non_monotonic(msgs: list[NtpPacket]) -> tuple[bool, str]:
+    """Hit when transmit/receive are frozen or go backwards across exchanges.
+
+    reference_timestamp updates on the server's poll interval and stays
+    constant across a short client burst on every synchronized server.
+    """
+    if len(msgs) < 2:
+        return False, "insufficient exchanges for monotonicity check"
+    for field, label in (
+        ("transmit_timestamp", "transmit"),
+        ("receive_timestamp", "receive"),
+    ):
+        vals = [getattr(m, field) for m in msgs]
+        if len(set(vals)) == 1 and vals[0] != 0:
+            return True, f"{label} timestamp frozen across {len(msgs)} exchanges ({vals[0]:#x})"
+        for i in range(1, len(vals)):
+            if vals[i] and vals[i - 1] and vals[i] < vals[i - 1]:
+                return True, (
+                    f"{label} timestamp went backwards "
+                    f"({vals[i - 1]:#x} -> {vals[i]:#x})"
+                )
+    return False, "timestamps advance across exchanges"
+
+
 def probe_ntp(host: str, port: int) -> list[Indicator]:
     # 1) Baseline NTPv4 client mode-3
     base_req = build_client_request()
@@ -346,6 +401,24 @@ def probe_ntp(host: str, port: int) -> list[Indicator]:
     else:
         stratum_detail = f"stratum {base_msg.stratum} ok"
 
+    # --- clock metadata plausibility (gated) ---
+    # Precision is a signed log2-seconds exponent; synchronized servers report
+    # roughly -30..-6. Poll is a signed exponent bounded 3..17 by RFC 5905
+    # (lenient 0..17 here). Canned replies ship raw bytes that violate both.
+    precision_bad = not (-30 <= base_msg.precision <= 1)
+    poll_bad = not (0 <= base_msg.poll <= 17)
+    clock_hit = precision_bad or poll_bad
+    clock_bits = []
+    if precision_bad:
+        clock_bits.append(f"precision exponent {base_msg.precision} outside [-30, 1]")
+    if poll_bad:
+        clock_bits.append(f"poll exponent {base_msg.poll} outside [0, 17]")
+    clock_detail = (
+        "; ".join(clock_bits)
+        if clock_bits
+        else f"precision={base_msg.precision} poll={base_msg.poll} plausible"
+    )
+
     # --- response clone (second distinct xmt) ---
     clone_req = build_client_request()
     clone_ex, _clone_msg, clone_err = _exchange(host, port, clone_req)
@@ -401,7 +474,75 @@ def probe_ntp(host: str, port: int) -> list[Indicator]:
         else f"refid={base_msg.reference_id!r}"
     )
 
+    # --- arbitrary auth / KoD absent: short mode-3 burst (2–3 extras) ---
+    # Exchanges so far: base, vn, clone (=3). Burst adds 2 → total 5.
+    burst_msgs: list[NtpPacket] = []
+    burst_served = 0
+    burst_kod = False
+    burst_rtts: list[float] = []
+    for _ in range(2):
+        breq = build_client_request()
+        bex, bmsg, _berr = _exchange(host, port, breq)
+        burst_rtts.append(bex.rtt_ms)
+        if bmsg is not None and bmsg.mode == _MODE_SERVER:
+            burst_served += 1
+            burst_msgs.append(bmsg)
+            if _is_rate_deny_kod(bmsg):
+                burst_kod = True
+    kod_hit = False
+    if burst_served >= 2 and not burst_kod:
+        # "Uniform serve under load": every burst packet is mode-4 with no RATE/DENY
+        # KoD, and replies are canned (identical) or freeze transmit timestamps.
+        raws = {m.raw for m in burst_msgs}
+        xmts = {m.transmit_timestamp for m in burst_msgs}
+        kod_hit = len(raws) == 1 or len(xmts) == 1
+    kod_detail = (
+        f"mode-3 burst: {burst_served}/2 uniform mode-4 replies with no KoD RATE/DENY"
+        if kod_hit
+        else (
+            "KoD RATE/DENY observed under burst"
+            if burst_kod
+            else f"burst served {burst_served}/2 mode-4 replies (clock advanced / not uniform)"
+        )
+    )
+
+    # --- state: timestamp monotonicity across baseline/clone/burst ---
+    jittered_reconnect_pause()
+    mono_msgs: list[NtpPacket] = [base_msg]
+    if _clone_msg is not None:
+        mono_msgs.append(_clone_msg)
+    mono_msgs.extend(burst_msgs)
+    # One more exchange after jitter for a fresh sample.
+    late_req = build_client_request()
+    late_ex, late_msg, _late_err = _exchange(host, port, late_req)
+    if late_msg is not None:
+        mono_msgs.append(late_msg)
+    state_hit, state_detail = _timestamps_non_monotonic(mono_msgs)
+    rtt_note = rtt_evidence(base_ex.rtt_ms, *burst_rtts, late_ex.rtt_ms)
+
     return [
+        Indicator(
+            id="ntp.kod_absent",
+            title="NTP mode-3 burst is served without KoD RATE/DENY",
+            category="arbitrary_auth",
+            triggered=kod_hit,
+            protocol="ntp",
+            detail=f"{kod_detail}; {rtt_note}" if rtt_note else kod_detail,
+            evidence=f"burst_served={burst_served}",
+            remediation="Emit stratum-0 KoD RATE/DENY under client burst load (RFC 5905 §7.4)",
+            fidelity="high" if kod_hit else "medium",
+        ),
+        Indicator(
+            id="ntp.state_nonpersist",
+            title="NTP timestamps fail monotonicity across exchanges",
+            category="state_nonpersist",
+            triggered=state_hit,
+            protocol="ntp",
+            detail=state_detail,
+            evidence=rtt_note,
+            remediation="Advance transmit/receive/reference timestamps per exchange",
+            fidelity="high" if state_hit else "medium",
+        ),
         Indicator(
             id="ntp.framing",
             title="NTP response framing is invalid",
@@ -445,6 +586,24 @@ def probe_ntp(host: str, port: int) -> list[Indicator]:
             evidence=f"stratum={base_msg.stratum} refid={base_msg.reference_id!r}",
             remediation="Use stratum 1–15 when synchronized; stratum 0 only with kiss codes",
             fidelity="high" if stratum_hit else "medium",
+        ),
+        Indicator(
+            id="ntp.clock_metadata",
+            title="NTP precision/poll metadata is implausible for a serving clock",
+            category="static_signature",
+            triggered=clock_hit,
+            protocol="ntp",
+            detail=clock_detail,
+            evidence=(
+                f"precision={base_msg.precision} poll={base_msg.poll} "
+                f"stratum={base_msg.stratum}"
+            ),
+            remediation=(
+                "Report a plausible signed precision exponent (−30..−6) and poll "
+                "exponent within 3..17 (RFC 5905 §7.3)"
+            ),
+            requires_corroboration=True,
+            fidelity="medium",
         ),
         Indicator(
             id="ntp.response_clone",

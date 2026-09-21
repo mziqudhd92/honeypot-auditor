@@ -63,9 +63,15 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": "loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone",
     },
     "http": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
-        "static_signature": "empty PUT 405 · GET / → index.html login skin · 407 Via localhost",
+        "arbitrary_auth": (
+            "two entropy-varied Basic pairs both 200 on a path that anonymously "
+            "challenged 401/403"
+        ),
+        "state_nonpersist": "session cookie replay returns 401/403 · POST body not retained",
+        "static_signature": (
+            "empty PUT 405 · GET / → index.html login skin · 407 Via localhost · "
+            "2xx before the terminal chunk of an unterminated chunked POST"
+        ),
     },
     "pop3": {
         "arbitrary_auth": "two random USER/PASS pairs",
@@ -89,9 +95,11 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": "SMB1/EOL native_os · static NTLM challenge",
     },
     "sip": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
-        "static_signature": "default User-Agent template",
+        "arbitrary_auth": (
+            "two entropy-varied Digest REGISTER both 200 without a valid response"
+        ),
+        "state_nonpersist": "CSeq / Call-ID binding not monotonic after re-REGISTER",
+        "static_signature": "default User-Agent template · Via received/rport coherence · CSeq echo",
     },
     "vnc": {
         "arbitrary_auth": "",
@@ -128,35 +136,54 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "dns": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "two entropy-varied private-label / bogus-TLD queries both NOERROR "
+            "(open-resolver / static SOA façade)"
+        ),
+        "state_nonpersist": (
+            "bitwise-identical positive answer · answer-section SOA serial frozen · "
+            "AA/TTL contradiction"
+        ),
         "static_signature": (
             "header framing · txid echo · illegal OPCODE facade · question echo · "
             "RCODE stub on .invalid · response clone · 0x20 case mismatch · "
-            "EDNS OPT facade · stock TXT/SOA lure"
+            "EDNS OPT facade · message-length incoherence · stock TXT/SOA lure"
         ),
     },
     "ntp": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "mode-3 burst still served with uniform mode-4 (missing KoD RATE/DENY)"
+        ),
+        "state_nonpersist": (
+            "transmit/receive timestamps frozen or move backwards across exchanges"
+        ),
         "static_signature": (
             "framing · mode/VN facade · originate echo · stratum facade · "
-            "bitwise-identical canned replies · zeroed clock metrics · epoch-zero · stock refid"
+            "bitwise-identical canned replies · zeroed clock metrics · epoch-zero · "
+            "implausible precision/poll metadata · stock refid"
         ),
     },
     "elasticsearch": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "anonymous GET / challenged 401/403, then two entropy-varied Basic "
+            "headers both return the ES root"
+        ),
+        "state_nonpersist": "GET / cluster UUID/version mismatches /_nodes or /_cluster/health",
         "static_signature": (
             "root framing · stock cluster/version/tagline/uuid · missing-index 200 · "
             "unknown-path root facade · DELETE/PUT/HEAD method stubs · "
             "/_cluster/health and /_cat/health shape facades · non-JSON Content-Type · "
-            "X-Elastic-Product mismatch"
+            "Accept: yaml negotiation ignored · X-Elastic-Product mismatch"
         ),
     },
     "ipp": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "anonymous /admin challenged 401/403, then two entropy-varied Basic "
+            "credentials both return 200"
+        ),
+        "state_nonpersist": (
+            "unsupported IPP opcode still successful-ok · ghost printer identity fails across reconnect"
+        ),
         "static_signature": (
             "CUPS root framing · stock Server header · unknown-path root facade · "
             "DELETE method stub · /printers stub · open /admin · frozen Date · "
@@ -166,22 +193,27 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "memcached": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "ASCII set accepted while a binary SASL frame is answered as ASCII"
+        ),
+        "state_nonpersist": (
+            "probe-key set then get miss inside the TTL window / stats ignore the write"
+        ),
         "static_signature": (
             "VERSION framing · STAT/END framing · unknown-command ERROR · "
-            "get-miss END · canned stats clone · stock VERSION lure · "
+            "get-miss END · gets/CAS token facade · canned stats clone · "
+            "VERSION-vs-stats version lie · stock VERSION lure · "
             "bare verbosity flush-stub stand-in · noreply facade"
         ),
     },
     "mysql": {
         "arbitrary_auth": "",
-        "state_nonpersist": "drop after 1045 · wrong-seq ER 1156 · SSL-request silent drop",
+        "state_nonpersist": "drop after 1045 · emulator Expected-seq FSM · SSL-request silent drop",
         "static_signature": "EOL 5.5.x ubuntu greeting · stock handshake caps",
     },
     "git": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": "two entropy-varied HTTP Basic / pkt-line auth both accepted",
+        "state_nonpersist": "advertised upload-pack capabilities fail on follow-up negotiation",
         "static_signature": "git-upload-pack always ERR no such repository",
     },
     "rdp": {
@@ -190,8 +222,8 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": "canned NLA cookie 0x1234",
     },
     "httpproxy": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": "two entropy-varied Proxy-Authorization Basic pairs both allow CONNECT/GET",
+        "state_nonpersist": "prior proxy success becomes identical canned 407 on reconnect",
         "static_signature": "407 Via localhost · frozen squid 3.3.8 · ISA deny phrase",
     },
     "mssql": {
@@ -215,7 +247,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": (
             "TID fixed_source_port · opcode/error/mode/WRQ facades · "
             "RFC 2347 option blindness · response clone · no OACK/DATA retransmit · "
-            "stock ERROR/DATA lure"
+            "DATA block >512 without negotiated blksize · stock ERROR/DATA lure"
         ),
     },
 }

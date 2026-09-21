@@ -8,6 +8,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- False-positive gates for production services: DNS `header_facade` scores only
+  **NOERROR** on illegal OPCODE (NOTIMP/NXDOMAIN/FORMERR/REFUSED stay clean —
+  verified against 8.8.8.8 / 1.1.1.1); HTTP `/admin` Basic requires a prior
+  anonymous 401/403; chunked premature scores **2xx** only (TLS skipped);
+  cookie rotation on 200 is not a state lie; Memcached auth needs ASCII `set`
+  **and** binary SASL answered as ASCII; Elasticsearch/IPP auth require a
+  prior challenge; SIP nonce reuse is not scored; Git `want` stays on the same
+  TCP session; NTP state ignores stable reference timestamps; MySQL `seq_order`
+  scores emulator `Expected seq` FSM only (real ER 1156 is clean); MongoDB
+  `op_msg` scores synthetic `requestId=9999` only (OP_MSG opcode 2013 is
+  normal); HTTP proxy treats 401/403 as denial (not auth success) and no longer
+  treats bare `X-Squid-Error` as a lure; FTP no longer scores bare
+  `215 UNIX Type: L8` SYST; bare `nginx` Server token is not a lure
 - Apply `requires_corroboration` suppression in **default** reports (not only
   `--deep`), so common-version Elasticsearch stock hits and lone IMAP/POP3/SNMP
   stock banners no longer inflate Honeyscore without another ungated tell
@@ -19,11 +32,34 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Second detection-hardening wave against deception skins: `memcached
+  .version_stats_coherence` (VERSION command vs `STAT version` lie — decisive),
+  `memcached.ttl_enforcement` (VALUE served past a 1s TTL inside a ≥1.4s
+  reconnect window; expiry-attributed misses stay clean), `sip.cseq_echo`
+  (per-transaction CSeq echo with randomized branch, gated),
+  `elasticsearch.content_negotiation` (JSON-only reply to
+  `Accept: application/yaml`, gated), `http.chunked_premature` (status line
+  returned before an unterminated chunked body completes, gated), and
+  `tftp.block_size_violation` (DATA block >512 bytes; only blksize=512 is
+  ever requested)
+- Detection hardening against honeypot/deception skins that pass the expanded
+  strategy checks: `dns.length_incoherence` (trailing bytes after declared
+  sections — conformant encoders are byte-exact), `ntp.clock_metadata`
+  (implausible precision/poll exponents, gated), `memcached.cas_facade`
+  (`gets` VALUE reply missing the mandatory `cas_unique` token), and
+  `sip.via_coherence` (response Via lacking `received=`/`rport=` echo or our
+  branch, gated)
 - TFTP UDP engine on ports 69/1069: TID `fixed_source_port`, opcode/error/mode/WRQ
   facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`, plus
   `tid_reuse` (`state_nonpersist`), `response_clone`, and `no_retransmit`
-  (`docs/udp/TFTP.md`); docs/site/LLM catalog synced to **26** engines / **51**
-  active strategy slots
+  (`docs/udp/TFTP.md`)
+- Three-strategy expansion for nine protocols that previously used
+  **static_signature** only: DNS, NTP, Elasticsearch, IPP/CUPS, Memcached, HTTP,
+  SIP, Git, and HTTP proxy now activate **arbitrary_auth** + **state_nonpersist**
+  + **static_signature** (`dns.arbitrary_auth` / `dns.state_nonpersist`,
+  `ntp.kod_absent` / `ntp.state_nonpersist`, `elasticsearch.*`, `ipp.*`,
+  `memcached.*`, `http.*`, `sip.*`, `git.*`, `httpproxy.*`; Memcached allows
+  probe-key set/delete, never `flush_all`)
 - Docs sync: surface NTP in README/BASIC banner, ports table, site index,
   agents/llms briefs, SCORING, and `docs/udp/README.md` (guide already at
   `docs/udp/NTP.md`)

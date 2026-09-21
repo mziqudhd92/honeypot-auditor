@@ -1,6 +1,9 @@
 HTTP_SERVER_TELLS = (
-    "nginx",
+    # Frozen / bait Server tokens only — bare "nginx"/"apache" are production.
     "apache/2.2.22",
+    "nginx/0.8.54",
+    "nginx/1.4.0",
+    "microsoft-iis/6.0",
 )
 
 HTTP_STATIC_BODY_MARKERS = (

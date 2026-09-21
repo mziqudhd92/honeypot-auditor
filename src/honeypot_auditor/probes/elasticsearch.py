@@ -1,6 +1,9 @@
 """Elasticsearch HTTP API fingerprint engine.
 
 Protocol non-compliance strategies (read-only — never index/delete/bulk write):
+  · arbitrary_auth — anonymous GET / challenged 401/403, then two entropy-varied
+    Basic headers both return the root document
+  · state_nonpersist — root cluster UUID/version vs /_nodes or /_cluster/health
   · static_signature — stock cluster/version/tagline/uuid lures; missing-index 200;
     unknown API path returns root-shaped 200; DELETE/PUT/HEAD on ``/`` method stubs;
     ``/_cluster/health`` and ``/_cat/health`` shape facades; wrong Content-Type;
@@ -14,6 +17,7 @@ See docs/ELASTICSEARCH.md and Elasticsearch HTTP API docs (root, cat, cluster, e
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import secrets
@@ -22,10 +26,26 @@ from typing import Any
 from honeypot_auditor.config import effective_user_agent
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason, tcp_transact
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    entropy_varied_creds,
+    is_safe_mode,
+    jittered_reconnect_pause,
+    rtt_evidence,
+    skip_suite,
+)
 from honeypot_auditor.settings import settings
 
 _ES_SKIP = (
+    (
+        "elasticsearch.arbitrary_auth",
+        "Elasticsearch accepts two entropy-varied Basic credentials on GET /",
+        "arbitrary_auth",
+    ),
+    (
+        "elasticsearch.state_nonpersist",
+        "Elasticsearch root metadata mismatches /_nodes or /_cluster/health",
+        "state_nonpersist",
+    ),
     (
         "elasticsearch.root_framing",
         "Elasticsearch root response is not a valid cluster document",
@@ -64,6 +84,11 @@ _ES_SKIP = (
     (
         "elasticsearch.content_type",
         "Elasticsearch JSON body is served with a non-JSON Content-Type",
+        "static_signature",
+    ),
+    (
+        "elasticsearch.content_negotiation",
+        "Elasticsearch ignores an Accept: application/yaml request",
         "static_signature",
     ),
     (
@@ -364,6 +389,71 @@ def _content_type_is_json(headers: dict[str, str]) -> bool:
     return "application/json" in ctype or "application/vnd.elasticsearch" in ctype
 
 
+def _basic_auth_header(user: str, password: str) -> dict[str, str]:
+    token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
+
+
+def _is_nodes_doc(doc: dict[str, Any] | None) -> bool:
+    if not doc:
+        return False
+    nodes = doc.get("nodes")
+    return isinstance(nodes, dict) and bool(nodes)
+
+
+def _state_metadata_mismatch(
+    root: dict[str, Any],
+    *,
+    nodes_doc: dict[str, Any] | None,
+    nodes_status: int,
+    health_doc: dict[str, Any] | None,
+    health_status: int,
+) -> tuple[bool, str]:
+    """Return (hit, detail) for root vs nodes/health contradictions."""
+    root_cluster = str(root.get("cluster_name") or "").strip()
+    root_ver = _version_number(root).strip()
+    notes: list[str] = []
+
+    nodes_ok = nodes_status == 200 and _is_nodes_doc(nodes_doc)
+    if nodes_status == 200 and not nodes_ok:
+        notes.append(
+            f"/_nodes empty/wrong shape while root looked real "
+            f"(keys={sorted(nodes_doc)[:8] if nodes_doc else []})"
+        )
+    elif nodes_ok and nodes_doc is not None:
+        node_cluster = str(nodes_doc.get("cluster_name") or "").strip()
+        if root_cluster and node_cluster and root_cluster != node_cluster:
+            notes.append(
+                f"cluster_name root={root_cluster!r} vs /_nodes={node_cluster!r}"
+            )
+        nodes_map = nodes_doc.get("nodes")
+        if isinstance(nodes_map, dict):
+            for _nid, info in nodes_map.items():
+                if not isinstance(info, dict):
+                    continue
+                nver = str(info.get("version") or "").strip()
+                if root_ver and nver and nver != root_ver:
+                    notes.append(f"version root={root_ver!r} vs node={nver!r}")
+                    break
+
+    health_ok = health_status == 200 and _is_cluster_health(health_doc)
+    if health_status == 200 and not health_ok:
+        notes.append(
+            f"/_cluster/health empty/wrong shape while root looked real "
+            f"(keys={sorted(health_doc)[:8] if health_doc else []})"
+        )
+    elif health_ok and health_doc is not None:
+        h_cluster = str(health_doc.get("cluster_name") or "").strip()
+        if root_cluster and h_cluster and root_cluster != h_cluster:
+            notes.append(
+                f"cluster_name root={root_cluster!r} vs health={h_cluster!r}"
+            )
+
+    if notes:
+        return True, "; ".join(notes)
+    return False, "root metadata consistent with /_nodes and /_cluster/health"
+
+
 def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
     status, headers, body, err = _http_exchange(host, port, "GET", "/")
     if err and not body and status == 0:
@@ -372,6 +462,13 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
     root = _as_dict(_parse_json(body))
     root_ok = _is_es_root(root)
     framing_hit = not root_ok
+    auth_from_challenge = False
+    auth_ok = 0
+    auth_notes: list[str] = []
+    auth_err = ""
+    auth_skipped = False
+    low_user = ""
+    high_user = ""
     if root is not None and root_ok:
         framing_detail = (
             f"root ok cluster_name={root.get('cluster_name')!r} "
@@ -382,6 +479,46 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
             "GET / did not return an Elasticsearch root document "
             f"(status={status}, json_keys={sorted(root)[:8] if root else []})"
         )
+
+    # Security-enabled clusters challenge GET /. A skin that then accepts any
+    # Basic credential and returns the root is an auth bypass. An already-open
+    # root (anonymous 200) is not: Basic is ignored because there is no gate.
+    if framing_hit and status in (401, 403):
+        anon_status = status
+        (low_user, low_pass), (high_user, high_pass) = entropy_varied_creds()
+        unlocked: tuple[int, dict[str, str], bytes] | None = None
+        for label, user, password in (
+            ("low-entropy", low_user, low_pass),
+            ("high-entropy", high_user, high_pass),
+        ):
+            a_status, a_hdrs, a_body, a_err = _http_exchange(
+                host,
+                port,
+                "GET",
+                "/",
+                extra_headers=_basic_auth_header(user, password),
+            )
+            if a_err and a_status == 0 and not a_body:
+                auth_err = auth_err or a_err
+                auth_notes.append(f"{label}: unanswered ({a_err})")
+                continue
+            a_doc = _as_dict(_parse_json(a_body))
+            if a_status == 200 and _is_es_root(a_doc):
+                auth_ok += 1
+                unlocked = (a_status, a_hdrs, a_body)
+                root = a_doc
+                auth_notes.append(f"{label}: Basic unlocked ES root (status=200)")
+            else:
+                auth_notes.append(f"{label}: Basic status={a_status}")
+        if auth_ok == 2 and unlocked is not None and root is not None and _is_es_root(root):
+            status, headers, body = unlocked
+            root_ok = True
+            framing_hit = False
+            auth_from_challenge = True
+            framing_detail = (
+                f"anonymous GET / was {anon_status}; root unlocked by arbitrary Basic "
+                f"cluster_name={root.get('cluster_name')!r} version={_version_number(root)!r}"
+            )
 
     if framing_hit:
         out: list[Indicator] = []
@@ -585,6 +722,35 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
         else:
             cat_detail = f"_cat/health status={cat_status}"
 
+    # --- Accept: application/yaml content negotiation ---
+    # Real Elasticsearch (and OpenSearch) natively serves YAML/SMILE/CBOR via
+    # Accept; JSON-only replies to a YAML request are hand-rolled HTTP skins.
+    # Gated: JSON-normalizing front proxies in front of real clusters exist.
+    y_status, y_hdrs, y_body, y_err = _http_exchange(
+        host, port, "GET", "/", extra_headers={"Accept": "application/yaml"}
+    )
+    yaml_skipped = bool(y_err) and y_status == 0 and not y_body
+    yaml_hit = False
+    yaml_detail = "yaml negotiation not evaluated"
+    if not yaml_skipped:
+        yct = y_hdrs.get("content-type", "")
+        looks_yaml = "yaml" in yct.lower() or y_body.lstrip().startswith(b"---")
+        looks_json = "json" in yct.lower() or _parse_json(y_body) is not None
+        if y_status == 200 and looks_yaml and not looks_json:
+            yaml_detail = f"yaml honored (Content-Type={yct!r})"
+        elif y_status == 200 and looks_json:
+            yaml_hit = True
+            yaml_detail = (
+                f"Accept: application/yaml answered with JSON "
+                f"(Content-Type={yct!r}, {len(y_body)}B body)"
+            )
+        elif y_status == 406:
+            yaml_skipped = True
+            yaml_detail = "406 to yaml negotiation (strict gatekeeper; not scored)"
+        else:
+            yaml_skipped = True
+            yaml_detail = f"yaml negotiation status={y_status} (not scored)"
+
     # --- X-Elastic-Product vs claimed version (7.14+) ---
     product = headers.get("x-elastic-product", "")
     ver = _major_minor_patch(_version_number(root))
@@ -610,7 +776,98 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
             f"(header={product!r})"
         )
 
+    # --- arbitrary_auth ---
+    # Reached only when GET / already returned a root document. If that was the
+    # anonymous response, Basic cannot be a bypass. The 401-then-unlock path
+    # sets auth_from_challenge before framing succeeds.
+    if auth_from_challenge:
+        auth_hit = auth_ok == 2
+        auth_detail = (
+            "anonymous GET / challenged; two entropy-varied Basic credentials "
+            "both returned 200 ES root"
+            if auth_hit
+            else ("; ".join(auth_notes) if auth_notes else "Basic challenge not bypassed")
+        )
+    else:
+        auth_hit = False
+        auth_detail = (
+            "anonymous GET / already returned the ES root; Basic is not a credential gate"
+        )
+
+    # --- state_nonpersist: root vs /_nodes + /_cluster/health after reconnect ---
+    pause_s = jittered_reconnect_pause()
+    n_status, _n_hdrs, n_body, n_err = _http_exchange(host, port, "GET", "/_nodes")
+    n_doc = _as_dict(_parse_json(n_body))
+    h2_status, _h2_hdrs, h2_body, h2_err = _http_exchange(
+        host, port, "GET", "/_cluster/health"
+    )
+    h2_doc = _as_dict(_parse_json(h2_body))
+    state_skipped = False
+    state_err = ""
+    if (n_err and n_status == 0 and not n_body) and (
+        h2_err and h2_status == 0 and not h2_body
+    ):
+        state_skipped = True
+        state_err = n_err or h2_err
+        state_hit = False
+        state_detail = closed_reason(state_err)
+    elif (
+        _looks_like_api_not_found(n_status, n_doc)
+        and _looks_like_api_not_found(h2_status, h2_doc)
+        and n_status != 200
+        and h2_status != 200
+    ):
+        state_skipped = True
+        state_detail = (
+            f"/_nodes and /_cluster/health denied/unavailable "
+            f"(status={n_status}/{h2_status})"
+        )
+        state_hit = False
+    else:
+        state_hit, state_detail = _state_metadata_mismatch(
+            root,
+            nodes_doc=n_doc,
+            nodes_status=n_status,
+            health_doc=h2_doc,
+            health_status=h2_status,
+        )
+    rtt_note = rtt_evidence(pause_s * 1000.0)
+    if rtt_note and state_hit:
+        state_detail = f"{state_detail}; pause_{rtt_note}"
+
     return [
+        Indicator(
+            id="elasticsearch.arbitrary_auth",
+            title="Elasticsearch accepts two entropy-varied Basic credentials on GET /",
+            category="arbitrary_auth",
+            triggered=auth_hit,
+            skipped=auth_skipped,
+            skip_reason=closed_reason(auth_err) if auth_skipped else "",
+            error=auth_err if auth_skipped else "",
+            protocol="elasticsearch",
+            detail=auth_detail,
+            evidence=f"{low_user},{high_user}" if auth_hit else "",
+            remediation="Reject unknown Basic credentials instead of always returning the root document",
+            fidelity="decisive" if auth_hit else "medium",
+        ),
+        Indicator(
+            id="elasticsearch.state_nonpersist",
+            title="Elasticsearch root metadata mismatches /_nodes or /_cluster/health",
+            category="state_nonpersist",
+            triggered=state_hit,
+            skipped=state_skipped,
+            skip_reason=state_detail if state_skipped else "",
+            error=state_err,
+            protocol="elasticsearch",
+            detail=state_detail,
+            evidence=(
+                (n_body[:200] + h2_body[:200]).decode("utf-8", "replace")
+                if (n_body or h2_body)
+                else ""
+            ),
+            remediation="Keep cluster_uuid/version coherent across /, /_nodes, and /_cluster/health",
+            fidelity="high" if state_hit else "medium",
+        ),
         Indicator(
             id="elasticsearch.root_framing",
             title="Elasticsearch root response is not a valid cluster document",
@@ -713,6 +970,24 @@ def probe_elasticsearch(host: str, port: int) -> list[Indicator]:
             evidence=f"Content-Type={ctype}",
             remediation="Serve application/json (or ES vendor JSON) for API responses",
             fidelity="medium",
+        ),
+        Indicator(
+            id="elasticsearch.content_negotiation",
+            title="Elasticsearch ignores an Accept: application/yaml request",
+            category="static_signature",
+            triggered=yaml_hit,
+            skipped=yaml_skipped,
+            skip_reason=yaml_detail if yaml_skipped else "",
+            error=y_err if yaml_skipped else "",
+            protocol="elasticsearch",
+            detail=yaml_detail,
+            evidence=y_body[:200].decode("utf-8", "replace") if y_body else "",
+            requires_corroboration=True if yaml_hit else False,
+            fidelity="high",
+            remediation=(
+                "Honor Accept: application/yaml (and SMILE/CBOR) content "
+                "negotiation on API endpoints"
+            ),
         ),
         Indicator(
             id="elasticsearch.product_header",

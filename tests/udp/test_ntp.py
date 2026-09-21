@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -21,10 +22,13 @@ from honeypot_auditor.probes import PROBE_BY_PROTOCOL
 from honeypot_auditor.settings import settings
 
 _NTP_IDS = (
+    "ntp.kod_absent",
+    "ntp.state_nonpersist",
     "ntp.framing",
     "ntp.mode_facade",
     "ntp.org_echo",
     "ntp.stratum_facade",
+    "ntp.clock_metadata",
     "ntp.response_clone",
     "ntp.zeroed_clock_metrics",
     "ntp.epoch_zero",
@@ -53,13 +57,16 @@ def _ts(seconds: int, fraction: int = 0) -> int:
 # Plausible "now" in NTP era (≈ 2024-ish).
 _NOW = _ts(0xE8D4A510, 0x12345678)
 _UNIX_EPOCH_NTP = ntp._UNIX_EPOCH_NTP_SECONDS
+_CONFORMANT_TICK = {"n": 0}
 
 
 def _conformant_reply(req: bytes, *, xmt_override: int | None = None) -> bytes:
-    """Chrony/ntpd-shaped mode-4 reply: org echo, stratum 2, non-zero metrics."""
+    """Chrony/ntpd-shaped mode-4 reply: org echo, stratum 2, advancing clock."""
     parsed = ntp.parse_ntp_packet(req)
     assert parsed is not None
     client_xmt = parsed.transmit_timestamp
+    _CONFORMANT_TICK["n"] += 1
+    tick = _CONFORMANT_TICK["n"]
     return ntp.build_ntp_packet(
         li=0,
         vn=4,
@@ -70,10 +77,10 @@ def _conformant_reply(req: bytes, *, xmt_override: int | None = None) -> bytes:
         root_delay=0x00000100,
         root_dispersion=0x00000050,
         reference_id=b"GPS\x00",
-        reference_timestamp=_NOW - _ts(10),
+        reference_timestamp=_NOW - _ts(10) + _ts(tick),
         originate_timestamp=client_xmt,
-        receive_timestamp=_NOW - _ts(0, 0x1000),
-        transmit_timestamp=xmt_override if xmt_override is not None else _NOW,
+        receive_timestamp=_NOW - _ts(0, 0x1000) + _ts(0, tick),
+        transmit_timestamp=xmt_override if xmt_override is not None else (_NOW + _ts(tick)),
     )
 
 
@@ -582,8 +589,8 @@ def test_ntp_registry_and_strategies():
     assert PROBE_BY_PROTOCOL["ntp"] is ntp.probe_ntp
     assert "ntp" in PROTOCOL_STRATEGIES
     row = PROTOCOL_STRATEGIES["ntp"]
-    assert row["arbitrary_auth"] == ""
-    assert row["state_nonpersist"] == ""
+    assert "KoD" in row["arbitrary_auth"] or "mode-3" in row["arbitrary_auth"]
+    assert "monotonic" in row["state_nonpersist"].lower() or "timestamp" in row["state_nonpersist"].lower()
     assert "static_signature" in row and row["static_signature"]
     assert ntp.UDP_ENGINE.name == "ntp"
     assert ntp.UDP_ENGINE.probe is ntp.probe_ntp
@@ -597,6 +604,121 @@ def test_ntp_ports_iana_and_lab():
     both = probe_port_map("both")
     assert both["ntp"] == [123, 1123]
     assert probe_port_map("both", extra_ports=[1123]) == {"ntp": [1123]}
+
+
+def test_ntp_kod_absent_and_state_frozen():
+    """Uniform mode-4 burst without KoD + frozen timestamps across exchanges."""
+    frozen_xmt = _NOW
+
+    def reply(host, port, payload):
+        del host, port
+        parsed = ntp.parse_ntp_packet(payload)
+        assert parsed is not None
+        if parsed.vn not in (3, 4) or parsed.mode != ntp._MODE_CLIENT:
+            return b"", "timed out"
+        return ntp.build_ntp_packet(
+            li=0,
+            vn=4,
+            mode=ntp._MODE_SERVER,
+            stratum=2,
+            poll=6,
+            precision=-20,
+            root_delay=0x100,
+            root_dispersion=0x50,
+            reference_id=b"GPS\x00",
+            reference_timestamp=frozen_xmt,
+            originate_timestamp=parsed.transmit_timestamp,
+            receive_timestamp=frozen_xmt,
+            transmit_timestamp=frozen_xmt,
+        )
+
+    trx = _scripted_from_callable(reply, drop_invalid_vn=False)
+    with (
+        trx.patch(),
+        patch.object(ntp, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = ntp.probe_ntp("127.0.0.1", 123)
+    by_id = {i.id: i for i in inds}
+    assert by_id["ntp.kod_absent"].triggered
+    assert "," not in (by_id["ntp.kod_absent"].evidence or "")
+    assert by_id["ntp.state_nonpersist"].triggered
+
+
+def test_ntp_stable_reference_timestamp_is_clean():
+    """A constant reference timestamp with an advancing clock is a live server."""
+    call_n = {"n": 0}
+
+    def reply(host, port, payload):
+        del host, port
+        parsed = ntp.parse_ntp_packet(payload)
+        assert parsed is not None
+        if parsed.vn not in (3, 4) or parsed.mode != ntp._MODE_CLIENT:
+            return b"", "timed out"
+        call_n["n"] += 1
+        n = call_n["n"]
+        return ntp.build_ntp_packet(
+            li=0,
+            vn=4,
+            mode=ntp._MODE_SERVER,
+            stratum=2,
+            poll=6,
+            precision=-20,
+            root_delay=0x100,
+            root_dispersion=0x50,
+            reference_id=b"GPS\x00",
+            reference_timestamp=_NOW,
+            originate_timestamp=parsed.transmit_timestamp,
+            receive_timestamp=_NOW + _ts(0, n),
+            transmit_timestamp=_NOW + _ts(n),
+        )
+
+    trx = _scripted_from_callable(reply, drop_invalid_vn=False)
+    with (
+        trx.patch(),
+        patch.object(ntp, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = ntp.probe_ntp("127.0.0.1", 123)
+    assert not {i.id: i for i in inds}["ntp.state_nonpersist"].triggered
+
+
+def test_ntp_kod_rate_clears_auth():
+    """Stratum-0 RATE kiss under burst must not score kod_absent."""
+    call_n = {"n": 0}
+
+    def reply(host, port, payload):
+        del host, port
+        parsed = ntp.parse_ntp_packet(payload)
+        assert parsed is not None
+        if parsed.vn not in (3, 4) or parsed.mode != ntp._MODE_CLIENT:
+            return b"", "timed out"
+        call_n["n"] += 1
+        # After baseline+clone, burst replies get KoD RATE.
+        if call_n["n"] >= 3:
+            return ntp.build_ntp_packet(
+                li=0,
+                vn=4,
+                mode=ntp._MODE_SERVER,
+                stratum=0,
+                poll=6,
+                precision=-20,
+                reference_id=b"RATE",
+                originate_timestamp=parsed.transmit_timestamp,
+                receive_timestamp=_NOW + call_n["n"],
+                transmit_timestamp=_NOW + call_n["n"] * 2,
+                reference_timestamp=_NOW,
+                root_delay=0x100,
+                root_dispersion=0x50,
+            )
+        return _conformant_reply(payload)
+
+    trx = _scripted_from_callable(reply, drop_invalid_vn=False)
+    with (
+        trx.patch(),
+        patch.object(ntp, "jittered_reconnect_pause", return_value=0.0),
+    ):
+        inds = ntp.probe_ntp("127.0.0.1", 123)
+    by_id = {i.id: i for i in inds}
+    assert not by_id["ntp.kod_absent"].triggered
 
 
 def test_ntp_gated_tells_suppressed_alone_in_default_report():
@@ -690,3 +812,41 @@ def test_ntp_no_monlist_or_mode7_in_probe_requests():
         assert pkt.mode != 7
         assert call["payload"][0] & 0x07 != 7
         assert pkt.mode == ntp._MODE_CLIENT
+
+
+def test_ntp_clock_metadata_implausible():
+    """Raw canned precision byte (0x20 ⇒ 2^32 s) → gated clock_metadata hit."""
+
+    def reply(host, port, payload):
+        del host, port
+        parsed = ntp.parse_ntp_packet(payload)
+        assert parsed is not None
+        return ntp.build_ntp_packet(
+            li=0,
+            vn=4,
+            mode=ntp._MODE_SERVER,
+            stratum=2,
+            poll=6,
+            precision=0x20,  # canned byte: +32 exponent ≈ 136 years
+            root_delay=0x100,
+            root_dispersion=0x50,
+            reference_id=b"GPS\x00",
+            reference_timestamp=_NOW,
+            originate_timestamp=parsed.transmit_timestamp,
+            receive_timestamp=_NOW,
+            transmit_timestamp=_NOW,
+        )
+
+    trx = _scripted_from_callable(reply)
+    with trx.patch():
+        inds = ntp.probe_ntp("127.0.0.1", 123)
+    by_id = {i.id: i for i in inds}
+    meta = by_id["ntp.clock_metadata"]
+    assert meta.triggered
+    assert meta.requires_corroboration is True
+    assert meta.fidelity == "medium"
+    # Isolation: only the metadata field is off.
+    assert not by_id["ntp.org_echo"].triggered
+    assert not by_id["ntp.mode_facade"].triggered
+    assert not by_id["ntp.stratum_facade"].triggered
+    assert "precision" in meta.detail

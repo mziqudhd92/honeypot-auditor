@@ -90,6 +90,7 @@ over lure strings alone — see [`udp/TFTP.md`](udp/TFTP.md).
 | `tftp.option_blindness` | static_signature | RRQ+`blksize` choke (`ERROR 0` empty) instead of OACK / proper ERROR |
 | `tftp.response_clone` | static_signature | Canned identical DATA/ACK (or stubby ERROR) for distinct RRQs |
 | `tftp.no_retransmit` | static_signature | OACK/DATA never retransmitted while ACK withheld |
+| `tftp.block_size_violation` | static_signature | DATA block over 512 bytes without a larger negotiated blksize |
 | `tftp.stock_payload` | static_signature | Stock ERROR/DATA lure tokens (corroboration-gated) |
 | `tftp.framing` | static_signature | Non-speaker / unparseable TFTP reply |
 
@@ -97,45 +98,53 @@ Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/TFTP.md
 
 ### DNS RFC non-compliance (basic probe)
 
-DNS uses **static_signature** only (UDP/53; no auth/state axis). Prefer RFC facade
+DNS uses **all three** basic strategies (UDP/53). Prefer RFC facade / auth / state
 tells over banner IOCs alone — see [`udp/DNS.md`](udp/DNS.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
+| `dns.arbitrary_auth` | arbitrary_auth | Decisive when hit; two entropy-varied private-label queries both NOERROR |
+| `dns.state_nonpersist` | state_nonpersist | Identical positive answer · answer-section SOA freeze · AA/TTL contradiction |
 | `dns.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across txids) |
 | `dns.header_framing` / `dns.txid` / `dns.header_facade` / `dns.question_echo` | static_signature | High fidelity RFC tells |
-| `dns.rcode_stub` / `dns.edns_facade` | static_signature | NXDOMAIN / EDNS OPT facade |
+| `dns.rcode_stub` / `dns.edns_facade` / `dns.length_incoherence` | static_signature | NXDOMAIN / EDNS OPT facade / trailing bytes after declared sections |
 | `dns.case_encoding_mismatch` / `dns.stock_payload` | static_signature | Corroboration-gated (0x20 case + stock TXT/SOA lure) |
 
 Full strategy narrative, probe flow, and non-destructive policy: [`udp/DNS.md`](udp/DNS.md).
 
 ### NTP RFC 5905 non-compliance (basic probe)
 
-NTP uses **static_signature** only (UDP/123; no auth/state axis). Prefer RFC facade
+NTP uses **all three** basic strategies (UDP/123). Prefer RFC facade / KoD / state
 tells over banner IOCs alone — see [`udp/NTP.md`](udp/NTP.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
+| `ntp.kod_absent` | arbitrary_auth | High when hit; mode-3 burst served without KoD `RATE`/`DENY` |
+| `ntp.state_nonpersist` | state_nonpersist | Transmit/receive timestamps frozen or move backwards |
 | `ntp.response_clone` | static_signature | Decisive when hit (bitwise-identical replies across distinct xmt) |
 | `ntp.framing` / `ntp.mode_facade` / `ntp.org_echo` / `ntp.stratum_facade` | static_signature | High fidelity RFC tells |
-| `ntp.zeroed_clock_metrics` / `ntp.epoch_zero` / `ntp.stock_refid` | static_signature | Corroboration-gated (sparse metrics · epoch stamps · lure refid) |
+| `ntp.zeroed_clock_metrics` / `ntp.epoch_zero` / `ntp.stock_refid` / `ntp.clock_metadata` | static_signature | Corroboration-gated (sparse metrics · epoch stamps · lure refid · implausible precision/poll) |
 
 Full strategy narrative, probe flow, and non-destructive policy: [`udp/NTP.md`](udp/NTP.md).
 
 ### Memcached ASCII non-compliance (basic probe)
 
-Memcached uses **static_signature** only (TCP ASCII; no auth/state axis). Prefer
-framing / ERROR / canned-stats tells over banner IOCs alone — see
-[`MEMCACHED.md`](MEMCACHED.md).
+Memcached uses **all three** basic strategies (TCP ASCII). Prefer framing / ERROR /
+auth / state tells over banner IOCs alone — see [`MEMCACHED.md`](MEMCACHED.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
+| `memcached.arbitrary_auth` | arbitrary_auth | Decisive when hit; ASCII `set` accepted and binary SASL answered as ASCII |
+| `memcached.state_nonpersist` | state_nonpersist | Probe-key set then reconnect get miss / stats ignore write |
 | `memcached.stats_clone` | static_signature | Decisive when hit (bitwise-identical `stats` replies) |
 | `memcached.version_framing` / `memcached.stats_framing` / `memcached.unknown_command` | static_signature | High fidelity ASCII tells |
-| `memcached.get_miss` / `memcached.flush_stub` / `memcached.noreply_facade` | static_signature | Miss END · bare verbosity · noreply quiet |
+| `memcached.get_miss` / `memcached.cas_facade` / `memcached.flush_stub` / `memcached.noreply_facade` | static_signature | Miss END · gets/CAS token · bare verbosity · noreply quiet |
+| `memcached.version_stats_coherence` | static_signature | **Decisive** when hit — `version` token disagrees with `STAT version` |
+| `memcached.ttl_enforcement` | state_nonpersist | `VALUE` served after the 1s TTL window (dict skins never expire keys) |
 | `memcached.stock_version` | static_signature | Stock VERSION lure (generic tokens corroboration-gated) |
 
-Full strategy narrative, probe flow, and non-destructive policy: [`MEMCACHED.md`](MEMCACHED.md).
+Probe-key `set`/`delete` allowed; **never** `flush_all`. Full strategy narrative,
+probe flow, and non-destructive policy: [`MEMCACHED.md`](MEMCACHED.md).
 
 ### Redis RESP non-compliance (basic probe)
 
@@ -155,19 +164,72 @@ Full indicator list, probe flow, safe-mode, and non-destructive policy: [`REDIS.
 
 ### Elasticsearch API non-compliance (basic probe)
 
-Elasticsearch uses **static_signature** only (read-only HTTP JSON API; no auth/state
-axis). Prefer path/method/endpoint facade tells over banner IOCs alone — full
-strategy narrative and probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+Elasticsearch uses **all three** basic strategies (read-only HTTP JSON API plus dual
+synthetic Basic and cluster-identity state checks). Prefer path/method/endpoint
+facade and auth/state tells over banner IOCs alone — full strategy narrative and
+probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
+| `elasticsearch.arbitrary_auth` | arbitrary_auth | Decisive when hit; anonymous 401/403, then two Basic headers both return the root |
+| `elasticsearch.state_nonpersist` | state_nonpersist | Root UUID/version mismatches `/_nodes` or `/_cluster/health` |
 | `elasticsearch.missing_index_ok` / `path_facade` / `method_stub` | static_signature | High-fidelity API non-compliance |
 | `elasticsearch.cluster_health_stub` / `cat_stub` | static_signature | Health/cat endpoints echo root instead of proper shapes |
 | `elasticsearch.content_type` / `product_header` | static_signature | Wrong Content-Type; modern version without `X-Elastic-Product` |
+| `elasticsearch.content_negotiation` | static_signature | JSON-only reply to `Accept: application/yaml` (gated) |
 | `elasticsearch.stock_cluster` | static_signature | Stock cluster_name / version / tagline / uuid (may be corroboration-gated) |
 | `elasticsearch.root_framing` | static_signature | Non-speaker / malformed root document |
 
 Full indicator list, ports, safe-mode, and non-destructive policy: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+
+### IPP / CUPS non-compliance (basic probe)
+
+IPP uses **all three** basic strategies (HTTP+IPP with TLS fallback). Prefer
+CUPS/IPP facade and auth/state tells over banner IOCs alone — see [`IPP.md`](IPP.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `ipp.arbitrary_auth` | arbitrary_auth | Decisive when hit; anonymous 401/403, then two Basic credentials both 200 on `/admin` |
+| `ipp.state_nonpersist` | state_nonpersist | Illegal-op still successful-ok · ghost printer drifts across reconnect |
+| `ipp.ipp_clone` | static_signature | Decisive when hit (bitwise-identical IPP bodies) |
+| `ipp.root_framing` / `ipp_framing` / `ghost_printer` / `request_id` / `illegal_op` | static_signature | High fidelity HTTP/IPP tells |
+| `ipp.path_facade` / `method_stub` / `printers_stub` / `admin_open` | static_signature | Path/method/admin façades |
+| `ipp.server_header` / `frozen_date` / `stock_body` | static_signature | Lure / clock (often corroboration-gated) |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`IPP.md`](IPP.md).
+
+### HTTP decoy-web non-compliance (basic probe)
+
+HTTP uses **all three** basic strategies plus a `proto_conformance` slot. Prefer
+body-reading, method, and skin tells over banner IOCs alone — see [`HTTP.md`](HTTP.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `http.arbitrary_auth` | arbitrary_auth | Decisive when hit; anonymous 401/403, then two Basic pairs both 200 on `/admin` |
+| `http.state_nonpersist` | state_nonpersist | Set-Cookie session not honored across reconnect / canned page after accepted POST |
+| `http.chunked_premature` | static_signature | **2xx** before the terminal chunk of an unterminated chunked POST (gated; TLS skipped) |
+| `http.malformed_200` / `http.method_stub` | static_signature | Canned 200 on malformed POST · empty 405 stub |
+| `http.login_skin` / `http.proxy_lure` / `http.framework_404_session` | static_signature | index.html redirect · 407 lure phrases · session-on-404 |
+| `http.header_order` | static_signature | Lure header ordering (needs another static hit; reverse-proxy aware) |
+| `http.wildcard_host` | proto_conformance | Invalid `Host` served 200 |
+| `http.silent_accept` | static_signature | TCP accept with no HTTP bytes (tarpit face) |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`HTTP.md`](HTTP.md).
+
+### SIP transaction-coherence non-compliance (basic probe)
+
+SIP uses **all three** basic strategies. Prefer transaction-echo and Digest
+tells over banner IOCs alone — see [`SIP.md`](SIP.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `sip.arbitrary_auth` | arbitrary_auth | Decisive when hit; two fake-Digest REGISTERs both 200. Nonce reuse is not scored |
+| `sip.state_nonpersist` | state_nonpersist | Canned identical 200s across CSeq advance · binding appears/vanishes |
+| `sip.via_coherence` | static_signature | Response Via lacks `received=`/`rport=`/branch echo (gated; sent-by is 0.0.0.0) |
+| `sip.cseq_echo` | static_signature | Response CSeq does not echo its own transaction (requests use 7 then 9; gated) |
+| `sip.user_agent` | static_signature | Default-template User-Agent/Server |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`SIP.md`](SIP.md).
 
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
