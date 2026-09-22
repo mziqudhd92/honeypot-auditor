@@ -78,6 +78,7 @@ Always require authorization for non-private targets (`--confirm-authorized`). N
 - DNS probe guide (UDP RFC non-compliance): https://mziqudhd92.github.io/honeypot-auditor/udp/DNS.md
 - NTP probe guide (UDP RFC 5905 non-compliance): https://mziqudhd92.github.io/honeypot-auditor/udp/NTP.md
 - TFTP probe guide (TID / option RFC non-compliance): https://mziqudhd92.github.io/honeypot-auditor/udp/TFTP.md
+- SSDP/UPnP probe guide (discovery non-compliance): https://mziqudhd92.github.io/honeypot-auditor/udp/SSDP.md
 - Redis probe guide (RESP non-compliance): https://mziqudhd92.github.io/honeypot-auditor/REDIS.md
 - Elasticsearch probe guide (HTTP API non-compliance strategies): https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md
 - Docker Engine API probe guide (read-only /_ping · /version · /info): https://mziqudhd92.github.io/honeypot-auditor/DOCKER.md

@@ -96,6 +96,20 @@ over lure strings alone — see [`udp/TFTP.md`](udp/TFTP.md).
 
 Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/TFTP.md`](udp/TFTP.md).
 
+### SSDP / UPnP discovery non-compliance (basic probe)
+
+SSDP uses **static_signature** only (UDP discovery has no auth or session axis).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `ssdp.framing` / `ssdp.header_facade` | static_signature | M-SEARCH reply framing · malformed HTTP/UPnP header handling |
+| `ssdp.st_echo` | static_signature | `ST` search target not echoed in the response |
+| `ssdp.response_clone` | static_signature | Bitwise-identical replies for distinct `M-SEARCH` transactions |
+| `ssdp.stock_server` / `ssdp.location_loopback` | static_signature | Stock `SERVER` lure · `LOCATION` pointing at loopback (corroboration-gated) |
+| `ssdp.method_stub` | static_signature | Illegal HTTP method answered like `M-SEARCH` |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/SSDP.md`](udp/SSDP.md).
+
 ### DNS RFC non-compliance (basic probe)
 
 DNS uses **all three** basic strategies (UDP/53). Prefer RFC facade / auth / state

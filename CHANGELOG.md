@@ -32,6 +32,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- SSDP / UPnP discovery UDP engine on ports 1900/11900: unicast `M-SEARCH`
+  framing, header facade, ST echo, response clone, corroboration-gated stock
+  `SERVER`, `LOCATION` loopback, method stub (`docs/udp/SSDP.md`)
 - Docker Engine HTTP API engine on ports 2375/12375 with protocol non-compliance
   detection: ping/version framing, stock ApiVersion/Version/GitCommit, unknown-path
   version/info facade, DELETE/PUT `/_ping` method stubs, `/info` missing fields or

@@ -256,11 +256,11 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 
 ## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-**27** protocol engines in the current version. Each uses up to **3** probe
+**28** protocol engines in the current version. Each uses up to **3** probe
 strategies (arbitrary auth · state non-persistence · static signature). The
 **Strategies** column is how many of those three are active for that protocol in
 this release — not Shodan, co-tenancy, or individual indicator checks
-(**70** active strategy slots across all protocols).
+(**71** active strategy slots across all protocols).
 
 Default preset (`--preset both`) probes IANA well-known ports **and** common
 lab/docker aliases on the same faces. Override ports with `-p` / `--ports`.
@@ -280,6 +280,7 @@ Closed faces are skipped, not scored.
 | DNS | 53 · 15353 (UDP) | 3 |
 | NTP | 123 · 1123 (UDP) | 3 |
 | TFTP | 69 · 1069 (UDP) | 2 |
+| SSDP | 1900 · 11900 (UDP) | 1 |
 | Elasticsearch | 9200 · 19200 | 3 |
 | Docker | 2375 · 12375 | 1 |
 | IPP / CUPS | 631 · 1631 | 3 |
@@ -296,7 +297,7 @@ Closed faces are skipped, not scored.
 | Git | 9418 · 9418 | 3 |
 | HTTP proxy | 3128 · 8080 | 3 |
 
-`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `53`/`15353` → DNS (UDP), `123`/`1123` → NTP (UDP), `69`/`1069` → TFTP (UDP), `9200`/`19200` → Elasticsearch, `2375`/`12375` → Docker, `631`/`1631` → IPP, `11211`/`21211` → Memcached, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
+`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `53`/`15353` → DNS (UDP), `123`/`1123` → NTP (UDP), `69`/`1069` → TFTP (UDP), `1900`/`11900` → SSDP (UDP), `9200`/`19200` → Elasticsearch, `2375`/`12375` → Docker, `631`/`1631` → IPP, `11211`/`21211` → Memcached, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
 The POP3 engine checks response framing, pre-authentication state boundaries (STAT), optional CAPA sampling, identical auth-failed `-ERR` blankets, stock lure banners, unknown-command handling, and repeated synthetic logins. It never lists, reads, retrieves, or deletes mail; see [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.html) and [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.html) (CAPA).
 
@@ -309,6 +310,8 @@ The DNS engine speaks UDP/53 (lab **15353**) and scores RFC non-compliance under
 The NTP engine speaks UDP/123 (lab **1123**) and scores RFC 5905 non-compliance under all three basic strategies: missing KoD RATE/DENY under mode-3 burst (**arbitrary_auth**), transmit/receive timestamp monotonicity failures (**state_nonpersist**; stable reference is normal), plus **static_signature** (framing, mode/VN facade, originate echo, stratum facade, response clone, corroboration-gated zeroed clock metrics / epoch-zero / implausible precision-poll / stock refid). Never sends monlist or mode-7 control queries. See [`docs/udp/NTP.md`](docs/udp/NTP.md) and [RFC 5905](https://www.rfc-editor.org/rfc/rfc5905.html).
 
 The TFTP engine speaks RFC 1350 over UDP/69 (lab 1069) with a light RFC 2347 `blksize` probe under **static_signature** + **state_nonpersist**: TID `fixed_source_port`, TID reuse across RRQs, opcode/error/mode/WRQ facades, option blindness, response clone, no OACK retransmit, DATA block-size arithmetic, corroboration-gated stock ERROR/DATA lures. Never uploads DATA or completes a write. See [`docs/udp/TFTP.md`](docs/udp/TFTP.md), [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350.html), and [RFC 2347](https://www.rfc-editor.org/rfc/rfc2347.html).
+
+The SSDP/UPnP engine speaks UDP/1900 (lab 11900) and scores discovery non-compliance under **static_signature** only: unicast `M-SEARCH` framing, HTTP header facades, `ST` echo fidelity, bitwise-identical response clones, corroboration-gated stock `SERVER` strings and loopback `LOCATION` URLs, and illegal-method stubs. Never joins multicast groups or floods `NOTIFY`. See [`docs/udp/SSDP.md`](docs/udp/SSDP.md) and [UPnP 1.0](https://openconnectivity.org/upnp/specs/UPnP_architecture_v1.0.pdf).
 
 The IPP/CUPS engine speaks HTTP (with TLS fallback) on **631** / lab **1631** and scores CUPS/IPP non-compliance under all three basic strategies: anonymous 401/403 then dual entropy-varied Basic on `/admin` (**arbitrary_auth**), unsupported opcode / ghost-printer identity across reconnect (**state_nonpersist**), plus **static_signature** (root framing, stock Server, path/method stubs, open `/admin`, frozen Date, IPP Content-Type framing, ghost-printer `successful-ok`, request-id echo, identical IPP replies, illegal operation façade, stock HTML lure). Never submits print jobs. See [`docs/IPP.md`](docs/IPP.md).
 

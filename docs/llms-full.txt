@@ -116,6 +116,7 @@ Default (`--preset both`) probes IANA **and** docker/lab ports. Closed ports are
 | DNS | 53 (UDP) | 15353 | 53 + 15353 |
 | NTP | 123 (UDP) | 1123 | 123 + 1123 |
 | TFTP | 69 (UDP) | 1069 | 69 + 1069 |
+| SSDP | 1900 (UDP) | 11900 | 1900 + 11900 |
 | Elasticsearch | 9200 | 19200 | 9200 + 19200 |
 | Docker | 2375 | 12375 | 2375 + 12375 |
 | IPP / CUPS | 631 | 1631 | 631 + 1631 |
@@ -180,6 +181,7 @@ UHBS (https://github.com/uhbs/uhbs-standard) grades decoy quality for builders. 
 - https://mziqudhd92.github.io/honeypot-auditor/udp/DNS.md
 - https://mziqudhd92.github.io/honeypot-auditor/udp/NTP.md
 - https://mziqudhd92.github.io/honeypot-auditor/udp/TFTP.md
+- https://mziqudhd92.github.io/honeypot-auditor/udp/SSDP.md
 - https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md
 - https://mziqudhd92.github.io/honeypot-auditor/DOCKER.md
 - https://mziqudhd92.github.io/honeypot-auditor/IPP.md

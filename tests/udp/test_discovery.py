@@ -20,6 +20,7 @@ def test_import_probes_package_with_udp_is_safe():
     assert "tftp" in discovered
     assert "dns" in discovered
     assert "ntp" in discovered
+    assert "ssdp" in discovered
     assert "ntp" in PROBE_BY_PROTOCOL
 
 
@@ -72,6 +73,7 @@ def test_discover_udp_engines_includes_dns_ntp_tftp():
     assert "dns" in names
     assert "ntp" in names
     assert "tftp" in names
+    assert "ssdp" in names
     assert names <= set(PROBE_BY_PROTOCOL)
 
 
