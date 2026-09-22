@@ -57,7 +57,7 @@ origin/app tells continue scoring.
 Use the helper script against an authorized lab target:
 
 ```bash
-./scripts/capture-tls-baseline.sh 127.0.0.1 443
+./docs/scripts/capture-tls-baseline.sh 127.0.0.1 443
 ```
 
 Paste resulting JA3S/JA4S into `tls_profiles.json` lure entries (never commit live

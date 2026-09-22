@@ -2,9 +2,9 @@
 # Run honeypot-auditor benchmark against CHN + stock honeypots.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CLI="${HONEYPOT_AUDITOR:-$ROOT/.venv/bin/honeypot-auditor}"
-COMPOSE="${COMPOSE:-docker compose -f $ROOT/deploy/docker-compose.benchmark.yml}"
+COMPOSE="${COMPOSE:-docker compose -f $ROOT/tests/fixtures/benchmark/docker-compose.yml}"
 
 if [[ ! -x "$CLI" ]]; then
   echo "missing $CLI — run: pip install -e '.[full,dev]'" >&2

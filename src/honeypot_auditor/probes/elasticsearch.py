@@ -12,7 +12,7 @@ Protocol non-compliance strategies (read-only — never index/delete/bulk write)
 
 Ports 9200 / lab 19200 (HTTP). Transport port 9300 is out of scope.
 
-See docs/ELASTICSEARCH.md and Elasticsearch HTTP API docs (root, cat, cluster, errors).
+See docs/tcp/ELASTICSEARCH.md and Elasticsearch HTTP API docs (root, cat, cluster, errors).
 """
 
 from __future__ import annotations

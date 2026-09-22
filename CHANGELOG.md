@@ -6,8 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-22
+
 ### Fixed
 
+- Kubernetes health speakership: fall through from non-ok `/livez` to `/healthz`
+  before scoring `kubernetes.health_framing` (clusters that only expose
+  `/healthz`, or return 404 on `/livez`, no longer false-positive)
 - False-positive gates for production services: DNS `header_facade` scores only
   **NOERROR** on illegal OPCODE (NOTIMP/NXDOMAIN/FORMERR/REFUSED stay clean —
   verified against 8.8.8.8 / 1.1.1.1); HTTP `/admin` Basic requires a prior
@@ -32,6 +37,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Kubernetes API server engine on ports 6443/16443 (TLS preferred) with protocol
+  non-compliance detection: livez/healthz framing, `/version` framing, `/api`
+  APIVersions shape, unknown-path version facade, DELETE `/version` method stub,
+  stock gitVersion/platform (corroboration-gated), unauthenticated `/api/v1`
+  object-list dump (`docs/KUBERNETES.md`)
+- SSDP / UPnP discovery UDP engine on ports 1900/11900: unicast `M-SEARCH`
+  framing, header facade, ST echo, response clone, corroboration-gated stock
+  `SERVER`, `LOCATION` loopback, method stub (`docs/udp/SSDP.md`)
+- Docker Engine HTTP API engine on ports 2375/12375 with protocol non-compliance
+  detection: ping/version framing, stock ApiVersion/Version/GitCommit, unknown-path
+  version/info facade, DELETE/PUT `/_ping` method stubs, `/info` missing fields or
+  version echo; TLS 2376 out of scope (`docs/DOCKER.md`)
 - Second detection-hardening wave against deception skins: `memcached
   .version_stats_coherence` (VERSION command vs `STAT version` lie — decisive),
   `memcached.ttl_enforcement` (VALUE served past a 1s TTL inside a ≥1.4s

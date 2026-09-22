@@ -4,14 +4,10 @@
 
 | Version | Supported |
 |---------|-----------|
+| 1.0.x   | Yes       |
 | 0.9.x   | Yes       |
 | 0.8.x   | Yes       |
-| 0.7.x   | Yes       |
-| 0.6.x   | Yes       |
-| 0.5.x   | Yes       |
-| 0.4.x   | Yes       |
-| 0.3.x   | Yes       |
-| ≤ 0.2.x | No        |
+| ≤ 0.7.x | No        |
 
 ## Reporting a vulnerability
 
@@ -102,7 +98,7 @@ It is for authorized defensive research, lab validation, and purple-team work on
 ### TLS lure profiles
 
 - Packaged `data/tls_profiles.json` and `data/cdn_tls_profiles.json` ship with
-  placeholder JA3S values until you run `scripts/capture-tls-baseline.sh` against
+  placeholder JA3S values until you run `docs/scripts/capture-tls-baseline.sh` against
   authorized lab lures. Default output is `.lab-tls-capture/` (merge-safe);
   `--update-package` writes into the packaged files. Placeholders are ignored at
   match time (no false positives).

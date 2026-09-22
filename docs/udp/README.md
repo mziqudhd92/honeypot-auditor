@@ -1,8 +1,10 @@
 # UDP probe package
 
-Layout and transport for UDP engines. **DNS**, **NTP**, and **TFTP** ship here.
-Existing **SNMP** and **SIP** probes stay in flat `probes/` until an optional
-relocate PR.
+Layout and transport for UDP engines. TCP guides live under
+[`docs/tcp/`](../tcp/README.md). **DNS**, **NTP**, **SSDP**, and **TFTP** ship here.
+Existing **SNMP** stays flat at `docs/SNMP.md` until an optional relocate PR;
+**SIP** is documented under [`docs/tcp/SIP.md`](../tcp/SIP.md) (UDP-first with
+TCP fallback).
 
 ## Layout
 
@@ -12,12 +14,14 @@ src/honeypot_auditor/probes/udp/
   _engine.py       # UDPEngine + discover_udp_engines()
   dns.py           # DNS RFC non-compliance engine
   ntp.py           # NTP RFC 5905 non-compliance engine
+  ssdp.py          # SSDP/UPnP discovery engine
   tftp.py          # RFC 1350 + light RFC 2347
 
 docs/udp/
   README.md        # this file
   DNS.md           # DNS probe guide
   NTP.md           # NTP probe guide
+  SSDP.md          # SSDP probe guide
   TFTP.md          # TFTP probe guide
 
 tests/udp/
@@ -26,6 +30,7 @@ tests/udp/
   test_discovery.py
   test_dns.py
   test_ntp.py
+  test_ssdp.py
   test_tftp.py
 ```
 
@@ -92,7 +97,7 @@ optional path when refuse detection is needed.
 ## Anti-patterns
 
 - Do not score synthetic latency alone.
-- Do not rename indicators to `udp.*` — keep `dns.*` / `ntp.*` / `tftp.*`.
+- Do not rename indicators to `udp.*` — keep `dns.*` / `ntp.*` / `ssdp.*` / `tftp.*`.
 - Do not put product honeypot brand IOCs in probes.
 - Do not add SOCKS/UDP proxy transport here.
 - Do not auto-source ports/strategies from probe modules into config.

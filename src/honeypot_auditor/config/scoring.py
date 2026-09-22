@@ -176,6 +176,15 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "Accept: yaml negotiation ignored · X-Elastic-Product mismatch"
         ),
     },
+    "docker": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "ping/version framing · stock ApiVersion/Version/GitCommit · "
+            "unknown-path version/info facade · DELETE/PUT /_ping method stubs · "
+            "/info missing fields or version echo · TLS hint deferred (2376)"
+        ),
+    },
     "ipp": {
         "arbitrary_auth": (
             "anonymous /admin challenged 401/403, then two entropy-varied Basic "
@@ -204,6 +213,23 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "get-miss END · gets/CAS token facade · canned stats clone · "
             "VERSION-vs-stats version lie · stock VERSION lure · "
             "bare verbosity flush-stub stand-in · noreply facade"
+        ),
+    },
+    "ssdp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "M-SEARCH framing · header facade · ST echo · response clone · "
+            "stock SERVER lure · LOCATION loopback · method stub"
+        ),
+    },
+    "kubernetes": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "livez/healthz framing · /version framing · /api APIVersions shape · "
+            "unknown-path version facade · DELETE /version method stub · "
+            "stock gitVersion/platform · unauthenticated /api/v1 object-list dump"
         ),
     },
     "mysql": {

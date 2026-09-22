@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fail CI when README/Pages CLI flag tables drift from --help output.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 if [ -x "$ROOT/.venv/bin/honeypot-auditor" ]; then
   HPA="$ROOT/.venv/bin/honeypot-auditor"
 elif command -v honeypot-auditor >/dev/null 2>&1; then

@@ -30,8 +30,10 @@ _REQUIRED_CORE = frozenset(
         "mqtt",
         "snmp",
         "elasticsearch",
+        "docker",
         "ipp",
         "memcached",
+        "kubernetes",
     }
 )
 

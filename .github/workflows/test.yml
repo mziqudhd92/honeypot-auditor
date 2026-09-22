@@ -62,7 +62,7 @@ jobs:
       - name: Unit tests
         run: python -m pytest --no-cov -m "not integration"
       - name: Ruff
-        run: ruff check src tests scripts honeypot-auditor.py
+        run: ruff check src tests honeypot-auditor.py
       - name: Package build
         run: python -m build
 
@@ -78,7 +78,7 @@ jobs:
         run: pip install -e ".[full,dev]"
       - name: Start Cowrie benchmark container
         run: |
-          docker compose -f deploy/docker-compose.benchmark.yml up -d cowrie
+          docker compose -f tests/fixtures/benchmark/docker-compose.yml up -d cowrie
           sleep 15
       - name: Audit Cowrie (expect honeypot)
         run: |

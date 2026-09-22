@@ -16,7 +16,7 @@ reconfigure queues):
 Transport: cleartext HTTP first; TLS fallback when the peer returns a TLS record
 layer or cleartext yields no HTTP response (CUPS often serves HTTPS on 631).
 
-See docs/IPP.md, RFC 8010/8011 (IPP), and CUPS HTTP admin surface.
+See docs/tcp/IPP.md, RFC 8010/8011 (IPP), and CUPS HTTP admin surface.
 """
 
 from __future__ import annotations

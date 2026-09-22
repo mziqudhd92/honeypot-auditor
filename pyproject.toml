@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "honeypot-auditor"
-version = "0.9.5"
+version = "1.0.0"
 description = "Multi-protocol CLI that fingerprints whether an authorized target behaves like a low-interaction honeypot."
 readme = "README.md"
 license = "MIT"
@@ -150,4 +150,4 @@ python_version = "3.10"
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
-targets = ["src", "scripts", "honeypot-auditor.py"]
+targets = ["src", "honeypot-auditor.py"]

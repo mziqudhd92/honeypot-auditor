@@ -2,11 +2,11 @@
 # Record asciinema casts + GIFs: Cowrie @ combined lab, Dionaea @ dedicated lab.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT_DIR="${OUT_DIR:-$ROOT/docs/demo}"
 
-COWRIE_TARGET="${COWRIE_TARGET:-54.84.251.249}"
-DIONAEA_TARGET="${DIONAEA_TARGET:-54.234.30.254}"
+COWRIE_TARGET="${COWRIE_TARGET:-127.0.0.1}"
+DIONAEA_TARGET="${DIONAEA_TARGET:-127.0.0.1}"
 
 mkdir -p "$OUT_DIR"
 
@@ -26,8 +26,8 @@ record_one() {
   export TARGET="$target" PAUSE_SEC=1
   asciinema rec \
     --overwrite \
-    --idle-time-limit 3 \
-    --title "honeypot-auditor: $name audit ($target)" \
+    --idle-time-limit 12 \
+    --title "honeypot-auditor 1.0.0: $name audit ($target)" \
     --command "bash $script" \
     "$cast"
 
@@ -38,14 +38,14 @@ record_one() {
 
 case "${1:-all}" in
   cowrie)
-    record_one cowrie "$ROOT/scripts/demo-cowrie.sh" "$COWRIE_TARGET"
+    record_one cowrie "$ROOT/docs/scripts/demo-cowrie.sh" "$COWRIE_TARGET"
     ;;
   dionaea)
-    record_one dionaea "$ROOT/scripts/demo-dionaea.sh" "$DIONAEA_TARGET"
+    record_one dionaea "$ROOT/docs/scripts/demo-dionaea.sh" "$DIONAEA_TARGET"
     ;;
   all)
-    record_one cowrie "$ROOT/scripts/demo-cowrie.sh" "$COWRIE_TARGET"
-    record_one dionaea "$ROOT/scripts/demo-dionaea.sh" "$DIONAEA_TARGET"
+    record_one cowrie "$ROOT/docs/scripts/demo-cowrie.sh" "$COWRIE_TARGET"
+    record_one dionaea "$ROOT/docs/scripts/demo-dionaea.sh" "$DIONAEA_TARGET"
     ;;
   *)
     echo "usage: $0 [cowrie|dionaea|all]" >&2

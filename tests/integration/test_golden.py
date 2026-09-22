@@ -1,6 +1,6 @@
 """Live Docker golden fixtures (cowrie / dionaea / nginx).
 
-Requires: docker compose -f deploy/docker-compose.benchmark.yml up -d
+Requires: docker compose -f tests/fixtures/benchmark/docker-compose.yml up -d
 Skipped automatically when services are unreachable.
 """
 
@@ -29,7 +29,7 @@ def _port_open(host: str, port: int, timeout: float = 1.0) -> bool:
 
 def _require(host: str, port: int) -> None:
     if not _port_open(host, port):
-        pytest.skip(f"{host}:{port} not reachable (start deploy/docker-compose.benchmark.yml)")
+        pytest.skip(f"{host}:{port} not reachable (start tests/fixtures/benchmark/docker-compose.yml)")
 
 
 def _report(host: str, indicators: list[Indicator], *, http_port: int) -> object:

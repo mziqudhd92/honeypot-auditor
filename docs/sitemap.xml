@@ -41,42 +41,57 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://mziqudhd92.github.io/honeypot-auditor/REDIS.md</loc>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/udp/SSDP.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md</loc>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/REDIS.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://mziqudhd92.github.io/honeypot-auditor/IPP.md</loc>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/ELASTICSEARCH.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://mziqudhd92.github.io/honeypot-auditor/MEMCACHED.md</loc>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/KUBERNETES.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://mziqudhd92.github.io/honeypot-auditor/HTTP.md</loc>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/DOCKER.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://mziqudhd92.github.io/honeypot-auditor/SIP.md</loc>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/IPP.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://mziqudhd92.github.io/honeypot-auditor/MQTT.md</loc>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/MEMCACHED.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://mziqudhd92.github.io/honeypot-auditor/IMAP.md</loc>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/HTTP.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/SIP.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/MQTT.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/IMAP.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -89,5 +104,69 @@
     <loc>https://mziqudhd92.github.io/honeypot-auditor/demo/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/README.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/SSH.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/TELNET.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/FTP.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/SMTP.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/POP3.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/SMB.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/VNC.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/MYSQL.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/POSTGRES.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/GIT.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/RDP.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/HTTPPROXY.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/MSSQL.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/MONGODB.md</loc>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/STRATEGIES.md</loc>
+    <changefreq>weekly</changefreq>
   </url>
 </urlset>

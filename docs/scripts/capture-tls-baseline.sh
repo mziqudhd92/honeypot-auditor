@@ -2,13 +2,13 @@
 # Capture TLS ServerHello JA3S/JA4S baselines using fixed ClientHello (audit profile).
 #
 # Usage:
-#   scripts/capture-tls-baseline.sh [--name NAME] [--cdn] [--update-package] TARGET
+#   docs/scripts/capture-tls-baseline.sh [--name NAME] [--cdn] [--update-package] TARGET
 #
 # TARGET may be HOST:PORT, [IPv6]:PORT, or bare HOST/IPv6 (default port 443).
 # Default: merge into .lab-tls-capture/tls_profiles.json (never clobber package placeholders).
 # --update-package: merge into packaged data (lures or cdn_tls_profiles.json).
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NAME="captured_baseline"
 KIND="lure"
 UPDATE_PACKAGE=0
@@ -105,7 +105,7 @@ else:
     doc = {
         "_meta": {
             "note": "Lab capture — merge into package data as needed",
-            "capture": "scripts/capture-tls-baseline.sh [--name NAME] [--cdn] TARGET",
+            "capture": "docs/scripts/capture-tls-baseline.sh [--name NAME] [--cdn] TARGET",
         },
         "lures": {},
         "cdn_edge": {},

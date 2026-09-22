@@ -6,12 +6,12 @@ Prefer this file + `llms.txt` + `llms-full.txt` over scraping marketing HTML.
 
 ## What this is
 
-**honeypot-auditor** — MIT-licensed Python CLI that fingerprints low-interaction honeypots via non-destructive multi-protocol probes (**26** engines including MQTT, SNMP, DNS, NTP, TFTP, Redis, Elasticsearch, IPP/CUPS, and Memcached). Outputs weighted **Honeyscore (0–100%)**, Rich table, JSON.
+**honeypot-auditor** — MIT-licensed Python CLI that fingerprints low-interaction honeypots via non-destructive multi-protocol probes (**29** engines including MQTT, SNMP, DNS, NTP, TFTP, SSDP, Redis, Elasticsearch, Docker Engine API, Kubernetes API, IPP/CUPS, and Memcached). Outputs weighted **Honeyscore (0–100%)**, Rich table, JSON.
 
 - Site: https://mziqudhd92.github.io/honeypot-auditor/
 - Repo: https://github.com/mziqudhd92/honeypot-auditor
 - PyPI: https://pypi.org/project/honeypot-auditor/
-- Version: **0.9.5**
+- Version: **1.0.0**
 - Contact: security@helloaeterna.com
 
 ## Hard rules for agents
@@ -91,22 +91,24 @@ Subnet JSON: `scan_type: subnet`, `summary[]` (per-IP scores), `hosts[]` (full p
 
 Read triggered indicators in JSON (`indicators[].triggered`) or pass `-v` / `--verbose` for the full console breakdown (hits/intra, score + scoped formulas, fidelity, per-protocol matrix). Default console is the score panel only (`protocol_strategies` is always in JSON). Closed/skipped probes do not raise the score.
 
-Basic **strategies** (same three on every protocol): arbitrary auth, state non-persistence, static signature (includes unknown nmap `-sV` on any protocol, `-sV`/banner family mismatch, Redis RESP stubs, and canned MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB templates). When nmap is enabled, every open preset port is version-scanned. See `PROTOCOL_STRATEGIES` in config. Extra same-category hits add +7.5% (cap +15%); `fidelity: high|decisive` adds +15% high-signal bonus. IMAP mail-skin details: `docs/IMAP.md`. MQTT behavioral tells: `docs/MQTT.md`. SNMP RFC non-compliance (arbitrary_auth + static_signature only): `docs/SNMP.md`. DNS UDP RFC non-compliance (**all three** strategies — `dns.arbitrary_auth` / `dns.state_nonpersist` / static RFC façades): `docs/udp/DNS.md`. NTP UDP RFC 5905 non-compliance (**all three** — `ntp.kod_absent` / `ntp.state_nonpersist` / static RFC façades): `docs/udp/NTP.md`. TFTP TID/option RFC non-compliance (**static_signature** + **state_nonpersist** — TID reuse, response clone, no OACK retransmit, block-size arithmetic): `docs/udp/TFTP.md`. Redis RESP non-compliance: `docs/REDIS.md`. Elasticsearch HTTP API non-compliance (**all three** — dual Basic / cluster-identity state / path-method façades): `docs/ELASTICSEARCH.md`. IPP/CUPS HTTP+IPP non-compliance (**all three** — dual Basic on `/admin` / illegal-op·ghost state / static façades): `docs/IPP.md`. Memcached ASCII non-compliance (**all three** — dual probe-key set / reconnect persist + TTL / static façades; never `flush_all`): `docs/MEMCACHED.md`. HTTP decoy-web tells (all three + proto_conformance — canned 200 / empty 405 / login skins / reply-before-chunked-body, gated): `docs/HTTP.md`. SIP transaction coherence (**all three** — fake-Digest / CSeq-Call-ID state / Via·CSeq echo façades): `docs/SIP.md`.
+Basic **strategies** (same three on every protocol): arbitrary auth, state non-persistence, static signature (includes unknown nmap `-sV` on any protocol, `-sV`/banner family mismatch, Redis RESP stubs, and canned MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB templates). When nmap is enabled, every open preset port is version-scanned. See `PROTOCOL_STRATEGIES` in config. Extra same-category hits add +7.5% (cap +15%); `fidelity: high|decisive` adds +15% high-signal bonus. IMAP mail-skin details: `docs/tcp/IMAP.md`. MQTT behavioral tells: `docs/tcp/MQTT.md`. SNMP RFC non-compliance (arbitrary_auth + static_signature only): `docs/SNMP.md`. DNS UDP RFC non-compliance (**all three** strategies — `dns.arbitrary_auth` / `dns.state_nonpersist` / static RFC façades): `docs/udp/DNS.md`. NTP UDP RFC 5905 non-compliance (**all three** — `ntp.kod_absent` / `ntp.state_nonpersist` / static RFC façades): `docs/udp/NTP.md`. TFTP TID/option RFC non-compliance (**static_signature** + **state_nonpersist** — TID reuse, response clone, no OACK retransmit, block-size arithmetic): `docs/udp/TFTP.md`. SSDP/UPnP discovery non-compliance (**static_signature** only — M-SEARCH framing, ST echo, stock SERVER, loopback LOCATION): `docs/udp/SSDP.md`. Redis RESP non-compliance: `docs/tcp/REDIS.md`. Elasticsearch HTTP API non-compliance (**all three** — dual Basic / cluster-identity state / path-method façades): `docs/tcp/ELASTICSEARCH.md`. Docker Engine API non-compliance (**static_signature** only — read-only `/_ping` · `/version` · `/info`; never create/start/exec/pull): `docs/tcp/DOCKER.md`. Kubernetes API non-compliance (**static_signature** only — read-only `/livez` · `/version` · `/api`; never token spray or object access): `docs/tcp/KUBERNETES.md`. IPP/CUPS HTTP+IPP non-compliance (**all three** — dual Basic on `/admin` / illegal-op·ghost state / static façades): `docs/tcp/IPP.md`. Memcached ASCII non-compliance (**all three** — dual probe-key set / reconnect persist + TTL / static façades; never `flush_all`): `docs/tcp/MEMCACHED.md`. HTTP decoy-web tells (all three + proto_conformance — canned 200 / empty 405 / login skins / reply-before-chunked-body, gated): `docs/tcp/HTTP.md`. SIP transaction coherence (**all three** — fake-Digest / CSeq-Call-ID state / Via·CSeq echo façades): `docs/tcp/SIP.md`.
 
 ## Repo layout (short)
 
 ```
 src/honeypot_auditor/   CLI, analyzer, banner (figlet header)
-  probes/               one module per protocol (ssh.py, telnet.py, ftp.py, …)
-    udp/                UDP engines via discovery (dns.py, ntp.py, tftp.py)
+  probes/               one module per protocol (ssh.py, telnet.py, ftp.py, docker.py, …)
+    udp/                UDP engines via discovery (dns.py, ntp.py, tftp.py, ssdp.py)
     common.py           shared skip/cred helpers
     shell_cti.py        Cowrie/Kippo transcript tells
     recon.py            Shodan + Nmap
     deep/               --deep axes (behavior, coherence, stack, FSM, temporal load, …)
 tests/                  pytest suite (test_ssh.py, test_telnet.py, …)
-deploy/                 docker-compose.benchmark.yml (Cowrie + Dionaea)
-scripts/                demo + benchmark helpers
+tests/fixtures/benchmark/   golden lab compose (Cowrie + Dionaea + nginx)
+docs/scripts/                demo + benchmark helpers
 docs/                   GitHub Pages site + llms/agents briefs
+  tcp/                  TCP protocol probe guides
+  udp/                  UDP protocol probe guides
 ```
 
 ## When helping users
