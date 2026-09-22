@@ -1,0 +1,42 @@
+{
+  "score": 70.0,
+  "threat_level": "Confirmed Honeypot",
+  "target": "127.0.0.1",
+  "hits": [
+    {
+      "id": "smb.dialect",
+      "detail": "SMB listener up but session setup failed: unpack requires a buffer of 2 bytes",
+      "fidelity": "medium",
+      "protocol": "smb:1445",
+      "weight": null
+    },
+    {
+      "id": "ftp.persist",
+      "detail": "non-routable PASV data path; upload surface not verifiable (no response)",
+      "fidelity": "medium",
+      "protocol": "ftp:2121",
+      "weight": null
+    },
+    {
+      "id": "ftp.banner",
+      "detail": "220 DiskStation FTP server ready. | 215 UNIX Type: L8 | PASV advertises non-routable 172.18.0.3; PASV address mismatch 172.18.0.3 vs 127.0.0.1; PORT timeout",
+      "fidelity": "medium",
+      "protocol": "ftp:2121",
+      "weight": null
+    },
+    {
+      "id": "http.silent_accept",
+      "detail": "TCP accept; request sent; no HTTP bytes before timeout",
+      "fidelity": "medium",
+      "protocol": "http:8081",
+      "weight": null
+    },
+    {
+      "id": "corroboration.protocol_buffet",
+      "detail": "+10% for 3 protocol lures (>1 at 5% each): ftp, http, smb",
+      "fidelity": "medium",
+      "protocol": "multi",
+      "weight": null
+    }
+  ]
+}

@@ -1,8 +1,10 @@
 # UDP probe package
 
-Layout and transport for UDP engines. **DNS**, **NTP**, **SSDP**, and **TFTP** ship here.
-Existing **SNMP** and **SIP** probes stay in flat `probes/` until an optional
-relocate PR.
+Layout and transport for UDP engines. TCP guides live under
+[`docs/tcp/`](../tcp/README.md). **DNS**, **NTP**, **SSDP**, and **TFTP** ship here.
+Existing **SNMP** stays flat at `docs/SNMP.md` until an optional relocate PR;
+**SIP** is documented under [`docs/tcp/SIP.md`](../tcp/SIP.md) (UDP-first with
+TCP fallback).
 
 ## Layout
 

@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 # Lab-tour demo: three authorized honeypot hosts, mixed CLI flags (-v / --deep).
-# Designed for asciinema → polished cast → GIF (see scripts/record-lab-tour-demo.sh).
+# Designed for asciinema → polished cast → GIF (see docs/scripts/record-lab-tour-demo.sh).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HPA="${HPA:-$ROOT/.venv/bin/honeypot-auditor}"
 if [[ ! -x "$HPA" ]]; then
   HPA="$(command -v honeypot-auditor || true)"
 fi
 [[ -n "$HPA" && -x "$HPA" ]] || { echo "honeypot-auditor not found (venv or PATH)" >&2; exit 1; }
 
-COWRIE="${COWRIE_TARGET:-54.237.202.94}"
-DD="${DD_TARGET:-54.204.78.207}"
-TARPIT="${TARPIT_TARGET:-13.218.137.93}"
+COWRIE="${COWRIE_TARGET:-127.0.0.1}"
+DD="${DD_TARGET:-127.0.0.1}"
+TARPIT="${TARPIT_TARGET:-127.0.0.1}"
+# Port lists for local Docker demo-lab (override for remote authorized hosts).
+COWRIE_PORTS="${COWRIE_PORTS:-28222}"
+DD_PORTS="${DD_PORTS:-28223,28080,28306}"
+TARPIT_PORTS="${TARPIT_PORTS:-29080,29445,28128}"
+DD_PORT_MAP="${DD_PORT_MAP:-ssh=28223,http=28080,mysql=28306}"
+TARPIT_PORT_MAP="${TARPIT_PORT_MAP:-http=29080,smb=29445,httpproxy=28128}"
+VERSION="$("$HPA" --version 2>/dev/null | awk '{print $NF}' || echo "1.0.0")"
 
 # Human-readable holds (must survive asciinema idle-time-limit + polish).
 PAUSE_TITLE="${PAUSE_TITLE:-2.5}"
@@ -26,6 +33,7 @@ export PYTHONWARNINGS=ignore
 export TERM="${TERM:-xterm-256color}"
 export COLUMNS="${COLUMNS:-100}"
 export LINES="${LINES:-32}"
+export HPA_DEMO_VERSION="$VERSION"
 
 clear_soft() {
   printf '\033[2J\033[H'
@@ -53,8 +61,9 @@ def clip(s: str, width: int) -> str:
 
 title = clip(os.environ.get("TITLE", ""), W - 2)
 sub = clip(os.environ.get("SUB", ""), W - 2)
-brand_l = "HONEYPOT-AUDITOR"
-brand_r = "· lab tour · authorized targets only"
+ver = os.environ.get("HPA_DEMO_VERSION", "1.0.0")
+brand_l = f"HONEYPOT-AUDITOR  v{ver}"
+brand_r = "· lab tour · authorized only"
 gap = W - 2 - len(brand_l) - len(brand_r)
 if gap < 1:
     brand_r = clip(brand_r, max(8, W - 2 - len(brand_l) - 1)).rstrip()
@@ -131,7 +140,7 @@ run_background_then_show() {
   local label="deep audit in progress"
   "$HPA" "${args[@]}" --output "$out" >/tmp/hpa-lab-tour.log 2>/tmp/hpa-lab-tour.err &
   wait_probe $! "$label"
-  python3 "$ROOT/scripts/demo-print-result.py" "$out" "dd-honeypot stack (--deep)"
+  python3 "$ROOT/docs/scripts/demo-print-result.py" "$out" "dd-honeypot stack (--deep)"
   python3 - <<PY
 import json
 r=json.load(open("$out"))
@@ -158,9 +167,9 @@ def clip(s, n):
     return s + " " * (n - len(s)) if len(s) <= n else s[: n - 1] + "…"
 
 rows = [
-    ("Cowrie", os.environ["COW"], "-p 22 -v", "208"),
-    ("dd-stack", os.environ["DD"], "-p 22,80,3306 --deep", "39"),
-    ("tarpit", os.environ["TP"], "-p 80,443,445,8080 -v", "201"),
+    ("Cowrie", os.environ["COW"], f"-p {os.environ.get('COWRIE_PORTS','28222')} -v", "208"),
+    ("dd-stack", os.environ["DD"], f"-p {os.environ.get('DD_PORTS','28223,28080,28306')} --deep", "39"),
+    ("tarpit", os.environ["TP"], f"-p {os.environ.get('TARPIT_PORTS','29080,29445,28128')} -v", "201"),
 ]
 top = "┌" + ("─" * W) + "┐"
 bot = "└" + ("─" * W) + "┘"
@@ -189,41 +198,45 @@ PY
 }
 
 # ─── INTRO ───────────────────────────────────────────────────────────────
-banner ">>> THREE HOSTS · THREE OPTION SETS <<<" "Cowrie  ·  dd-honeypot stack  ·  silent-accept tarpit"
+banner ">>> THREE FACES · THREE OPTION SETS · v$VERSION <<<" "Cowrie  ·  OpenCanary / dd-stack  ·  silent-accept tarpit"
 sleep "$PAUSE_TITLE"
 
 # ─── SCENE 1: Cowrie, SSH-only, verbose, no deep ─────────────────────────
 banner "SCENE 1 / 3  ·  COWRIE" "password-gated SSH · pre-auth KEX facade · -v · no --deep"
 sleep "$PAUSE_SCENE"
-CMD="honeypot-auditor --target $COWRIE --confirm-authorized -p 22 -v --timeout $TIMEOUT"
+CMD="honeypot-auditor --target $COWRIE --confirm-authorized -p $COWRIE_PORTS -v --timeout $TIMEOUT"
 type_cmd "$CMD"
-run_live --target "$COWRIE" --confirm-authorized -p 22 -v --timeout "$TIMEOUT" \
+run_live --target "$COWRIE" --confirm-authorized -p "$COWRIE_PORTS" -v --timeout "$TIMEOUT" \
   --output /tmp/hpa-cowrie-demo.json
 COWRIE_SCORE="$(python3 -c "import json;print(f\"{json.load(open('/tmp/hpa-cowrie-demo.json'))['score']:.0f}%\")" 2>/dev/null || echo "?")"
 reading_pause "KEX facade is the Cowrie tell — review the scoreboard"
 
 # ─── SCENE 2: dd stack, multi-port, deep, no -v ──────────────────────────
-banner "SCENE 2 / 3  ·  DD-HONEYPOT STACK" "SSH + Werkzeug HTTP + MySQL · --deep · compact report (no -v)"
+banner "SCENE 2 / 3  ·  DD-HONEYPOT / OPENCANARY" "SSH + HTTP + MySQL · --deep · compact report (no -v)"
 sleep "$PAUSE_SCENE"
-CMD="honeypot-auditor --target $DD --confirm-authorized -p 22,80,3306 --deep --timeout $TIMEOUT"
+CMD="honeypot-auditor --target $DD --confirm-authorized -p $DD_PORTS --ports $DD_PORT_MAP --deep --timeout $TIMEOUT"
 type_cmd "$CMD"
+# Map OpenCanary host ports to protocol engines for a clean deep scan.
 run_background_then_show /tmp/hpa-dd-demo.json \
-  --target "$DD" --confirm-authorized -p 22,80,3306 --deep --timeout "$TIMEOUT"
+  --target "$DD" --confirm-authorized -p "$DD_PORTS" \
+  --ports "$DD_PORT_MAP" --deep --timeout "$TIMEOUT"
 DD_SCORE="$(python3 -c "import json;print(f\"{json.load(open('/tmp/hpa-dd-demo.json'))['score']:.0f}%\")" 2>/dev/null || echo "?")"
 reading_pause "deep stack/FSM tells — read the verdict and triggers"
 
 # ─── SCENE 3: tarpit, silent accepts, verbose, no deep ───────────────────
 banner "SCENE 3 / 3  ·  SILENT-ACCEPT TARPIT" "HTTP/HTTPS/SMB/proxy faces that accept TCP then go quiet · -v"
 sleep "$PAUSE_SCENE"
-CMD="honeypot-auditor --target $TARPIT --confirm-authorized -p 80,443,445,8080 -v --timeout $TIMEOUT"
+CMD="honeypot-auditor --target $TARPIT --confirm-authorized -p $TARPIT_PORTS --ports $TARPIT_PORT_MAP -v --timeout $TIMEOUT"
 type_cmd "$CMD"
-run_live --target "$TARPIT" --confirm-authorized -p 80,443,445,8080 -v --timeout "$TIMEOUT" \
+run_live --target "$TARPIT" --confirm-authorized -p "$TARPIT_PORTS" \
+  --ports "$TARPIT_PORT_MAP" -v --timeout "$TIMEOUT" \
   --output /tmp/hpa-tarpit-demo.json
 TARPIT_SCORE="$(python3 -c "import json;print(f\"{json.load(open('/tmp/hpa-tarpit-demo.json'))['score']:.0f}%\")" 2>/dev/null || echo "?")"
 reading_pause "silent-accept + SMB timeout — review the HIT lines"
 
 # ─── FINALE ──────────────────────────────────────────────────────────────
-banner "TOUR COMPLETE" "same tool · different lenses · authorized lab only"
+export COWRIE_PORTS DD_PORTS TARPIT_PORTS
+banner "TOUR COMPLETE · v$VERSION" "same tool · different lenses · authorized lab only"
 scoreboard "$COWRIE_SCORE" "$DD_SCORE" "$TARPIT_SCORE"
 printf '  \033[38;5;244m▸ reading pause — compare the three scores\033[0m\n'
 sleep "$PAUSE_FINALE"

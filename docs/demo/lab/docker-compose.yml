@@ -1,0 +1,46 @@
+# Local targets for honeypot-auditor lab-tour demo (v1.0.0).
+# High host ports avoid clashes with other local labs. Bind 127.0.0.1 only.
+name: hpa-demo-lab
+
+services:
+  cowrie:
+    image: cowrie/cowrie:latest
+    container_name: hpa-demo-cowrie
+    ports:
+      - "127.0.0.1:28222:2222/tcp"
+    restart: unless-stopped
+
+  opencanary:
+    image: python:3.11-slim-bookworm
+    container_name: hpa-demo-opencanary
+    volumes:
+      - ./opencanary.conf:/root/.opencanary.conf:ro
+    ports:
+      - "127.0.0.1:28223:2222/tcp"
+      - "127.0.0.1:28080:80/tcp"
+      - "127.0.0.1:28306:3306/tcp"
+    command: >-
+      bash -lc "pip install -q opencanary &&
+      opencanaryd --start --uid=nobody && sleep infinity"
+    restart: unless-stopped
+
+  dionaea:
+    image: dinotools/dionaea:latest
+    container_name: hpa-demo-dionaea
+    ports:
+      - "127.0.0.1:22121:21/tcp"
+      - "127.0.0.1:28081:80/tcp"
+      - "127.0.0.1:21445:445/tcp"
+    restart: unless-stopped
+
+  tarpit:
+    image: python:3.11-slim-bookworm
+    container_name: hpa-demo-tarpit
+    volumes:
+      - ./tarpit.py:/demo-tarpit.py:ro
+    ports:
+      - "127.0.0.1:29080:9080/tcp"
+      - "127.0.0.1:29445:9445/tcp"
+      - "127.0.0.1:28128:3128/tcp"
+    command: ["python3", "/demo-tarpit.py"]
+    restart: unless-stopped

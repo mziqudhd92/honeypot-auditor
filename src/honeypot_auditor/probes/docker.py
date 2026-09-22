@@ -10,7 +10,7 @@ pull images, exec, or write volumes/networks):
 
 Ports 2375 / lab 12375 (plain HTTP). TLS port 2376 is out of scope for v1.
 
-See docs/DOCKER.md and Docker Engine API docs (System ping, version, info).
+See docs/tcp/DOCKER.md and Docker Engine API docs (System ping, version, info).
 """
 
 from __future__ import annotations

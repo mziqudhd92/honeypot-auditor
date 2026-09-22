@@ -1,0 +1,49 @@
+{
+  "score": 100.0,
+  "threat_level": "Confirmed Honeypot",
+  "target": "127.0.0.1",
+  "hits": [
+    {
+      "id": "ssh.kex_facade",
+      "detail": "OpenSSH_9.2p1 banner with Twisted/Cowrie KEX facade: host_key prefers ssh-rsa without rsa-sha2-*; enc lacks AEAD (chacha20/gcm) but still offers CBC/3DES; MAC lacks *-etm@openssh.com; KEX includes gro",
+      "fidelity": "high",
+      "protocol": "ssh:2222",
+      "weight": null
+    },
+    {
+      "id": "ssh.arbitrary_auth",
+      "detail": "random user_a11:**** accepted; 2nd login user_a61:**** also accepted",
+      "fidelity": "medium",
+      "protocol": "ssh:2222",
+      "weight": null
+    },
+    {
+      "id": "ssh.exec_denied",
+      "detail": "exec_command failed after random login; interactive shell is a lure",
+      "fidelity": "medium",
+      "protocol": "ssh:2222",
+      "weight": null
+    },
+    {
+      "id": "ssh.uname",
+      "detail": "cowrie-default-hostname=svr04; no bash arithmetic (expected 63); pipe utilities missing",
+      "fidelity": "medium",
+      "protocol": "ssh:2222",
+      "weight": null
+    },
+    {
+      "id": "ssh.whoami",
+      "detail": "session identity is lure account user_a11",
+      "fidelity": "medium",
+      "protocol": "ssh:2222",
+      "weight": null
+    },
+    {
+      "id": "corroboration.high_signal",
+      "detail": "+15% for high-fidelity tell(s): ssh.kex_facade",
+      "fidelity": "high",
+      "protocol": "multi",
+      "weight": null
+    }
+  ]
+}

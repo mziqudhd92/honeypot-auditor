@@ -12,7 +12,7 @@ Ephemeral topics use a unique ``honeypot-auditor/`` prefix and QoS0/1 only.
 
 Port 8883 and lab 18883 use implicit TLS (MQTTS); 1883/11883 are cleartext.
 
-See docs/MQTT.md and OASIS MQTT v3.1.1.
+See docs/tcp/MQTT.md and OASIS MQTT v3.1.1.
 """
 
 from __future__ import annotations

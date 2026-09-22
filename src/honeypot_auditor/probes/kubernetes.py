@@ -9,7 +9,7 @@ cluster objects):
 
 Ports 6443 / lab 16443. TLS is preferred on those ports (IMAPS-style).
 
-See docs/KUBERNETES.md and Kubernetes API health/discovery docs.
+See docs/tcp/KUBERNETES.md and Kubernetes API health/discovery docs.
 """
 
 from __future__ import annotations

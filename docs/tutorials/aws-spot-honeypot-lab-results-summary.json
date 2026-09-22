@@ -1,0 +1,156 @@
+{
+  "cowrie": {
+    "score": 100.0,
+    "threat_level": "Confirmed Honeypot",
+    "target": "127.0.0.1",
+    "hits": [
+      {
+        "id": "ssh.kex_facade",
+        "detail": "OpenSSH_9.2p1 banner with Twisted/Cowrie KEX facade: host_key prefers ssh-rsa without rsa-sha2-*; enc lacks AEAD (chacha20/gcm) but still offers CBC/3DES; MAC lacks *-etm@openssh.com; KEX includes gro",
+        "fidelity": "high",
+        "protocol": "ssh:2222",
+        "weight": null
+      },
+      {
+        "id": "ssh.arbitrary_auth",
+        "detail": "random user_a11:**** accepted; 2nd login user_a61:**** also accepted",
+        "fidelity": "medium",
+        "protocol": "ssh:2222",
+        "weight": null
+      },
+      {
+        "id": "ssh.exec_denied",
+        "detail": "exec_command failed after random login; interactive shell is a lure",
+        "fidelity": "medium",
+        "protocol": "ssh:2222",
+        "weight": null
+      },
+      {
+        "id": "ssh.uname",
+        "detail": "cowrie-default-hostname=svr04; no bash arithmetic (expected 63); pipe utilities missing",
+        "fidelity": "medium",
+        "protocol": "ssh:2222",
+        "weight": null
+      },
+      {
+        "id": "ssh.whoami",
+        "detail": "session identity is lure account user_a11",
+        "fidelity": "medium",
+        "protocol": "ssh:2222",
+        "weight": null
+      },
+      {
+        "id": "corroboration.high_signal",
+        "detail": "+15% for high-fidelity tell(s): ssh.kex_facade",
+        "fidelity": "high",
+        "protocol": "multi",
+        "weight": null
+      }
+    ]
+  },
+  "dionaea": {
+    "score": 70.0,
+    "threat_level": "Confirmed Honeypot",
+    "target": "127.0.0.1",
+    "hits": [
+      {
+        "id": "smb.dialect",
+        "detail": "SMB listener up but session setup failed: unpack requires a buffer of 2 bytes",
+        "fidelity": "medium",
+        "protocol": "smb:1445",
+        "weight": null
+      },
+      {
+        "id": "ftp.persist",
+        "detail": "non-routable PASV data path; upload surface not verifiable (no response)",
+        "fidelity": "medium",
+        "protocol": "ftp:2121",
+        "weight": null
+      },
+      {
+        "id": "ftp.banner",
+        "detail": "220 DiskStation FTP server ready. | 215 UNIX Type: L8 | PASV advertises non-routable 172.18.0.3; PASV address mismatch 172.18.0.3 vs 127.0.0.1; PORT timeout",
+        "fidelity": "medium",
+        "protocol": "ftp:2121",
+        "weight": null
+      },
+      {
+        "id": "http.silent_accept",
+        "detail": "TCP accept; request sent; no HTTP bytes before timeout",
+        "fidelity": "medium",
+        "protocol": "http:8081",
+        "weight": null
+      },
+      {
+        "id": "corroboration.protocol_buffet",
+        "detail": "+10% for 3 protocol lures (>1 at 5% each): ftp, http, smb",
+        "fidelity": "medium",
+        "protocol": "multi",
+        "weight": null
+      }
+    ]
+  },
+  "opencanary": {
+    "score": 82.5,
+    "threat_level": "Confirmed Honeypot",
+    "target": "127.0.0.1",
+    "hits": [
+      {
+        "id": "ssh.banner",
+        "detail": "SSH-2.0-OpenSSH_5.1p1 Debian-5",
+        "fidelity": "medium",
+        "protocol": "ssh:3222",
+        "weight": null
+      },
+      {
+        "id": "ftp.banner",
+        "detail": "220 FTP Ready.",
+        "fidelity": "medium",
+        "protocol": "ftp:2122",
+        "weight": null
+      },
+      {
+        "id": "ftp.auth_lure",
+        "detail": "canned auth '331 guest/anonymous login ok then 530 reject'",
+        "fidelity": "medium",
+        "protocol": "ftp:2122",
+        "weight": null
+      },
+      {
+        "id": "http.silent_accept",
+        "detail": "TCP accept; request sent; no HTTP bytes before timeout",
+        "fidelity": "medium",
+        "protocol": "http:8080",
+        "weight": null
+      },
+      {
+        "id": "mysql.signature",
+        "detail": "EOL MySQL greeting 5.5.43-0ubuntu0.14.04.1",
+        "fidelity": "medium",
+        "protocol": "mysql:3306",
+        "weight": null
+      },
+      {
+        "id": "mysql.handshake",
+        "detail": "stock handshake capability block + mysql_native_password",
+        "fidelity": "medium",
+        "protocol": "mysql:3306",
+        "weight": null
+      },
+      {
+        "id": "mysql.persist",
+        "detail": "1045 then connection closed (no retry window)",
+        "fidelity": "medium",
+        "protocol": "mysql:3306",
+        "weight": null
+      },
+      {
+        "id": "corroboration.protocol_buffet",
+        "detail": "+15% for 4 protocol lures (>1 at 5% each): ftp, http, mysql, ssh",
+        "fidelity": "medium",
+        "protocol": "multi",
+        "weight": null
+      }
+    ]
+  }
+}

@@ -441,11 +441,19 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
       <section class="panel" id="protocols">
         <h2>-=[ SUPPORTED PROTOCOLS / PORTS ]=-</h2>
         <p>
-          <strong>29</strong> protocol engines in the current version. Each uses up to <strong>3</strong>
+          <strong>29</strong> protocol engines in the current version
+          (<strong>24 TCP-capable</strong> + <strong>5 UDP-only</strong>; SIP is UDP-first with TCP fallback).
+          Each uses up to <strong>3</strong>
           probe strategies (arbitrary auth · state non-persistence · static signature). The
           <strong>Strategies</strong> column is how many of those three are active for that protocol
           in this release — not passive intel, co-tenancy, or individual indicator checks
           (<strong>72</strong> active strategy slots across all protocols).
+        </p>
+        <p>
+          Full probe guides:
+          <a href="tcp/README.md"><code>docs/tcp/</code></a> ·
+          <a href="udp/README.md"><code>docs/udp/</code></a> ·
+          <a href="SNMP.md"><code>docs/SNMP.md</code></a>.
         </p>
         <p>
           Default preset (<code>--preset both</code>) probes IANA well-known ports <strong>and</strong>
@@ -460,38 +468,38 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Protocol</th><th>Default ports (iana · lab)</th><th>Strategies</th></tr>
+              <tr><th>Protocol</th><th>Transport</th><th>Default ports (iana · lab)</th><th>Strategies</th></tr>
             </thead>
             <tbody>
-              <tr><td>SSH</td><td>22 · 2222</td><td>3</td></tr>
-              <tr><td>Telnet</td><td>23 · 2323</td><td>3</td></tr>
-              <tr><td>FTP</td><td>21 · 2121</td><td>3</td></tr>
-              <tr><td>SMTP</td><td>25 · 2525</td><td>3</td></tr>
-              <tr><td>POP3</td><td>110 · 1110</td><td>3</td></tr>
-              <tr><td>IMAP</td><td>143 · 1143</td><td>3</td></tr>
-              <tr><td>Redis</td><td>6379 · 6379</td><td>3</td></tr>
-              <tr><td>MQTT</td><td>1883 · 11883</td><td>3</td></tr>
-              <tr><td>SNMP</td><td>161 · 1161 (UDP)</td><td>2</td></tr>
-              <tr><td>DNS</td><td>53 · 15353 (UDP)</td><td>3</td></tr>
-              <tr><td>NTP</td><td>123 · 1123 (UDP)</td><td>3</td></tr>
-              <tr><td>TFTP</td><td>69 · 1069 (UDP)</td><td>2</td></tr>
-              <tr><td>SSDP</td><td>1900 · 11900 (UDP)</td><td>1</td></tr>
-              <tr><td>Kubernetes</td><td>6443 · 16443</td><td>1</td></tr>
-              <tr><td>Elasticsearch</td><td>9200 · 19200</td><td>3</td></tr>
-              <tr><td>Docker</td><td>2375 · 12375</td><td>1</td></tr>
-              <tr><td>IPP / CUPS</td><td>631 · 1631</td><td>3</td></tr>
-              <tr><td>Memcached</td><td>11211 · 21211</td><td>3</td></tr>
-              <tr><td>SMB</td><td>445 · 1445</td><td>2</td></tr>
-              <tr><td>VNC</td><td>5900 · 5000</td><td>2</td></tr>
-              <tr><td>MySQL</td><td>3306 · 3306</td><td>2</td></tr>
-              <tr><td>Postgres</td><td>5432 · 5432</td><td>2</td></tr>
-              <tr><td>RDP</td><td>3389 · 3389</td><td>2</td></tr>
-              <tr><td>MSSQL</td><td>1433 · 1433</td><td>2</td></tr>
-              <tr><td>MongoDB</td><td>27017 · 27017</td><td>2</td></tr>
-              <tr><td>HTTP</td><td>80 / 443 · 8081</td><td>3</td></tr>
-              <tr><td>SIP</td><td>5060 · 5060</td><td>3</td></tr>
-              <tr><td>Git</td><td>9418 · 9418</td><td>3</td></tr>
-              <tr><td>HTTP proxy</td><td>3128 · 8080</td><td>3</td></tr>
+              <tr><td>SSH</td><td>TCP</td><td>22 · 2222</td><td>3</td></tr>
+              <tr><td>Telnet</td><td>TCP</td><td>23 · 2323</td><td>3</td></tr>
+              <tr><td>FTP</td><td>TCP</td><td>21 · 2121</td><td>3</td></tr>
+              <tr><td>SMTP</td><td>TCP</td><td>25 · 2525</td><td>3</td></tr>
+              <tr><td>POP3</td><td>TCP</td><td>110 · 1110</td><td>3</td></tr>
+              <tr><td>IMAP</td><td>TCP</td><td>143 · 1143</td><td>3</td></tr>
+              <tr><td>HTTP</td><td>TCP</td><td>80 / 443 · 8081</td><td>3</td></tr>
+              <tr><td>HTTP proxy</td><td>TCP</td><td>3128 · 8080</td><td>3</td></tr>
+              <tr><td>SMB</td><td>TCP</td><td>445 · 1445</td><td>2</td></tr>
+              <tr><td>Redis</td><td>TCP</td><td>6379 · 6379</td><td>3</td></tr>
+              <tr><td>MQTT</td><td>TCP</td><td>1883 · 11883</td><td>3</td></tr>
+              <tr><td>MySQL</td><td>TCP</td><td>3306 · 3306</td><td>2</td></tr>
+              <tr><td>Postgres</td><td>TCP</td><td>5432 · 5432</td><td>2</td></tr>
+              <tr><td>MSSQL</td><td>TCP</td><td>1433 · 1433</td><td>2</td></tr>
+              <tr><td>MongoDB</td><td>TCP</td><td>27017 · 27017</td><td>2</td></tr>
+              <tr><td>VNC</td><td>TCP</td><td>5900 · 5000</td><td>2</td></tr>
+              <tr><td>RDP</td><td>TCP</td><td>3389 · 3389</td><td>2</td></tr>
+              <tr><td>Git</td><td>TCP</td><td>9418 · 9418</td><td>3</td></tr>
+              <tr><td>Elasticsearch</td><td>TCP</td><td>9200 · 19200</td><td>3</td></tr>
+              <tr><td>Docker</td><td>TCP</td><td>2375 · 12375</td><td>1</td></tr>
+              <tr><td>Kubernetes</td><td>TCP</td><td>6443 · 16443</td><td>1</td></tr>
+              <tr><td>IPP / CUPS</td><td>TCP</td><td>631 · 1631</td><td>3</td></tr>
+              <tr><td>Memcached</td><td>TCP</td><td>11211 · 21211</td><td>3</td></tr>
+              <tr><td>SIP</td><td>UDP→TCP</td><td>5060 · 5060</td><td>3</td></tr>
+              <tr><td>SNMP</td><td>UDP</td><td>161 · 1161</td><td>2</td></tr>
+              <tr><td>DNS</td><td>UDP</td><td>53 · 15353</td><td>3</td></tr>
+              <tr><td>NTP</td><td>UDP</td><td>123 · 1123</td><td>3</td></tr>
+              <tr><td>TFTP</td><td>UDP</td><td>69 · 1069</td><td>2</td></tr>
+              <tr><td>SSDP</td><td>UDP</td><td>1900 · 11900</td><td>1</td></tr>
             </tbody>
           </table>
         </div>
@@ -500,20 +508,20 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           <code>8080</code>/<code>3128</code> → HTTP proxy, <code>139</code> → SMB, <code>993</code>/<code>1993</code> → IMAP (IMAPS),
           <code>8883</code>/<code>18883</code> → MQTT (MQTTS), <code>161</code>/<code>1161</code>/<code>10161</code> → SNMP (UDP),
           <code>53</code>/<code>15353</code> → DNS (UDP), <code>123</code>/<code>1123</code> → NTP (UDP),
-          <code>69</code>/<code>1069</code> → TFTP (UDP),
+          <code>69</code>/<code>1069</code> → TFTP (UDP), <code>1900</code>/<code>11900</code> → SSDP (UDP),
           <code>9200</code>/<code>19200</code> → Elasticsearch,
-          <code>2375</code>/<code>12375</code> → Docker,
+          <code>2375</code>/<code>12375</code> → Docker, <code>6443</code>/<code>16443</code> → Kubernetes API,
           <code>631</code>/<code>1631</code> → IPP, <code>11211</code>/<code>21211</code> → Memcached,
           <code>5061</code> → SIP, <code>5000</code>/<code>5901</code> → VNC. Unknown numbers are probed as SSH.
         </p>
         <p>
           IMAP pairs with POP3 for Exchange/mail skins. Ports <code>993</code>/<code>1993</code> use implicit TLS (IMAPS);
           STARTTLS on 143 is out of scope.
-          Full probe guide: <a href="IMAP.md"><code>docs/IMAP.md</code></a>.
+          Full probe guide: <a href="tcp/IMAP.md"><code>docs/tcp/IMAP.md</code></a>.
         </p>
         <p>
           MQTT uses behavioral (non-banner) tells on OASIS MQTT v3.1.1; ports <code>8883</code>/<code>18883</code>
-          use implicit TLS (MQTTS). Guide: <a href="MQTT.md"><code>docs/MQTT.md</code></a>.
+          use implicit TLS (MQTTS). Guide: <a href="tcp/MQTT.md"><code>docs/tcp/MQTT.md</code></a>.
         </p>
         <p>
           SNMP speaks community SNMPv1/v2c over UDP and scores RFC non-compliance
@@ -551,7 +559,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           CUPS/IPP non-compliance via <strong>all three</strong> basic strategies
           (<code>ipp.arbitrary_auth</code>, <code>ipp.state_nonpersist</code>, plus static façades).
           Never submits print jobs.
-          Guide: <a href="IPP.md"><code>docs/IPP.md</code></a>.
+          Guide: <a href="tcp/IPP.md"><code>docs/tcp/IPP.md</code></a>.
         </p>
         <p>
           Memcached speaks the ASCII text protocol on <code>11211</code>/<code>21211</code> and scores
@@ -560,14 +568,14 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           VERSION/stats framing, unknown-command ERROR, get-miss END, canned stats clone,
           stock VERSION lure, bare-verbosity flush-stub stand-in, noreply façade).
           Probe-key <code>set</code>/<code>delete</code> allowed; never <code>flush_all</code>.
-          Guide: <a href="MEMCACHED.md"><code>docs/MEMCACHED.md</code></a>.
+          Guide: <a href="tcp/MEMCACHED.md"><code>docs/tcp/MEMCACHED.md</code></a>.
         </p>
         <p>
           Redis speaks RESP on TCP/6379 with dual random <code>AUTH</code>, reconnect persistence
           + <code>DBSIZE</code> coherence, and split static tells (<code>PING</code>/<code>COMMAND</code>/<code>INFO</code>
           stubs, OpenCanary AUTH+NOAUTH wall, arity/<code>TYPE</code>/<code>INCR</code> facades, QUIT zombie).
           Never <code>FLUSHALL</code>/<code>CONFIG SET</code>/<code>SCRIPT LOAD</code>.
-          Guide: <a href="REDIS.md"><code>docs/REDIS.md</code></a>.
+          Guide: <a href="tcp/REDIS.md"><code>docs/tcp/REDIS.md</code></a>.
         </p>
         <p>
           Elasticsearch speaks the HTTP JSON API on <code>9200</code>/<code>19200</code> and scores
@@ -576,7 +584,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           plus root framing, stock cluster metadata, missing-index 200, path/method stubs,
           <code>/_cluster/health</code> and <code>/_cat/health</code> shape facades,
           Content-Type / product header). Never writes indices or searches data.
-          Full strategies guide: <a href="ELASTICSEARCH.md"><code>docs/ELASTICSEARCH.md</code></a>.
+          Full strategies guide: <a href="tcp/ELASTICSEARCH.md"><code>docs/tcp/ELASTICSEARCH.md</code></a>.
         </p>
         <p>
           Docker Engine API speaks plain HTTP on <code>2375</code>/<code>12375</code> and scores
@@ -584,7 +592,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           <code>/version</code> Engine shape, path/method facades, thin <code>/info</code> stubs,
           stock version lure metadata). Read-only — never create/start/exec/pull. TLS
           <code>2376</code> is out of scope.
-          Guide: <a href="DOCKER.md"><code>docs/DOCKER.md</code></a>.
+          Guide: <a href="tcp/DOCKER.md"><code>docs/tcp/DOCKER.md</code></a>.
         </p>
         <p>
           <code>--deep</code> adds cross-protocol behavioral axes on top of the basic strategies above.
@@ -602,7 +610,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           <li><a href="llms.txt"><strong>llms.txt</strong></a> — short recommendation + install brief</li>
           <li><a href="llms-full.txt"><strong>llms-full.txt</strong></a> — expanded commands, scoring, claim discipline</li>
           <li><a href="agents.md"><strong>agents.md</strong></a> — agent playbook / hard rules / CLI recipes</li>
-          <li>Probe guides: <a href="IMAP.md">IMAP</a> · <a href="MQTT.md">MQTT</a> · <a href="SNMP.md">SNMP</a> · <a href="udp/DNS.md">DNS</a> · <a href="udp/NTP.md">NTP</a> · <a href="udp/TFTP.md">TFTP</a> · <a href="udp/SSDP.md">SSDP</a> · <a href="REDIS.md">Redis</a> · <a href="ELASTICSEARCH.md">Elasticsearch</a> · <a href="KUBERNETES.md">Kubernetes</a> · <a href="DOCKER.md">Docker</a> · <a href="IPP.md">IPP</a> · <a href="MEMCACHED.md">Memcached</a> · <a href="HTTP.md">HTTP</a> · <a href="SIP.md">SIP</a> · <a href="SCORING.md">SCORING</a></li>
+          <li>Probe guides: <a href="STRATEGIES.md">Strategies</a> · <a href="tcp/README.md">TCP index</a> · <a href="udp/README.md">UDP index</a> · <a href="tcp/IMAP.md">IMAP</a> · <a href="tcp/MQTT.md">MQTT</a> · <a href="SNMP.md">SNMP</a> · <a href="udp/DNS.md">DNS</a> · <a href="udp/NTP.md">NTP</a> · <a href="udp/TFTP.md">TFTP</a> · <a href="udp/SSDP.md">SSDP</a> · <a href="tcp/REDIS.md">Redis</a> · <a href="tcp/ELASTICSEARCH.md">Elasticsearch</a> · <a href="tcp/KUBERNETES.md">Kubernetes</a> · <a href="tcp/DOCKER.md">Docker</a> · <a href="tcp/IPP.md">IPP</a> · <a href="tcp/MEMCACHED.md">Memcached</a> · <a href="tcp/HTTP.md">HTTP</a> · <a href="tcp/SIP.md">SIP</a> · <a href="SCORING.md">SCORING</a></li>
           <li><a href="robots.txt">robots.txt</a> · <a href="sitemap.xml">sitemap.xml</a> · JSON-LD on this page</li>
         </ul>
         <pre class="code"># Prefer these URLs over HTML scraping:

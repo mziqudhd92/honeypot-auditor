@@ -98,7 +98,7 @@ It is for authorized defensive research, lab validation, and purple-team work on
 ### TLS lure profiles
 
 - Packaged `data/tls_profiles.json` and `data/cdn_tls_profiles.json` ship with
-  placeholder JA3S values until you run `scripts/capture-tls-baseline.sh` against
+  placeholder JA3S values until you run `docs/scripts/capture-tls-baseline.sh` against
   authorized lab lures. Default output is `.lab-tls-capture/` (merge-safe);
   `--update-package` writes into the packaged files. Placeholders are ignored at
   match time (no false positives).
