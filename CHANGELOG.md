@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-22
+
 ### Fixed
 
 - Kubernetes health speakership: fall through from non-ok `/livez` to `/healthz`
