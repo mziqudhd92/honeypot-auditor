@@ -245,6 +245,21 @@ tells over banner IOCs alone — see [`SIP.md`](SIP.md).
 
 Full indicator list, ports, safe-mode, and non-destructive policy: [`SIP.md`](SIP.md).
 
+### Kubernetes API non-compliance (basic probe)
+
+Kubernetes uses **static_signature** only (read-only TLS discovery on **6443** /
+lab **16443**; no token spraying, no object access). Prefer path/shape facade
+tells over banner IOCs alone — see [`KUBERNETES.md`](KUBERNETES.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `kubernetes.api_framing` / `kubernetes.version_framing` / `kubernetes.health_framing` | static_signature | `/api` APIVersions · `/version` shape · `/livez`/`/healthz` not `ok` |
+| `kubernetes.path_facade` / `kubernetes.method_stub` | static_signature | Unknown path returns version-shaped 200 · `DELETE /version` ignored |
+| `kubernetes.stock_version` | static_signature | Stock `gitVersion` / `platform` lure (often corroboration-gated) |
+| `kubernetes.unauthenticated_ok` | static_signature | `/api/v1` without a token dumps object lists instead of discovery (gated) |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`KUBERNETES.md`](KUBERNETES.md).
+
 ### Docker Engine API non-compliance (basic probe)
 
 Docker uses **static_signature** only (read-only Engine HTTP API on **2375** /

@@ -33,6 +33,7 @@ _REQUIRED_CORE = frozenset(
         "docker",
         "ipp",
         "memcached",
+        "kubernetes",
     }
 )
 

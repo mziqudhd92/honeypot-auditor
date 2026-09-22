@@ -256,11 +256,11 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 
 ## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-**28** protocol engines in the current version. Each uses up to **3** probe
+**29** protocol engines in the current version. Each uses up to **3** probe
 strategies (arbitrary auth · state non-persistence · static signature). The
 **Strategies** column is how many of those three are active for that protocol in
 this release — not Shodan, co-tenancy, or individual indicator checks
-(**71** active strategy slots across all protocols).
+(**72** active strategy slots across all protocols).
 
 Default preset (`--preset both`) probes IANA well-known ports **and** common
 lab/docker aliases on the same faces. Override ports with `-p` / `--ports`.
@@ -281,6 +281,7 @@ Closed faces are skipped, not scored.
 | NTP | 123 · 1123 (UDP) | 3 |
 | TFTP | 69 · 1069 (UDP) | 2 |
 | SSDP | 1900 · 11900 (UDP) | 1 |
+| Kubernetes | 6443 · 16443 | 1 |
 | Elasticsearch | 9200 · 19200 | 3 |
 | Docker | 2375 · 12375 | 1 |
 | IPP / CUPS | 631 · 1631 | 3 |
@@ -297,7 +298,7 @@ Closed faces are skipped, not scored.
 | Git | 9418 · 9418 | 3 |
 | HTTP proxy | 3128 · 8080 | 3 |
 
-`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `53`/`15353` → DNS (UDP), `123`/`1123` → NTP (UDP), `69`/`1069` → TFTP (UDP), `1900`/`11900` → SSDP (UDP), `9200`/`19200` → Elasticsearch, `2375`/`12375` → Docker, `631`/`1631` → IPP, `11211`/`21211` → Memcached, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
+`-p` maps well-known extras the same way: `443`/`8443` → HTTP (TLS), `8080`/`3128` → HTTP proxy, `139` → SMB, `993`/`1993` → IMAP (TLS/IMAPS), `8883`/`18883` → MQTT (TLS/MQTTS), `161`/`1161`/`10161` → SNMP (UDP), `53`/`15353` → DNS (UDP), `123`/`1123` → NTP (UDP), `69`/`1069` → TFTP (UDP), `1900`/`11900` → SSDP (UDP), `9200`/`19200` → Elasticsearch, `2375`/`12375` → Docker, `6443`/`16443` → Kubernetes API, `631`/`1631` → IPP, `11211`/`21211` → Memcached, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
 The POP3 engine checks response framing, pre-authentication state boundaries (STAT), optional CAPA sampling, identical auth-failed `-ERR` blankets, stock lure banners, unknown-command handling, and repeated synthetic logins. It never lists, reads, retrieves, or deletes mail; see [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.html) and [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.html) (CAPA).
 
@@ -318,6 +319,8 @@ The IPP/CUPS engine speaks HTTP (with TLS fallback) on **631** / lab **1631** an
 The Memcached engine speaks the ASCII text protocol on **11211** / lab **21211** and scores protocol non-compliance under all three basic strategies: ASCII `set` accepted while binary SASL is answered as ASCII (**arbitrary_auth**; open `set` alone is the protocol default), reconnect `get` miss inside the TTL window and TTL-expiry enforcement (**state_nonpersist**), plus **static_signature** (VERSION/stats framing, unknown-command ERROR, get-miss END, gets/CAS façade, canned stats clone, VERSION-vs-stats coherence, stock VERSION lure, bare-verbosity flush-stub stand-in, noreply façade). Never sends `flush_all`; probe keys use an `hpaudit_` prefix and are deleted when possible. See [`docs/MEMCACHED.md`](docs/MEMCACHED.md).
 
 The Redis engine speaks RESP on TCP/6379 with **protocol non-compliance** detection: dual random `AUTH` (decisive when both `+OK`), reconnect key persistence + `DBSIZE` coherence, plus split static tells (`PING` stub, `COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP`, missing/mismatched `ECHO`/`SELECT`, OpenCanary AUTH+NOAUTH wall, `TYPE`/`INCR` facades, wrong-arity `GET`, QUIT zombie). Never sends `FLUSHALL`/`FLUSHDB`/`CONFIG SET`/`SCRIPT LOAD`; probe keys use an `hpaudit_` prefix and are deleted. See [`docs/REDIS.md`](docs/REDIS.md) and the [Redis protocol spec](https://redis.io/docs/reference/protocol-spec/).
+
+The Kubernetes engine speaks the API server on **6443** / lab **16443** (TLS, read-only discovery paths) and scores decoy kube-API faces under **static_signature** only: `/livez`/`/healthz` framing, `/version` shape, `/api` APIVersions fidelity, unknown-path version-shaped 200s, method stubs, stock `gitVersion` lures, and corroboration-gated unauthenticated `/api/v1` object dumps. Never sends tokens or touches pods/secrets. See [`docs/KUBERNETES.md`](docs/KUBERNETES.md).
 
 The Elasticsearch engine speaks the HTTP JSON API on **9200** / lab **19200** and scores API non-compliance under all three basic strategies: anonymous 401/403 then dual entropy-varied Basic both return the root (**arbitrary_auth**; open anonymous root is not a bypass), root vs `/_nodes`/`/_cluster/health` metadata mismatch (**state_nonpersist**), plus **static_signature** (root framing, stock cluster metadata/uuid, missing-index **200**, unknown-path root facade, DELETE/PUT/HEAD method stubs, `/_cluster/health` and `/_cat/health` shape facades, non-JSON Content-Type, corroboration-gated `Accept: application/yaml` negotiation facade, `X-Elastic-Product` mismatch). Never creates indices, bulks, or searches real data. Strategies and probe flow: [`docs/ELASTICSEARCH.md`](docs/ELASTICSEARCH.md).
 

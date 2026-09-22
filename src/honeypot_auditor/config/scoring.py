@@ -223,6 +223,15 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "stock SERVER lure · LOCATION loopback · method stub"
         ),
     },
+    "kubernetes": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "livez/healthz framing · /version framing · /api APIVersions shape · "
+            "unknown-path version facade · DELETE /version method stub · "
+            "stock gitVersion/platform · unauthenticated /api/v1 object-list dump"
+        ),
+    },
     "mysql": {
         "arbitrary_auth": "",
         "state_nonpersist": "drop after 1045 · emulator Expected-seq FSM · SSL-request silent drop",

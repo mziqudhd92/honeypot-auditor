@@ -35,6 +35,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "ntp": 123,
     "ssdp": 1900,
     "tftp": 69,
+    "kubernetes": 6443,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -66,6 +67,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "ntp": 1123,
     "ssdp": 11900,
     "tftp": 1069,
+    "kubernetes": 16443,
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {
@@ -99,6 +101,8 @@ _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     11211: "memcached",
     21211: "memcached",  # lab Memcached ASCII
     1123: "ntp",  # lab NTP (UDP), pairs with IANA 123
+    6443: "kubernetes",
+    16443: "kubernetes",  # lab Kubernetes API server (TLS)
 }
 
 

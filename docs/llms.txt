@@ -81,6 +81,7 @@ Always require authorization for non-private targets (`--confirm-authorized`). N
 - SSDP/UPnP probe guide (discovery non-compliance): https://mziqudhd92.github.io/honeypot-auditor/udp/SSDP.md
 - Redis probe guide (RESP non-compliance): https://mziqudhd92.github.io/honeypot-auditor/REDIS.md
 - Elasticsearch probe guide (HTTP API non-compliance strategies): https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md
+- Kubernetes API probe guide (decoy kube-API tells): https://mziqudhd92.github.io/honeypot-auditor/KUBERNETES.md
 - Docker Engine API probe guide (read-only /_ping · /version · /info): https://mziqudhd92.github.io/honeypot-auditor/DOCKER.md
 - IPP/CUPS probe guide: https://mziqudhd92.github.io/honeypot-auditor/IPP.md
 - Memcached probe guide (ASCII non-compliance): https://mziqudhd92.github.io/honeypot-auditor/MEMCACHED.md
