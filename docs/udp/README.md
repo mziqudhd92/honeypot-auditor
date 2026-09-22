@@ -28,6 +28,7 @@ tests/udp/
   test_discovery.py
   test_dns.py
   test_ntp.py
+  test_ssdp.py
   test_tftp.py
 ```
 
@@ -94,7 +95,7 @@ optional path when refuse detection is needed.
 ## Anti-patterns
 
 - Do not score synthetic latency alone.
-- Do not rename indicators to `udp.*` — keep `dns.*` / `ntp.*` / `tftp.*`.
+- Do not rename indicators to `udp.*` — keep `dns.*` / `ntp.*` / `ssdp.*` / `tftp.*`.
 - Do not put product honeypot brand IOCs in probes.
 - Do not add SOCKS/UDP proxy transport here.
 - Do not auto-source ports/strategies from probe modules into config.

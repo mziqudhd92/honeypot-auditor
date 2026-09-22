@@ -63,7 +63,7 @@ Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ```
-  [ BASIC ]  passive intel · Nmap NSE · SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/MQTT/SNMP/DNS/NTP/TFTP/Elasticsearch/Docker/IPP/Memcached/SMTP/VNC/SIP
+  [ BASIC ]  passive intel · Nmap NSE · SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/MQTT/SNMP/DNS/NTP/TFTP/SSDP/Elasticsearch/Docker/Kubernetes/IPP/Memcached/SMTP/VNC/SIP
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
              · co-tenancy buffet detect · latency · latency-under-load · egress bait
              (flag: --deep · more intrusive · same authorization rules)

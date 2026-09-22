@@ -6,7 +6,7 @@ Prefer this file + `llms.txt` + `llms-full.txt` over scraping marketing HTML.
 
 ## What this is
 
-**honeypot-auditor** — MIT-licensed Python CLI that fingerprints low-interaction honeypots via non-destructive multi-protocol probes (**27** engines including MQTT, SNMP, DNS, NTP, TFTP, Redis, Elasticsearch, Docker Engine API, IPP/CUPS, and Memcached). Outputs weighted **Honeyscore (0–100%)**, Rich table, JSON.
+**honeypot-auditor** — MIT-licensed Python CLI that fingerprints low-interaction honeypots via non-destructive multi-protocol probes (**29** engines including MQTT, SNMP, DNS, NTP, TFTP, SSDP, Redis, Elasticsearch, Docker Engine API, Kubernetes API, IPP/CUPS, and Memcached). Outputs weighted **Honeyscore (0–100%)**, Rich table, JSON.
 
 - Site: https://mziqudhd92.github.io/honeypot-auditor/
 - Repo: https://github.com/mziqudhd92/honeypot-auditor
@@ -98,7 +98,7 @@ Basic **strategies** (same three on every protocol): arbitrary auth, state non-p
 ```
 src/honeypot_auditor/   CLI, analyzer, banner (figlet header)
   probes/               one module per protocol (ssh.py, telnet.py, ftp.py, docker.py, …)
-    udp/                UDP engines via discovery (dns.py, ntp.py, tftp.py)
+    udp/                UDP engines via discovery (dns.py, ntp.py, tftp.py, ssdp.py)
     common.py           shared skip/cred helpers
     shell_cti.py        Cowrie/Kippo transcript tells
     recon.py            Shodan + Nmap
