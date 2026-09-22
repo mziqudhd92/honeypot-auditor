@@ -4,10 +4,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT_DIR="${OUT_DIR:-$ROOT/docs/demo}"
-NAME="${NAME:-lab-tour}"
-CAST_RAW="$OUT_DIR/honeypot-auditor-${NAME}-demo.raw.cast"
-CAST="$OUT_DIR/honeypot-auditor-${NAME}-demo.cast"
-GIF="$OUT_DIR/honeypot-auditor-${NAME}-demo.gif"
+NAME="${NAME:-lab-tour-v1.0.0}"
+CAST_RAW="$OUT_DIR/honeypot-auditor-${NAME}.raw.cast"
+CAST="$OUT_DIR/honeypot-auditor-${NAME}.cast"
+GIF="$OUT_DIR/honeypot-auditor-${NAME}.gif"
 
 COWRIE_TARGET="${COWRIE_TARGET:-127.0.0.1}"
 DD_TARGET="${DD_TARGET:-127.0.0.1}"

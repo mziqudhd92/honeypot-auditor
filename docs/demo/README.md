@@ -6,12 +6,12 @@ asciinema casts + animated GIFs for README / docs. Recorded against
 
 | File | What it shows | Notes |
 |------|----------------|-------|
-| `honeypot-auditor-lab-tour-demo.cast` / `.gif` | **3 faces · mixed options · v1.0.0** | Cowrie (`-p` SSH `-v`), OpenCanary / dd-stack (`--deep`), silent-accept tarpit (`-v`) |
+| `honeypot-auditor-lab-tour-v1.0.0.cast` / `.gif` | **3 faces · mixed options · v1.0.0** | Cowrie (`-p` SSH `-v`), OpenCanary / dd-stack (`--deep`), silent-accept tarpit (`-v`) |
 | `honeypot-auditor-cowrie-demo.cast` / `.gif` | Pip-install + Cowrie deep | Ubuntu container install path → local Cowrie |
 | `honeypot-auditor-dionaea-demo.cast` / `.gif` | Pip-install + Dionaea deep | Ubuntu container install path → local Dionaea |
 
 ```bash
-open docs/demo/honeypot-auditor-lab-tour-demo.gif
+open docs/demo/honeypot-auditor-lab-tour-v1.0.0.gif
 open docs/demo/honeypot-auditor-cowrie-demo.gif
 open docs/demo/honeypot-auditor-dionaea-demo.gif
 ```
@@ -62,7 +62,7 @@ Requires `asciinema`, `agg`, Docker, **nmap** (installed in-container via apt).
 ## Replay locally
 
 ```bash
-asciinema play docs/demo/honeypot-auditor-lab-tour-demo.cast
+asciinema play docs/demo/honeypot-auditor-lab-tour-v1.0.0.cast
 asciinema play docs/demo/honeypot-auditor-cowrie-demo.cast
 asciinema play docs/demo/honeypot-auditor-dionaea-demo.cast
 ```

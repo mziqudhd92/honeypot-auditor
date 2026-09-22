@@ -25,7 +25,7 @@
   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 ```
 
-![Lab tour demo v1.0.0 — Cowrie, OpenCanary/dd-stack, tarpit](docs/demo/honeypot-auditor-lab-tour-demo.gif)
+![Lab tour demo v1.0.0 — Cowrie, OpenCanary/dd-stack, tarpit](docs/demo/honeypot-auditor-lab-tour-v1.0.0.gif)
 
 ```
   "three faces, three lenses: KEX facade with -v, deep on the buffet,

@@ -121,7 +121,7 @@ docs/                   GitHub Pages site + llms/agents briefs
 
 Animated GIFs (authorized lab captures):
 
-- https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-lab-tour-demo.gif
+- https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-lab-tour-v1.0.0.gif
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-cowrie-demo.gif
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-dionaea-demo.gif
 
