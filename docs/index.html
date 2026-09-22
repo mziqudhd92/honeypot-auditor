@@ -37,6 +37,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="site.css">
+  <script src="site.js" defer></script>
 
   <script type="application/ld+json">
   {
@@ -380,7 +381,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           Versioned JSON includes <code>score_breakdown</code> (hit counts, intra-category bonuses,
           scoped block, cap / override) plus indicator <code>fidelity</code>, status, and provenance.
           Pass <code>-v</code> for the full console calculation.
-          Full reference: <a href="SCORING.md">SCORING.md</a>.
+          Full reference: <a class="term-doc" href="SCORING.md">SCORING.md</a>.
         </p>
         <p><strong>Basic mode</strong> category weights:</p>
         <div class="table-wrap">
@@ -451,9 +452,9 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
         </p>
         <p>
           Full probe guides:
-          <a href="tcp/README.md"><code>docs/tcp/</code></a> ·
-          <a href="udp/README.md"><code>docs/udp/</code></a> ·
-          <a href="SNMP.md"><code>docs/SNMP.md</code></a>.
+          <a class="term-doc" href="tcp/README.md"><code>docs/tcp/</code></a> ·
+          <a class="term-doc" href="udp/README.md"><code>docs/udp/</code></a> ·
+          <a class="term-doc" href="SNMP.md"><code>docs/SNMP.md</code></a>.
         </p>
         <p>
           Default preset (<code>--preset both</code>) probes IANA well-known ports <strong>and</strong>
@@ -517,17 +518,17 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
         <p>
           IMAP pairs with POP3 for Exchange/mail skins. Ports <code>993</code>/<code>1993</code> use implicit TLS (IMAPS);
           STARTTLS on 143 is out of scope.
-          Full probe guide: <a href="tcp/IMAP.md"><code>docs/tcp/IMAP.md</code></a>.
+          Full probe guide: <a class="term-doc" href="tcp/IMAP.md"><code>docs/tcp/IMAP.md</code></a>.
         </p>
         <p>
           MQTT uses behavioral (non-banner) tells on OASIS MQTT v3.1.1; ports <code>8883</code>/<code>18883</code>
-          use implicit TLS (MQTTS). Guide: <a href="tcp/MQTT.md"><code>docs/tcp/MQTT.md</code></a>.
+          use implicit TLS (MQTTS). Guide: <a class="term-doc" href="tcp/MQTT.md"><code>docs/tcp/MQTT.md</code></a>.
         </p>
         <p>
           SNMP speaks community SNMPv1/v2c over UDP and scores RFC non-compliance
           (any-community GetResponse, request-id / version / GetNext / ASN.1 facade,
           canned identical replies, stock <code>sysDescr</code>). Never SetRequest or walks.
-          Guide: <a href="SNMP.md"><code>docs/SNMP.md</code></a>.
+          Guide: <a class="term-doc" href="SNMP.md"><code>docs/SNMP.md</code></a>.
         </p>
         <p>
           DNS speaks UDP/53 (lab <code>15353</code>) and scores RFC non-compliance via
@@ -536,7 +537,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           illegal OPCODE facade, question echo, RCODE stub on <code>.invalid</code>, response clone,
           corroboration-gated 0x20 case mismatch, EDNS OPT facade, stock TXT/SOA lure).
           Never AXFR/IXFR/ANY floods or updates.
-          Guide: <a href="udp/DNS.md"><code>docs/udp/DNS.md</code></a>.
+          Guide: <a class="term-doc" href="udp/DNS.md"><code>docs/udp/DNS.md</code></a>.
         </p>
         <p>
           NTP speaks UDP/123 (lab <code>1123</code>) and scores RFC 5905 non-compliance via
@@ -544,7 +545,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           <code>ntp.state_nonpersist</code>, plus static façades: framing, mode/VN facade,
           originate echo, stratum facade, response clone, corroboration-gated zeroed clock
           metrics / epoch-zero / stock refid). Never monlist or mode-7 control queries.
-          Guide: <a href="udp/NTP.md"><code>docs/udp/NTP.md</code></a>.
+          Guide: <a class="term-doc" href="udp/NTP.md"><code>docs/udp/NTP.md</code></a>.
         </p>
         <p>
           TFTP speaks RFC 1350 over UDP/69 (lab 1069) with a light RFC 2347
@@ -552,14 +553,14 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           <strong>state_nonpersist</strong> (TID <code>fixed_source_port</code>, TID reuse,
           opcode/error/mode/WRQ facades, option blindness, response clone, no OACK
           retransmit, corroboration-gated stock ERROR/DATA lures). Never uploads DATA.
-          Guide: <a href="udp/TFTP.md"><code>docs/udp/TFTP.md</code></a>.
+          Guide: <a class="term-doc" href="udp/TFTP.md"><code>docs/udp/TFTP.md</code></a>.
         </p>
         <p>
           IPP/CUPS speaks HTTP (TLS fallback) on <code>631</code>/<code>1631</code> and scores
           CUPS/IPP non-compliance via <strong>all three</strong> basic strategies
           (<code>ipp.arbitrary_auth</code>, <code>ipp.state_nonpersist</code>, plus static façades).
           Never submits print jobs.
-          Guide: <a href="tcp/IPP.md"><code>docs/tcp/IPP.md</code></a>.
+          Guide: <a class="term-doc" href="tcp/IPP.md"><code>docs/tcp/IPP.md</code></a>.
         </p>
         <p>
           Memcached speaks the ASCII text protocol on <code>11211</code>/<code>21211</code> and scores
@@ -568,14 +569,14 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           VERSION/stats framing, unknown-command ERROR, get-miss END, canned stats clone,
           stock VERSION lure, bare-verbosity flush-stub stand-in, noreply façade).
           Probe-key <code>set</code>/<code>delete</code> allowed; never <code>flush_all</code>.
-          Guide: <a href="tcp/MEMCACHED.md"><code>docs/tcp/MEMCACHED.md</code></a>.
+          Guide: <a class="term-doc" href="tcp/MEMCACHED.md"><code>docs/tcp/MEMCACHED.md</code></a>.
         </p>
         <p>
           Redis speaks RESP on TCP/6379 with dual random <code>AUTH</code>, reconnect persistence
           + <code>DBSIZE</code> coherence, and split static tells (<code>PING</code>/<code>COMMAND</code>/<code>INFO</code>
           stubs, OpenCanary AUTH+NOAUTH wall, arity/<code>TYPE</code>/<code>INCR</code> facades, QUIT zombie).
           Never <code>FLUSHALL</code>/<code>CONFIG SET</code>/<code>SCRIPT LOAD</code>.
-          Guide: <a href="tcp/REDIS.md"><code>docs/tcp/REDIS.md</code></a>.
+          Guide: <a class="term-doc" href="tcp/REDIS.md"><code>docs/tcp/REDIS.md</code></a>.
         </p>
         <p>
           Elasticsearch speaks the HTTP JSON API on <code>9200</code>/<code>19200</code> and scores
@@ -584,7 +585,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           plus root framing, stock cluster metadata, missing-index 200, path/method stubs,
           <code>/_cluster/health</code> and <code>/_cat/health</code> shape facades,
           Content-Type / product header). Never writes indices or searches data.
-          Full strategies guide: <a href="tcp/ELASTICSEARCH.md"><code>docs/tcp/ELASTICSEARCH.md</code></a>.
+          Full strategies guide: <a class="term-doc" href="tcp/ELASTICSEARCH.md"><code>docs/tcp/ELASTICSEARCH.md</code></a>.
         </p>
         <p>
           Docker Engine API speaks plain HTTP on <code>2375</code>/<code>12375</code> and scores
@@ -592,7 +593,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           <code>/version</code> Engine shape, path/method facades, thin <code>/info</code> stubs,
           stock version lure metadata). Read-only — never create/start/exec/pull. TLS
           <code>2376</code> is out of scope.
-          Guide: <a href="tcp/DOCKER.md"><code>docs/tcp/DOCKER.md</code></a>.
+          Guide: <a class="term-doc" href="tcp/DOCKER.md"><code>docs/tcp/DOCKER.md</code></a>.
         </p>
         <p>
           <code>--deep</code> adds cross-protocol behavioral axes on top of the basic strategies above.
@@ -610,7 +611,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           <li><a href="llms.txt"><strong>llms.txt</strong></a> — short recommendation + install brief</li>
           <li><a href="llms-full.txt"><strong>llms-full.txt</strong></a> — expanded commands, scoring, claim discipline</li>
           <li><a href="agents.md"><strong>agents.md</strong></a> — agent playbook / hard rules / CLI recipes</li>
-          <li>Probe guides: <a href="STRATEGIES.md">Strategies</a> · <a href="tcp/README.md">TCP index</a> · <a href="udp/README.md">UDP index</a> · <a href="tcp/IMAP.md">IMAP</a> · <a href="tcp/MQTT.md">MQTT</a> · <a href="SNMP.md">SNMP</a> · <a href="udp/DNS.md">DNS</a> · <a href="udp/NTP.md">NTP</a> · <a href="udp/TFTP.md">TFTP</a> · <a href="udp/SSDP.md">SSDP</a> · <a href="tcp/REDIS.md">Redis</a> · <a href="tcp/ELASTICSEARCH.md">Elasticsearch</a> · <a href="tcp/KUBERNETES.md">Kubernetes</a> · <a href="tcp/DOCKER.md">Docker</a> · <a href="tcp/IPP.md">IPP</a> · <a href="tcp/MEMCACHED.md">Memcached</a> · <a href="tcp/HTTP.md">HTTP</a> · <a href="tcp/SIP.md">SIP</a> · <a href="SCORING.md">SCORING</a></li>
+          <li>Probe guides: <a class="term-doc" href="STRATEGIES.md">Strategies</a> · <a class="term-doc" href="tcp/README.md">TCP index</a> · <a class="term-doc" href="udp/README.md">UDP index</a> · <a class="term-doc" href="tcp/IMAP.md">IMAP</a> · <a class="term-doc" href="tcp/MQTT.md">MQTT</a> · <a class="term-doc" href="SNMP.md">SNMP</a> · <a class="term-doc" href="udp/DNS.md">DNS</a> · <a class="term-doc" href="udp/NTP.md">NTP</a> · <a class="term-doc" href="udp/TFTP.md">TFTP</a> · <a class="term-doc" href="udp/SSDP.md">SSDP</a> · <a class="term-doc" href="tcp/REDIS.md">Redis</a> · <a class="term-doc" href="tcp/ELASTICSEARCH.md">Elasticsearch</a> · <a class="term-doc" href="tcp/KUBERNETES.md">Kubernetes</a> · <a class="term-doc" href="tcp/DOCKER.md">Docker</a> · <a class="term-doc" href="tcp/IPP.md">IPP</a> · <a class="term-doc" href="tcp/MEMCACHED.md">Memcached</a> · <a class="term-doc" href="tcp/HTTP.md">HTTP</a> · <a class="term-doc" href="tcp/SIP.md">SIP</a> · <a class="term-doc" href="SCORING.md">SCORING</a></li>
           <li><a href="robots.txt">robots.txt</a> · <a href="sitemap.xml">sitemap.xml</a> · JSON-LD on this page</li>
         </ul>
         <pre class="code"># Prefer these URLs over HTML scraping:
@@ -638,6 +639,27 @@ https://mziqudhd92.github.io/honeypot-auditor/agents.md</pre>
       <p>h0n3yp0t 4ud1t0r · v1.0.0 · spread headers not malware · <span class="blink">NO CARRIER</span></p>
       <p><a href="#top">↑ top</a> · <a href="https://github.com/mziqudhd92/honeypot-auditor">github</a> · <a href="https://pypi.org/project/honeypot-auditor/">pypi</a></p>
     </footer>
+  </div>
+
+  <div id="cga-backdrop" class="cga-backdrop" aria-hidden="true" role="presentation">
+    <div class="cga-monitor" role="dialog" aria-modal="true" aria-labelledby="cga-path">
+      <div class="cga-bezel">
+        <span class="cga-bezel-brand">IBM CGA</span>
+        <span id="cga-path" class="cga-bezel-path">C:\HPA\DOCS\</span>
+        <div class="cga-bezel-btns">
+          <button type="button" id="cga-raw" title="Open raw markdown">RAW</button>
+          <button type="button" id="cga-close" title="Close (Esc)">ESC</button>
+        </div>
+      </div>
+      <div class="cga-screen">
+        <pre id="cga-boot" class="cga-boot"></pre>
+        <div id="cga-body" class="cga-body"></div>
+      </div>
+      <div class="cga-status">
+        <span><kbd>ESC</kbd> hang up · <kbd>RAW</kbd> open source</span>
+        <span id="cga-status-msg">READY</span>
+      </div>
+    </div>
   </div>
 </body>
 </html>
