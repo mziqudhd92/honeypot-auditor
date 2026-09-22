@@ -231,6 +231,22 @@ tells over banner IOCs alone — see [`SIP.md`](SIP.md).
 
 Full indicator list, ports, safe-mode, and non-destructive policy: [`SIP.md`](SIP.md).
 
+### Docker Engine API non-compliance (basic probe)
+
+Docker uses **static_signature** only (read-only Engine HTTP API on **2375** /
+lab **12375**; no auth/state axis). Prefer path/method/info facade tells over
+banner IOCs alone — full strategy narrative and probe flow: [`DOCKER.md`](DOCKER.md).
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `docker.ping_framing` | static_signature | Non-speaker / `/_ping` body is not plain-text `OK` |
+| `docker.version_framing` | static_signature | Non-speaker / thin `/version` lacking Engine shape beyond `ApiVersion`+`Version` |
+| `docker.path_facade` / `method_stub` / `info_stub` | static_signature | High-fidelity API non-compliance |
+| `docker.stock_version` | static_signature | Stock `ApiVersion` / `Version` / `GitCommit` lure (`ApiVersion` `1.0` and other common values are corroboration-gated, not decisive alone) |
+| `docker.tls_hint_mismatch` | static_signature | Deferred — TLS Engine API **2376** out of scope (always skipped) |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`DOCKER.md`](DOCKER.md).
+
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 
 **High-signal bonus**: +15% when any triggered indicator has `fidelity` of `high` or

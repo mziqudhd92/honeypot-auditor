@@ -32,6 +32,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Docker Engine HTTP API engine on ports 2375/12375 with protocol non-compliance
+  detection: ping/version framing, stock ApiVersion/Version/GitCommit, unknown-path
+  version/info facade, DELETE/PUT `/_ping` method stubs, `/info` missing fields or
+  version echo; TLS 2376 out of scope (`docs/DOCKER.md`)
 - Second detection-hardening wave against deception skins: `memcached
   .version_stats_coherence` (VERSION command vs `STAT version` lie — decisive),
   `memcached.ttl_enforcement` (VALUE served past a 1s TTL inside a ≥1.4s

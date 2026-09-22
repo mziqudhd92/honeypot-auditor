@@ -176,6 +176,15 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "Accept: yaml negotiation ignored · X-Elastic-Product mismatch"
         ),
     },
+    "docker": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "ping/version framing · stock ApiVersion/Version/GitCommit · "
+            "unknown-path version/info facade · DELETE/PUT /_ping method stubs · "
+            "/info missing fields or version echo · TLS hint deferred (2376)"
+        ),
+    },
     "ipp": {
         "arbitrary_auth": (
             "anonymous /admin challenged 401/403, then two entropy-varied Basic "

@@ -29,6 +29,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "snmp": 161,
     "dns": 53,
     "elasticsearch": 9200,
+    "docker": 2375,
     "ipp": 631,
     "memcached": 11211,
     "ntp": 123,
@@ -58,6 +59,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "snmp": 1161,
     "dns": 15353,
     "elasticsearch": 19200,
+    "docker": 12375,
     "ipp": 1631,
     "memcached": 21211,
     "ntp": 1123,
@@ -88,6 +90,8 @@ _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
     15353: "dns",  # lab DNS (UDP), pairs with IANA 53
     9200: "elasticsearch",
     19200: "elasticsearch",  # lab Elasticsearch HTTP API
+    2375: "docker",
+    12375: "docker",  # lab Docker Engine API (plain HTTP)
     631: "ipp",
     1631: "ipp",  # lab CUPS / IPP HTTP, pairs with IANA 631
     11211: "memcached",

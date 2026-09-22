@@ -51,6 +51,11 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/DOCKER.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://mziqudhd92.github.io/honeypot-auditor/IPP.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
