@@ -32,7 +32,7 @@ Detection philosophy:
 
 | Allowed | Never done |
 |---------|------------|
-| Unicast `M-SEARCH` to `host:1900` with `ST: ssdp:all` or `upnp:rootdevice` (and one synthetic URN) | Amplification floods / multicast abuse beyond a single packet |
+| Unicast `M-SEARCH` to `host:1900` with `ST: upnp:rootdevice` (and one synthetic URN) | Amplification floods / multicast abuse beyond a single packet |
 | Small `MX` (1) | `NOTIFY` spam |
 | Parse SSDP response headers only | Bulk HTTP GETs of `LOCATION` (optional same-host GET deferred; v1 stays UDP-only) |
 

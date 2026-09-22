@@ -307,15 +307,19 @@ def _stock_version_assessment(doc: dict[str, Any]) -> tuple[str | None, bool]:
 
 
 def _probe_health(host: str, port: int) -> tuple[int, bytes, str, str]:
-    """Try /livez then /healthz. Returns (status, body, path_used, error)."""
+    """Try /livez then /healthz. Prefer the first ok body; else the last attempt.
+
+    Real apiservers may expose only one of the two health endpoints (or return
+    404 on /livez while /healthz is fine). Falling through on any non-ok reply
+    avoids false ``health_framing`` hits on conformant clusters.
+    """
+    last: tuple[int, bytes, str, str] = (0, b"", "/healthz", "empty HTTP response")
     for path in ("/livez", "/healthz"):
         status, _hdrs, body, err = _http_exchange(host, port, "GET", path)
-        if err and status == 0 and not body:
-            if path == "/livez":
-                continue
-            return 0, b"", path, err
-        return status, body, path, err
-    return 0, b"", "/healthz", "empty HTTP response"
+        last = (status, body, path, err)
+        if _is_health_ok(status, body):
+            return last
+    return last
 
 
 def probe_kubernetes(host: str, port: int) -> list[Indicator]:

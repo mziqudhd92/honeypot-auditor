@@ -104,6 +104,28 @@ def test_k8s_conformant_api_is_clean():
     assert len(inds) == 7
 
 
+def test_k8s_healthz_fallback_when_livez_missing():
+    """Conformant apiservers that only expose /healthz must not trip health_framing."""
+    paths: list[str] = []
+
+    def fake_ex(host, port, method, path, **kwargs):
+        paths.append(f"{method} {path}")
+        if method == "GET" and path == "/livez":
+            return 404, {"content-type": "application/json"}, b'{"kind":"Status","code":404}', ""
+        if method == "GET" and path == "/healthz":
+            return 200, {"content-type": "text/plain"}, b"ok", ""
+        return _conformant_exchange(host, port, method, path, **kwargs)
+
+    with patch.object(k8s, "_http_exchange", side_effect=fake_ex):
+        inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+    by_id = {ind.id: ind for ind in inds}
+    assert "GET /livez" in paths
+    assert "GET /healthz" in paths
+    assert not by_id["kubernetes.health_framing"].triggered
+    assert "/healthz" in by_id["kubernetes.health_framing"].detail
+    assert not any(ind.triggered for ind in inds)
+
+
 def test_k8s_honeypot_tells_fire():
     def fake_ex(host, port, method, path, **kwargs):
         if method == "GET" and path in ("/livez", "/healthz"):

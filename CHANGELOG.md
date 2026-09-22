@@ -8,6 +8,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Kubernetes health speakership: fall through from non-ok `/livez` to `/healthz`
+  before scoring `kubernetes.health_framing` (clusters that only expose
+  `/healthz`, or return 404 on `/livez`, no longer false-positive)
 - False-positive gates for production services: DNS `header_facade` scores only
   **NOERROR** on illegal OPCODE (NOTIMP/NXDOMAIN/FORMERR/REFUSED stay clean —
   verified against 8.8.8.8 / 1.1.1.1); HTTP `/admin` Basic requires a prior
