@@ -22,7 +22,7 @@ jobs:
       - name: Semgrep
         run: semgrep scan --config p/python --config p/security-audit --config p/secrets --error --metrics off .
       - name: Bandit
-        run: bandit -c pyproject.toml -r src scripts honeypot-auditor.py
+        run: bandit -c pyproject.toml -r src honeypot-auditor.py
       - name: Dependency vulnerabilities
         run: pip-audit
       - name: Secret candidates

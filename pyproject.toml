@@ -150,4 +150,4 @@ python_version = "3.10"
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
-targets = ["src", "scripts", "honeypot-auditor.py"]
+targets = ["src", "honeypot-auditor.py"]

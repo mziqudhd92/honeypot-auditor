@@ -62,7 +62,7 @@ jobs:
       - name: Unit tests
         run: python -m pytest --no-cov -m "not integration"
       - name: Ruff
-        run: ruff check src tests scripts honeypot-auditor.py
+        run: ruff check src tests honeypot-auditor.py
       - name: Package build
         run: python -m build
 

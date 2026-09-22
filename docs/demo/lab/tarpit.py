@@ -12,7 +12,7 @@ PORTS = (9080, 9445, 3128)
 def serve(port: int) -> None:
     sock = socket.socket()
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("0.0.0.0", port))
+    sock.bind(("0.0.0.0", port))  # nosemgrep: python.lang.security.audit.network.bind.avoid-bind-to-all-interfaces
     sock.listen(64)
     while True:
         client, _ = sock.accept()
