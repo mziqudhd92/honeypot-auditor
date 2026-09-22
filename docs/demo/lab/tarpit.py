@@ -10,9 +10,10 @@ PORTS = (9080, 9445, 3128)
 
 
 def serve(port: int) -> None:
-    sock = socket.socket()
+    # Demo listeners must accept published Docker ports from the host.
+    sock = socket.socket()  # nosemgrep: python.lang.security.audit.network.bind.avoid-bind-to-all-interfaces
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("0.0.0.0", port))  # nosemgrep: python.lang.security.audit.network.bind.avoid-bind-to-all-interfaces
+    sock.bind(("0.0.0.0", port))
     sock.listen(64)
     while True:
         client, _ = sock.accept()
