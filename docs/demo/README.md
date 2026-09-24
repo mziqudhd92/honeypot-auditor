@@ -16,6 +16,9 @@ open docs/demo/honeypot-auditor-cowrie-demo.gif
 open docs/demo/honeypot-auditor-dionaea-demo.gif
 ```
 
+Still frames from the lab-tour GIF (for articles / Medium):
+[`screenshots/`](./screenshots/) — regenerate with `python3 docs/demo/screenshots/extract_from_gif.py`.
+
 ## Prerequisites
 
 ```bash
