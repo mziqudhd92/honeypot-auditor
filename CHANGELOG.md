@@ -6,6 +6,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Docker and Kubernetes: activate **arbitrary_auth** + **state_nonpersist**
+  (now all three basic strategies), plus discovery facades
+  (`docker.containers_stub`, `kubernetes.apis_framing`)
+- SMB: **arbitrary_auth** (dual entropy-varied logins) and **ghost share**
+  TREE_CONNECT tell, plus stock lure shares (`smb.stock_shares`) — SMB now
+  uses all three basic strategies (**77** active strategy slots)
+
+### Fixed
+
+- SMB ghost-share: treat ACCESS_DENIED / missing-share NTSTATUS class as clean;
+  pipe+ghost share share one session
+- Kubernetes auth detail when `/version` is challenged but Bearer is rejected
+  (no longer claims anonymous open); `/apis` 404/5xx skipped not scored
+- Docker state coherence re-fetches `/info` after pause; normalize Engine
+  version suffixes (`24.0.7` vs `24.0.7-ce`); stock share generics need ≥2 hits
+
 ## [1.0.0] - 2026-09-22
 
 ### Fixed

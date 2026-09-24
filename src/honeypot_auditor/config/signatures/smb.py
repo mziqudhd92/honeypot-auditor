@@ -1,7 +1,11 @@
 from honeypot_auditor.config.tells.smb import (
     SMB2_DIALECT_30,
     SMB2_DIALECT_311,
+    SMB_GHOST_SHARE_OK_STATUS,
     SMB_SMB1_DIALECTS,
+    SMB_STOCK_SHARE_GENERIC,
+    SMB_STOCK_SHARE_TELLS,
+    STATUS_BAD_NETWORK_NAME,
     STATUS_OBJECT_NAME_NOT_FOUND,
 )
 
@@ -27,6 +31,48 @@ def match_smb_bogus_pipe(code: int | None, detail: str, *, accepted: bool) -> st
     if any(tok in low for tok in ("reset", "broken pipe", "connection refused", "timed out")):
         return f"bogus pipe probe failed messily: {detail[:120]}"
     return None
+
+
+def match_smb_ghost_share(code: int | None, detail: str, *, accepted: bool) -> str | None:
+    """Random share TREE_CONNECT should fail cleanly, not accept the tree."""
+    if accepted:
+        return f"ghost share TREE_CONNECT accepted ({detail})"
+    if code in SMB_GHOST_SHARE_OK_STATUS:
+        return None
+    if code is not None:
+        return (
+            f"ghost share NTSTATUS 0x{code:08X} "
+            f"(expected missing-share / access-denied class status)"
+        )
+    low = (detail or "").lower()
+    if any(tok in low for tok in ("reset", "broken pipe", "connection refused", "timed out")):
+        return f"ghost share probe failed messily: {detail[:120]}"
+    return None
+
+
+def match_smb_stock_shares(share_names: list[str]) -> tuple[str | None, bool]:
+    """Return ``(detail, requires_corroboration)`` for lure share names.
+
+    Decisive tokens (honey/honeypot/…) score alone. Generic names (tmp/public/…)
+    only contribute when ≥2 distinct generics appear, and stay corroboration-gated.
+    """
+    decisive: list[str] = []
+    generic: list[str] = []
+    for name in share_names:
+        clean = str(name or "").rstrip("\x00").strip().lower()
+        if not clean or clean in {"ipc$", "admin$", "c$", "print$"}:
+            continue
+        if clean in SMB_STOCK_SHARE_TELLS:
+            decisive.append(clean)
+        elif clean in SMB_STOCK_SHARE_GENERIC:
+            generic.append(clean)
+    hits = list(dict.fromkeys(decisive))
+    generics = list(dict.fromkeys(generic))
+    if hits:
+        return f"stock lure share names: {', '.join(hits[:6])}", False
+    if len(generics) >= 2:
+        return f"stock lure share names: {', '.join(generics[:6])}", True
+    return None, False
 
 
 def match_smb_negotiate_deficit(facts: dict) -> str | None:

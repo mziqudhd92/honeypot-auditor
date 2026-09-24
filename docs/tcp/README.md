@@ -31,7 +31,7 @@ docs/tcp/
 | HTTP(S) | 80 / 443 | 8081 | [HTTP.md](HTTP.md) | all three |
 | POP3 | 110 | 1110 | [POP3.md](POP3.md) | all three |
 | IMAP(S) | 143 / 993 | 1143 / 1993 | [IMAP.md](IMAP.md) | all three |
-| SMB | 445 | 1445 | [SMB.md](SMB.md) | state + static |
+| SMB | 445 | 1445 | [SMB.md](SMB.md) | all three |
 | VNC | 5900 | 5000 | [VNC.md](VNC.md) | state + static |
 | Redis | 6379 | 6379 | [REDIS.md](REDIS.md) | all three |
 | MySQL | 3306 | 3306 | [MYSQL.md](MYSQL.md) | state + static |
@@ -43,10 +43,10 @@ docs/tcp/
 | MongoDB | 27017 | 27017 | [MONGODB.md](MONGODB.md) | state + static |
 | MQTT(S) | 1883 / 8883 | 11883 / 18883 | [MQTT.md](MQTT.md) | all three |
 | Elasticsearch | 9200 | 19200 | [ELASTICSEARCH.md](ELASTICSEARCH.md) | all three |
-| Docker Engine | 2375 | 12375 | [DOCKER.md](DOCKER.md) | static only |
+| Docker Engine | 2375 | 12375 | [DOCKER.md](DOCKER.md) | all three |
 | IPP / CUPS | 631 | 1631 | [IPP.md](IPP.md) | all three |
 | Memcached | 11211 | 21211 | [MEMCACHED.md](MEMCACHED.md) | all three |
-| Kubernetes | 6443 | 16443 | [KUBERNETES.md](KUBERNETES.md) | static only |
+| Kubernetes | 6443 | 16443 | [KUBERNETES.md](KUBERNETES.md) | all three |
 | SIP | 5060 | 5060 | [SIP.md](SIP.md) | all three (UDP→TCP) |
 
 Lab aliases come from the `docker-research` / `both` presets in

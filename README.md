@@ -263,7 +263,7 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 | IMAP | TCP | 143 · 1143 | 3 | [IMAP](docs/tcp/IMAP.md) |
 | HTTP | TCP | 80 / 443 · 8081 | 3 | [HTTP](docs/tcp/HTTP.md) |
 | HTTP proxy | TCP | 3128 · 8080 | 3 | [HTTPPROXY](docs/tcp/HTTPPROXY.md) |
-| SMB | TCP | 445 · 1445 | 2 | [SMB](docs/tcp/SMB.md) |
+| SMB | TCP | 445 · 1445 | 3 | [SMB](docs/tcp/SMB.md) |
 | Redis | TCP | 6379 · 6379 | 3 | [REDIS](docs/tcp/REDIS.md) |
 | MQTT | TCP | 1883 · 11883 | 3 | [MQTT](docs/tcp/MQTT.md) |
 | MySQL | TCP | 3306 · 3306 | 2 | [MYSQL](docs/tcp/MYSQL.md) |
@@ -274,8 +274,8 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 | RDP | TCP | 3389 · 3389 | 2 | [RDP](docs/tcp/RDP.md) |
 | Git | TCP | 9418 · 9418 | 3 | [GIT](docs/tcp/GIT.md) |
 | Elasticsearch | TCP | 9200 · 19200 | 3 | [ELASTICSEARCH](docs/tcp/ELASTICSEARCH.md) |
-| Docker | TCP | 2375 · 12375 | 1 | [DOCKER](docs/tcp/DOCKER.md) |
-| Kubernetes | TCP | 6443 · 16443 | 1 | [KUBERNETES](docs/tcp/KUBERNETES.md) |
+| Docker | TCP | 2375 · 12375 | 3 | [DOCKER](docs/tcp/DOCKER.md) |
+| Kubernetes | TCP | 6443 · 16443 | 3 | [KUBERNETES](docs/tcp/KUBERNETES.md) |
 | IPP / CUPS | TCP | 631 · 1631 | 3 | [IPP](docs/tcp/IPP.md) |
 | Memcached | TCP | 11211 · 21211 | 3 | [MEMCACHED](docs/tcp/MEMCACHED.md) |
 | SIP | UDP→TCP | 5060 · 5060 | 3 | [SIP](docs/tcp/SIP.md) |

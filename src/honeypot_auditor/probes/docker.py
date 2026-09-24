@@ -2,11 +2,14 @@
 
 Protocol non-compliance strategies (read-only — never create/start containers,
 pull images, exec, or write volumes/networks):
+  · arbitrary_auth — anonymous GET /version challenged 401/403, then two
+    entropy-varied Basic credentials both return Engine version JSON
+  · state_nonpersist — /version Version mismatches /info ServerVersion after
+    reconnect
   · static_signature — stock ApiVersion/Version/GitCommit lures; unknown path
     returns version/info-shaped 200; DELETE/PUT on ``/_ping`` method stubs;
-    ``/info`` missing required fields or echoing ``/version``; ping/version framing
-  · framing — GET ``/_ping`` is not plain-text OK; GET ``/version`` is not
-    parseable Docker version JSON
+    ``/info`` missing required fields or echoing ``/version``; ``/containers/json``
+    version-echo facade; ping/version framing
 
 Ports 2375 / lab 12375 (plain HTTP). TLS port 2376 is out of scope for v1.
 
@@ -15,6 +18,7 @@ See docs/tcp/DOCKER.md and Docker Engine API docs (System ping, version, info).
 
 from __future__ import annotations
 
+import base64
 import json
 import secrets
 from typing import Any
@@ -22,10 +26,26 @@ from typing import Any
 from honeypot_auditor.config import effective_user_agent
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason, tcp_transact
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    entropy_varied_creds,
+    is_safe_mode,
+    jittered_reconnect_pause,
+    rtt_evidence,
+    skip_suite,
+)
 from honeypot_auditor.settings import settings
 
 _DOCKER_SKIP = (
+    (
+        "docker.arbitrary_auth",
+        "Docker accepts two entropy-varied Basic credentials on /version",
+        "arbitrary_auth",
+    ),
+    (
+        "docker.state_nonpersist",
+        "Docker /version metadata mismatches /info ServerVersion",
+        "state_nonpersist",
+    ),
     (
         "docker.ping_framing",
         "Docker /_ping response is not plain-text OK",
@@ -54,6 +74,11 @@ _DOCKER_SKIP = (
     (
         "docker.info_stub",
         "Docker /info is missing required fields or echoes /version",
+        "static_signature",
+    ),
+    (
+        "docker.containers_stub",
+        "Docker /containers/json is not a container list (version/info echo)",
         "static_signature",
     ),
     (
@@ -311,6 +336,51 @@ def _looks_like_version_or_info(doc: dict[str, Any] | None) -> bool:
     return _is_docker_version(doc) or _is_docker_info(doc)
 
 
+def _basic_auth_header(user: str, password: str) -> dict[str, str]:
+    token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
+
+
+def _state_version_info_mismatch(
+    version: dict[str, Any],
+    *,
+    info_doc: dict[str, Any] | None,
+    info_status: int,
+) -> tuple[bool, str]:
+    """Return (hit, detail) when /version and /info advertise different Engine versions."""
+    ver = _normalize_engine_version(str(version.get("Version") or ""))
+    if info_status != 200 or not info_doc:
+        return False, "info unavailable for version coherence check"
+    server = _normalize_engine_version(str(info_doc.get("ServerVersion") or ""))
+    if not ver or not server:
+        return False, "Version/ServerVersion missing on one side"
+    if ver != server:
+        return True, (
+            f"/version Version={version.get('Version')!r} vs "
+            f"/info ServerVersion={info_doc.get('ServerVersion')!r}"
+        )
+    return False, f"Version coherent with ServerVersion ({ver})"
+
+
+def _normalize_engine_version(raw: str) -> str:
+    """Compare Engine versions on major.minor.patch; ignore -ce / build suffixes."""
+    text = (raw or "").strip().lower()
+    if not text:
+        return ""
+    # Drop common distro/build suffixes: 24.0.7-ce, 20.10.12+azure, …
+    for sep in ("-", "+", "_"):
+        if sep in text:
+            text = text.split(sep, 1)[0]
+    parts = text.split(".")
+    nums: list[str] = []
+    for part in parts[:3]:
+        digits = "".join(ch for ch in part if ch.isdigit())
+        if not digits:
+            break
+        nums.append(str(int(digits)))
+    return ".".join(nums) if nums else text
+
+
 def probe_docker(host: str, port: int) -> list[Indicator]:
     ping_status, _ping_hdrs, ping_body, ping_err = _http_exchange(host, port, "GET", "/_ping")
     if ping_err and not ping_body and ping_status == 0:
@@ -329,7 +399,61 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
     ver_status, _ver_hdrs, ver_body, ver_err = _http_exchange(host, port, "GET", "/version")
     version = _as_dict(_parse_json(ver_body))
     version_ok = _is_docker_version(version)
-    if version is not None and version_ok:
+    auth_from_challenge = False
+    auth_ok = 0
+    auth_notes: list[str] = []
+    auth_err = ""
+    auth_skipped = False
+    low_user = ""
+    high_user = ""
+
+    # Security-gated Engine faces challenge GET /version. A skin that then
+    # accepts any Basic credential and returns version JSON is an auth bypass.
+    # An already-open anonymous version document is not a bypass.
+    if (not version_ok or version is None) and ver_status in (401, 403):
+        anon_status = ver_status
+        (low_user, low_pass), (high_user, high_pass) = entropy_varied_creds()
+        unlocked: tuple[int, bytes] | None = None
+        for label, user, password in (
+            ("low-entropy", low_user, low_pass),
+            ("high-entropy", high_user, high_pass),
+        ):
+            a_status, _a_hdrs, a_body, a_err = _http_exchange(
+                host,
+                port,
+                "GET",
+                "/version",
+                extra_headers=_basic_auth_header(user, password),
+            )
+            if a_err and a_status == 0 and not a_body:
+                auth_err = auth_err or a_err
+                auth_notes.append(f"{label}: unanswered ({a_err})")
+                continue
+            a_doc = _as_dict(_parse_json(a_body))
+            if a_status == 200 and _is_docker_version(a_doc):
+                auth_ok += 1
+                unlocked = (a_status, a_body)
+                version = a_doc
+                auth_notes.append(f"{label}: Basic unlocked /version (status=200)")
+            else:
+                auth_notes.append(f"{label}: Basic status={a_status}")
+        if auth_ok == 2 and unlocked is not None and version is not None and _is_docker_version(
+            version
+        ):
+            ver_status, ver_body = unlocked
+            version_ok = True
+            auth_from_challenge = True
+            version_detail = (
+                f"anonymous GET /version was {anon_status}; version unlocked by arbitrary Basic "
+                f"ApiVersion={version.get('ApiVersion')!r} Version={version.get('Version')!r}"
+            )
+        else:
+            version_detail = (
+                "GET /version challenged "
+                f"(status={anon_status}); Basic did not unlock Engine version "
+                f"({'; '.join(auth_notes) or 'no Basic attempts'})"
+            )
+    elif version is not None and version_ok:
         version_detail = (
             f"version ok ApiVersion={version.get('ApiVersion')!r} "
             f"Version={version.get('Version')!r}"
@@ -516,7 +640,119 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
         else:
             info_detail = f"GET /info status={info_status}"
 
+    # --- /containers/json discovery shape (must be a JSON array) ---
+    c_status, _c_hdrs, c_body, c_err = _http_exchange(host, port, "GET", "/containers/json")
+    c_parsed = _parse_json(c_body)
+    containers_skipped = bool(c_err) and c_status == 0 and not c_body
+    containers_hit = False
+    containers_detail = "containers discovery not evaluated"
+    if not containers_skipped:
+        if c_status in {401, 403}:
+            containers_skipped = True
+            containers_detail = f"/containers/json denied (status={c_status})"
+        elif c_status == 200 and isinstance(c_parsed, list):
+            containers_detail = f"/containers/json ok list_len={len(c_parsed)}"
+        elif c_status == 200 and (
+            _looks_like_version_or_info(_as_dict(c_parsed) if isinstance(c_parsed, dict) else None)
+            or c_parsed == version
+        ):
+            containers_hit = True
+            containers_detail = (
+                "GET /containers/json returned version/info-shaped JSON "
+                "(expected a JSON array of container summaries)"
+            )
+        elif c_status == 200:
+            containers_hit = True
+            containers_detail = (
+                f"GET /containers/json status=200 is not a JSON array "
+                f"(type={type(c_parsed).__name__})"
+            )
+        elif _looks_like_api_not_found(c_status, _as_dict(c_parsed) if isinstance(c_parsed, dict) else None):
+            containers_skipped = True
+            containers_detail = f"/containers/json denied/unavailable (status={c_status})"
+        else:
+            containers_detail = f"GET /containers/json status={c_status}"
+
+    # --- arbitrary_auth ---
+    if auth_from_challenge:
+        auth_hit = auth_ok == 2
+        auth_detail = (
+            "anonymous GET /version challenged; two entropy-varied Basic credentials "
+            "both returned Engine version JSON"
+            if auth_hit
+            else ("; ".join(auth_notes) if auth_notes else "Basic challenge not bypassed")
+        )
+        auth_skipped = False
+    elif ver_status in (401, 403) and auth_notes:
+        # Challenge path ran but did not unlock (should not reach here for Docker —
+        # non-speaker exit — kept for consistent detail if framing policy changes).
+        auth_hit = False
+        auth_detail = "; ".join(auth_notes)
+        auth_skipped = auth_ok == 0 and bool(auth_err) and all(
+            "unanswered" in n for n in auth_notes
+        )
+    else:
+        auth_hit = False
+        auth_detail = (
+            "anonymous GET /version already returned Engine version JSON; "
+            "Basic is not a credential gate"
+        )
+        auth_skipped = False
+
+    # --- state_nonpersist: re-fetch /info after pause and compare to /version ---
+    pause_s = jittered_reconnect_pause()
+    s_status, _s_hdrs, s_body, s_err = _http_exchange(host, port, "GET", "/info")
+    s_doc = _as_dict(_parse_json(s_body))
+    state_err = s_err
+    state_evidence = s_body or info_body
+    if bool(s_err) and s_status == 0 and not s_body:
+        state_skipped = True
+        state_hit = False
+        state_detail = closed_reason(state_err)
+    elif s_status in {401, 403} or (
+        _looks_like_api_not_found(s_status, s_doc) and s_status != 200
+    ):
+        state_skipped = True
+        state_hit = False
+        state_detail = f"/info denied/unavailable for coherence check (status={s_status})"
+    else:
+        state_skipped = False
+        state_hit, state_detail = _state_version_info_mismatch(
+            version, info_doc=s_doc, info_status=s_status
+        )
+    rtt_note = rtt_evidence(pause_s * 1000.0)
+    if rtt_note and state_hit:
+        state_detail = f"{state_detail}; pause_{rtt_note}"
+
     return [
+        Indicator(
+            id="docker.arbitrary_auth",
+            title="Docker accepts two entropy-varied Basic credentials on /version",
+            category="arbitrary_auth",
+            triggered=auth_hit,
+            skipped=auth_skipped,
+            skip_reason=closed_reason(auth_err) if auth_skipped else "",
+            error=auth_err if auth_skipped else "",
+            protocol="docker",
+            detail=auth_detail,
+            evidence=f"{low_user},{high_user}" if auth_hit else "",
+            remediation="Reject unknown Basic credentials instead of always returning /version",
+            fidelity="decisive" if auth_hit else "medium",
+        ),
+        Indicator(
+            id="docker.state_nonpersist",
+            title="Docker /version metadata mismatches /info ServerVersion",
+            category="state_nonpersist",
+            triggered=state_hit,
+            skipped=state_skipped,
+            skip_reason=state_detail if state_skipped else "",
+            error=state_err,
+            protocol="docker",
+            detail=state_detail,
+            evidence=(state_evidence[:400].decode("utf-8", "replace") if state_evidence else ""),
+            remediation="Keep Version coherent across GET /version and GET /info ServerVersion",
+            fidelity="high" if state_hit else "medium",
+        ),
         Indicator(
             id="docker.ping_framing",
             title="Docker /_ping response is not plain-text OK",
@@ -591,6 +827,20 @@ def probe_docker(host: str, port: int) -> list[Indicator]:
             evidence=(info_body[:400].decode("utf-8", "replace") if info_body else ""),
             remediation="Implement GET /info with ID, Containers, Images, Driver, Name, ServerVersion",
             fidelity="high" if info_hit else "medium",
+        ),
+        Indicator(
+            id="docker.containers_stub",
+            title="Docker /containers/json is not a container list (version/info echo)",
+            category="static_signature",
+            triggered=containers_hit,
+            skipped=containers_skipped,
+            skip_reason=containers_detail if containers_skipped else "",
+            error=c_err,
+            protocol="docker",
+            detail=containers_detail,
+            evidence=(c_body[:400].decode("utf-8", "replace") if c_body else ""),
+            remediation="Return a JSON array of container summaries on GET /containers/json",
+            fidelity="high" if containers_hit else "medium",
         ),
         Indicator(
             id="docker.tls_hint_mismatch",

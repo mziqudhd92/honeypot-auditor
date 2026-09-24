@@ -69,6 +69,15 @@ _POD_LIST = {
 }
 
 
+_API_GROUP_LIST = {
+    "kind": "APIGroupList",
+    "apiVersion": "v1",
+    "groups": [
+        {"name": "apps", "versions": [{"groupVersion": "apps/v1", "version": "v1"}]},
+    ],
+}
+
+
 def _conformant_exchange(host, port, method, path, **kwargs):
     if method == "GET" and path in ("/livez", "/healthz"):
         return 200, {"content-type": "text/plain"}, b"ok", ""
@@ -78,6 +87,8 @@ def _conformant_exchange(host, port, method, path, **kwargs):
         return 405, {"content-type": "application/json"}, b'{"kind":"Status","status":"Failure"}', ""
     if method == "GET" and path == "/api":
         return 200, {"content-type": "application/json"}, json.dumps(_API_VERSIONS).encode(), ""
+    if method == "GET" and path == "/apis":
+        return 200, {"content-type": "application/json"}, json.dumps(_API_GROUP_LIST).encode(), ""
     if method == "GET" and path.startswith("/_hpa_nonexistent_"):
         return 404, {"content-type": "application/json"}, b'{"kind":"Status","status":"Failure","code":404}', ""
     if method == "GET" and path == "/api/v1":
@@ -93,15 +104,18 @@ def test_k8s_shape_helpers():
     assert not k8s._is_version_doc({"ok": True})
     assert k8s._is_api_versions(_API_VERSIONS)
     assert not k8s._is_api_versions(_VERSION)
+    assert k8s._is_api_group_list(_API_GROUP_LIST)
+    assert not k8s._is_api_group_list(_VERSION)
     assert k8s._is_api_resource_list(_API_RESOURCE_LIST)
     assert k8s._looks_like_object_list(_POD_LIST)
 
 
 def test_k8s_conformant_api_is_clean():
     with patch.object(k8s, "_http_exchange", side_effect=_conformant_exchange):
-        inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
     assert not any(ind.triggered for ind in inds)
-    assert len(inds) == 7
+    assert len(inds) == 10
 
 
 def test_k8s_healthz_fallback_when_livez_missing():
@@ -117,7 +131,8 @@ def test_k8s_healthz_fallback_when_livez_missing():
         return _conformant_exchange(host, port, method, path, **kwargs)
 
     with patch.object(k8s, "_http_exchange", side_effect=fake_ex):
-        inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
     by_id = {ind.id: ind for ind in inds}
     assert "GET /livez" in paths
     assert "GET /healthz" in paths
@@ -134,6 +149,8 @@ def test_k8s_honeypot_tells_fire():
             return 200, {}, json.dumps(_STOCK_VERSION).encode(), ""
         if method == "GET" and path == "/api":
             return 200, {}, json.dumps(_STOCK_VERSION).encode(), ""
+        if method == "GET" and path == "/apis":
+            return 200, {}, json.dumps(_STOCK_VERSION).encode(), ""
         if method == "GET" and path.startswith("/_hpa_nonexistent_"):
             return 200, {}, json.dumps(_STOCK_VERSION).encode(), ""
         if method == "GET" and path == "/api/v1":
@@ -141,16 +158,98 @@ def test_k8s_honeypot_tells_fire():
         return 0, {}, b"", "unexpected"
 
     with patch.object(k8s, "_http_exchange", side_effect=fake_ex):
-        inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
     by_id = {ind.id: ind for ind in inds}
     assert by_id["kubernetes.health_framing"].triggered
     assert not by_id["kubernetes.version_framing"].triggered  # parseable, but stock
     assert by_id["kubernetes.api_framing"].triggered
+    assert by_id["kubernetes.apis_framing"].triggered
     assert by_id["kubernetes.path_facade"].triggered
     assert by_id["kubernetes.method_stub"].triggered
     assert by_id["kubernetes.stock_version"].triggered
     assert not by_id["kubernetes.stock_version"].requires_corroboration
     assert by_id["kubernetes.unauthenticated_ok"].triggered
+    assert not by_id["kubernetes.arbitrary_auth"].triggered
+
+
+def test_k8s_arbitrary_auth_after_challenge():
+    def fake_ex(host, port, method, path, **kwargs):
+        hdrs = kwargs.get("extra_headers") or {}
+        auth = "Authorization" in hdrs and str(hdrs["Authorization"]).startswith("Bearer ")
+        if method == "GET" and path in ("/livez", "/healthz"):
+            return 200, {}, b"ok", ""
+        if method == "GET" and path == "/version":
+            if not auth:
+                return 401, {}, b'{"kind":"Status","status":"Failure","code":401}', ""
+            return 200, {}, json.dumps(_VERSION).encode(), ""
+        return _conformant_exchange(host, port, method, path, **kwargs)
+
+    with patch.object(k8s, "_http_exchange", side_effect=fake_ex):
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["kubernetes.arbitrary_auth"].triggered
+    assert by_id["kubernetes.arbitrary_auth"].fidelity == "decisive"
+    assert not by_id["kubernetes.version_framing"].triggered
+
+
+def test_k8s_challenge_rejected_keeps_honest_auth_detail():
+    """Health-ok + /version 401 that rejects Bearer must not claim anonymous open."""
+
+    def fake_ex(host, port, method, path, **kwargs):
+        hdrs = kwargs.get("extra_headers") or {}
+        auth = "Authorization" in hdrs and str(hdrs["Authorization"]).startswith("Bearer ")
+        if method == "GET" and path in ("/livez", "/healthz"):
+            return 200, {}, b"ok", ""
+        if method == "GET" and path == "/version":
+            if auth:
+                return 401, {}, b'{"kind":"Status","status":"Failure","code":401}', ""
+            return 401, {}, b'{"kind":"Status","status":"Failure","code":401}', ""
+        return _conformant_exchange(host, port, method, path, **kwargs)
+
+    with patch.object(k8s, "_http_exchange", side_effect=fake_ex):
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+    auth = {i.id: i for i in inds}["kubernetes.arbitrary_auth"]
+    assert not auth.triggered
+    assert "challenged" in auth.detail
+    assert "already returned" not in auth.detail
+
+
+def test_k8s_apis_404_is_skipped_not_hit():
+    def fake_ex(host, port, method, path, **kwargs):
+        if method == "GET" and path == "/apis":
+            return 404, {}, b'{"kind":"Status","status":"Failure","code":404}', ""
+        return _conformant_exchange(host, port, method, path, **kwargs)
+
+    with patch.object(k8s, "_http_exchange", side_effect=fake_ex):
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+    apis = {i.id: i for i in inds}["kubernetes.apis_framing"]
+    assert apis.skipped
+    assert not apis.triggered
+
+
+def test_k8s_version_drift_is_state_hit():
+    calls = {"n": 0}
+
+    def fake_ex(host, port, method, path, **kwargs):
+        if method == "GET" and path == "/version":
+            calls["n"] += 1
+            doc = dict(_VERSION)
+            if calls["n"] > 1:
+                doc["gitVersion"] = "v1.29.9-drift"
+                doc["gitCommit"] = "driftedcommit"
+            return 200, {}, json.dumps(doc).encode(), ""
+        return _conformant_exchange(host, port, method, path, **kwargs)
+
+    with patch.object(k8s, "_http_exchange", side_effect=fake_ex):
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+    state = {i.id: i for i in inds}["kubernetes.state_nonpersist"]
+    assert state.triggered
+    assert "drifted" in state.detail
 
 
 def test_k8s_generic_gitversion_requires_corroboration():
@@ -165,7 +264,8 @@ def test_k8s_generic_gitversion_requires_corroboration():
         return _conformant_exchange(host, port, method, path, **kwargs)
 
     with patch.object(k8s, "_http_exchange", side_effect=fake_ex):
-        inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
     stock = {i.id: i for i in inds}["kubernetes.stock_version"]
     assert stock.triggered
     assert stock.requires_corroboration
@@ -238,7 +338,8 @@ def test_k8s_gated_stock_kept_with_ungated_tell():
 
 def test_k8s_api_v1_resource_list_is_not_unauth_tell():
     with patch.object(k8s, "_http_exchange", side_effect=_conformant_exchange):
-        inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
     assert not {i.id: i for i in inds}["kubernetes.unauthenticated_ok"].triggered
 
 
@@ -249,7 +350,8 @@ def test_k8s_api_v1_401_is_clean():
         return _conformant_exchange(host, port, method, path, **kwargs)
 
     with patch.object(k8s, "_http_exchange", side_effect=fake_ex):
-        inds = k8s.probe_kubernetes("127.0.0.1", 6443)
+        with patch.object(k8s, "jittered_reconnect_pause", return_value=0.0):
+            inds = k8s.probe_kubernetes("127.0.0.1", 6443)
     assert not {i.id: i for i in inds}["kubernetes.unauthenticated_ok"].triggered
 
 
@@ -282,7 +384,7 @@ def test_k8s_tls_preferred_on_api_ports():
 def test_k8s_connection_error_skips_suite():
     with patch.object(k8s, "_http_exchange", return_value=(0, {}, b"", "Connection refused")):
         inds = k8s.probe_kubernetes("127.0.0.1", 6443)
-    assert len(inds) == 7
+    assert len(inds) == 10
     assert all(ind.skipped for ind in inds)
 
 
@@ -300,7 +402,7 @@ def test_k8s_non_speaker_triggers_framing():
         i.skipped or i.id in {"kubernetes.health_framing", "kubernetes.version_framing"}
         for i in inds
     )
-    assert len(inds) == 7
+    assert len(inds) == 10
 
 
 def test_k8s_safe_mode_framing_only():
@@ -312,10 +414,13 @@ def test_k8s_safe_mode_framing_only():
     finally:
         settings.safe_mode = old
     by_id = {ind.id: ind for ind in inds}
-    assert len(inds) == 7
+    assert len(inds) == 10
     assert not by_id["kubernetes.health_framing"].triggered
     assert not by_id["kubernetes.version_framing"].triggered
+    assert by_id["kubernetes.arbitrary_auth"].skipped
+    assert by_id["kubernetes.state_nonpersist"].skipped
     assert by_id["kubernetes.api_framing"].skipped
+    assert by_id["kubernetes.apis_framing"].skipped
     assert by_id["kubernetes.path_facade"].skipped
     assert by_id["kubernetes.method_stub"].skipped
     assert by_id["kubernetes.stock_version"].skipped
@@ -331,5 +436,5 @@ def test_k8s_ports_wired():
     assert ports["kubernetes"] == [6443, 16443]
     assert "kubernetes" in PROTOCOL_STRATEGIES
     assert PROTOCOL_STRATEGIES["kubernetes"]["static_signature"]
-    assert not PROTOCOL_STRATEGIES["kubernetes"]["arbitrary_auth"]
-    assert not PROTOCOL_STRATEGIES["kubernetes"]["state_nonpersist"]
+    assert PROTOCOL_STRATEGIES["kubernetes"]["arbitrary_auth"]
+    assert PROTOCOL_STRATEGIES["kubernetes"]["state_nonpersist"]

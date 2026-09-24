@@ -90,9 +90,11 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "smb": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "bogus pipe NTSTATUS · session FSM",
-        "static_signature": "SMB1/EOL native_os · static NTLM challenge",
+        "arbitrary_auth": "two entropy-varied credentials both establish a session",
+        "state_nonpersist": "bogus pipe NTSTATUS · ghost share TREE_CONNECT",
+        "static_signature": (
+            "SMB1/EOL native_os · static NTLM challenge · stock lure shares · silent accept"
+        ),
     },
     "sip": {
         "arbitrary_auth": (
@@ -177,12 +179,16 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "docker": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "anonymous GET /version challenged 401/403, then two entropy-varied "
+            "Basic credentials both return Engine version JSON"
+        ),
+        "state_nonpersist": "GET /version Version mismatches /info ServerVersion after reconnect",
         "static_signature": (
             "ping/version framing · stock ApiVersion/Version/GitCommit · "
             "unknown-path version/info facade · DELETE/PUT /_ping method stubs · "
-            "/info missing fields or version echo · TLS hint deferred (2376)"
+            "/info missing fields or version echo · /containers/json list facade · "
+            "TLS hint deferred (2376)"
         ),
     },
     "ipp": {
@@ -224,12 +230,18 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         ),
     },
     "kubernetes": {
-        "arbitrary_auth": "",
-        "state_nonpersist": "",
+        "arbitrary_auth": (
+            "anonymous GET /version challenged 401/403, then two entropy-varied "
+            "Bearer tokens both return a version document"
+        ),
+        "state_nonpersist": (
+            "/version gitVersion/gitCommit drifts across reconnect or contradicts /apis"
+        ),
         "static_signature": (
             "livez/healthz framing · /version framing · /api APIVersions shape · "
-            "unknown-path version facade · DELETE /version method stub · "
-            "stock gitVersion/platform · unauthenticated /api/v1 object-list dump"
+            "/apis APIGroupList shape · unknown-path version facade · "
+            "DELETE /version method stub · stock gitVersion/platform · "
+            "unauthenticated /api/v1 object-list dump"
         ),
     },
     "mysql": {

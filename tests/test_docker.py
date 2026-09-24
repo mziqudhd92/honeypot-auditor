@@ -80,6 +80,8 @@ def _conformant_tcp(host, port, payload=b"", **kwargs):
         return _http_bytes(200, _VERSION), ""
     if first.startswith("GET /info"):
         return _http_bytes(200, _INFO), ""
+    if first.startswith("GET /containers/json"):
+        return _http_bytes(200, []), ""
     if first.startswith("GET /_hpa_nonexistent_"):
         return _http_bytes(404, {"message": "page not found"}), ""
     if first.startswith("DELETE /_ping") or first.startswith("PUT /_ping"):
@@ -178,13 +180,17 @@ def test_docker_tls_hint_is_never_applicable_skip():
 
 def test_docker_conformant_daemon_is_clean():
     with patch.object(docker, "tcp_transact", side_effect=_conformant_tcp):
-        inds = docker.probe_docker("127.0.0.1", 2375)
+        with patch.object(docker, "jittered_reconnect_pause", return_value=0.0):
+            inds = docker.probe_docker("127.0.0.1", 2375)
     assert not any(ind.triggered for ind in inds)
-    assert len(inds) == 7
+    assert len(inds) == 10
     assert {i.id: i for i in inds}["docker.tls_hint_mismatch"].skipped
 
 
 def test_docker_honeypot_tells_fire():
+    mismatched_info = dict(_STOCK_VERSION)
+    mismatched_info["ServerVersion"] = "9.9.9"
+
     def fake_tcp(host, port, payload=b"", **kwargs):
         text = payload.decode("latin-1", "replace")
         first = text.split("\r\n", 1)[0]
@@ -193,6 +199,8 @@ def test_docker_honeypot_tells_fire():
         if first.startswith("GET /version"):
             return _http_bytes(200, _STOCK_VERSION), ""
         if first.startswith("GET /info"):
+            return _http_bytes(200, mismatched_info), ""
+        if first.startswith("GET /containers/json"):
             return _http_bytes(200, _STOCK_VERSION), ""
         if first.startswith("GET /_hpa_nonexistent_"):
             return _http_bytes(200, _STOCK_VERSION), ""
@@ -201,13 +209,103 @@ def test_docker_honeypot_tells_fire():
         return b"", "unexpected"
 
     with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
-        inds = docker.probe_docker("127.0.0.1", 2375)
+        with patch.object(docker, "jittered_reconnect_pause", return_value=0.0):
+            inds = docker.probe_docker("127.0.0.1", 2375)
     by_id = {ind.id: ind for ind in inds}
     assert by_id["docker.stock_version"].triggered
     assert not by_id["docker.stock_version"].requires_corroboration
     assert by_id["docker.path_facade"].triggered
     assert by_id["docker.method_stub"].triggered
     assert by_id["docker.info_stub"].triggered
+    assert by_id["docker.containers_stub"].triggered
+    assert by_id["docker.state_nonpersist"].triggered
+    assert not by_id["docker.arbitrary_auth"].triggered
+
+
+def test_docker_arbitrary_auth_after_challenge():
+    calls = {"n": 0}
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        auth = "Authorization: Basic" in text
+        if first.startswith("GET /_ping"):
+            return _http_bytes(200, "OK"), ""
+        if first.startswith("GET /version"):
+            if not auth:
+                return _http_bytes(401, {"message": "unauthorized"}), ""
+            return _http_bytes(200, _VERSION), ""
+        if first.startswith("GET /info"):
+            return _http_bytes(200, _INFO), ""
+        if first.startswith("GET /containers/json"):
+            return _http_bytes(200, []), ""
+        if first.startswith("GET /_hpa_nonexistent_"):
+            return _http_bytes(404, {"message": "page not found"}), ""
+        if first.startswith("DELETE /_ping") or first.startswith("PUT /_ping"):
+            return _http_bytes(405, {"message": "method not allowed"}), ""
+        calls["n"] += 1
+        return b"", "unexpected"
+
+    with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
+        with patch.object(docker, "jittered_reconnect_pause", return_value=0.0):
+            inds = docker.probe_docker("127.0.0.1", 2375)
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["docker.arbitrary_auth"].triggered
+    assert by_id["docker.arbitrary_auth"].fidelity == "decisive"
+    assert not by_id["docker.version_framing"].triggered
+
+
+def test_docker_version_info_mismatch_is_state_hit():
+    mismatched_info = dict(_INFO)
+    mismatched_info["ServerVersion"] = "19.03.0"
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET /info"):
+            return _http_bytes(200, mismatched_info), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
+        with patch.object(docker, "jittered_reconnect_pause", return_value=0.0):
+            inds = docker.probe_docker("127.0.0.1", 2375)
+    state = {i.id: i for i in inds}["docker.state_nonpersist"]
+    assert state.triggered
+    assert "ServerVersion" in state.detail
+
+
+def test_docker_version_suffix_mismatch_is_clean():
+    """24.0.7 vs 24.0.7-ce must not trip state_nonpersist after normalization."""
+    suffixed = dict(_INFO)
+    suffixed["ServerVersion"] = "24.0.7-ce"
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET /info"):
+            return _http_bytes(200, suffixed), ""
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
+        with patch.object(docker, "jittered_reconnect_pause", return_value=0.0):
+            inds = docker.probe_docker("127.0.0.1", 2375)
+    assert not {i.id: i for i in inds}["docker.state_nonpersist"].triggered
+
+
+def test_docker_state_refetches_info_after_pause():
+    info_gets: list[str] = []
+
+    def fake_tcp(host, port, payload=b"", **kwargs):
+        text = payload.decode("latin-1", "replace")
+        first = text.split("\r\n", 1)[0]
+        if first.startswith("GET /info"):
+            info_gets.append(first)
+        return _conformant_tcp(host, port, payload, **kwargs)
+
+    with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
+        with patch.object(docker, "jittered_reconnect_pause", return_value=0.0):
+            docker.probe_docker("127.0.0.1", 2375)
+    assert len(info_gets) >= 2
 
 
 def test_docker_generic_apiversion_alone_requires_corroboration():
@@ -370,18 +468,21 @@ def test_docker_version_framing_skips_deep_probes():
         return b"", "unexpected"
 
     with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
-        inds = docker.probe_docker("127.0.0.1", 2375)
+        with patch.object(docker, "jittered_reconnect_pause", return_value=0.0):
+            inds = docker.probe_docker("127.0.0.1", 2375)
     by_id = {ind.id: ind for ind in inds}
     assert not by_id["docker.ping_framing"].triggered
     assert by_id["docker.version_framing"].triggered
-    assert all(i.skipped or i.id in {"docker.ping_framing", "docker.version_framing"} for i in inds)
-    assert len(inds) == 7
+    assert all(
+        i.skipped or i.id in {"docker.ping_framing", "docker.version_framing"} for i in inds
+    )
+    assert len(inds) == 10
 
 
 def test_docker_connection_error_skips_suite():
     with patch.object(docker, "tcp_transact", return_value=(b"", "Connection refused")):
         inds = docker.probe_docker("127.0.0.1", 2375)
-    assert len(inds) == 7
+    assert len(inds) == 10
     assert all(ind.skipped for ind in inds)
 
 
@@ -396,7 +497,8 @@ def test_docker_info_missing_fields_is_stub():
         return _conformant_tcp(host, port, payload, **kwargs)
 
     with patch.object(docker, "tcp_transact", side_effect=fake_tcp):
-        inds = docker.probe_docker("127.0.0.1", 2375)
+        with patch.object(docker, "jittered_reconnect_pause", return_value=0.0):
+            inds = docker.probe_docker("127.0.0.1", 2375)
     assert {i.id: i for i in inds}["docker.info_stub"].triggered
 
 
@@ -409,11 +511,24 @@ def test_docker_safe_mode_framing_only():
     finally:
         settings.safe_mode = old
     by_id = {ind.id: ind for ind in inds}
-    assert len(inds) == 7
+    assert len(inds) == 10
     assert not by_id["docker.ping_framing"].triggered
     assert not by_id["docker.version_framing"].triggered
+    assert by_id["docker.arbitrary_auth"].skipped
+    assert by_id["docker.state_nonpersist"].skipped
     assert by_id["docker.path_facade"].skipped
     assert by_id["docker.method_stub"].skipped
     assert by_id["docker.stock_version"].skipped
     assert by_id["docker.info_stub"].skipped
+    assert by_id["docker.containers_stub"].skipped
     assert by_id["docker.tls_hint_mismatch"].skipped
+
+
+def test_docker_strategies_wired():
+    from honeypot_auditor.config import PROTOCOL_STRATEGIES
+
+    row = PROTOCOL_STRATEGIES["docker"]
+    assert row["arbitrary_auth"]
+    assert row["state_nonpersist"]
+    assert row["static_signature"]
+    assert "containers/json" in row["static_signature"]

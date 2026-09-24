@@ -2,10 +2,14 @@
 
 Protocol non-compliance strategies (read-only — never create/exec/proxy/delete
 cluster objects):
+  · arbitrary_auth — anonymous GET /version challenged 401/403, then two
+    entropy-varied Bearer tokens both return a version document
+  · state_nonpersist — /version gitVersion/gitCommit drifts across reconnect,
+    or contradicts /apis discovery identity
   · static_signature — /livez|/healthz not ok; /version not parseable;
-    /api not APIVersions-shaped; unknown path returns version-shaped 200;
-    DELETE /version method stub; stock gitVersion/platform lures;
-    unauthenticated /api/v1 returns pods/secrets-shaped lists
+    /api not APIVersions-shaped; /apis not APIGroupList-shaped; unknown path
+    returns version-shaped 200; DELETE /version method stub; stock
+    gitVersion/platform lures; unauthenticated /api/v1 returns pods/secrets-shaped lists
 
 Ports 6443 / lab 16443. TLS is preferred on those ports (IMAPS-style).
 
@@ -21,11 +25,27 @@ from typing import Any
 from honeypot_auditor.config import effective_user_agent
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason
-from honeypot_auditor.probes.common import is_safe_mode, skip_suite
+from honeypot_auditor.probes.common import (
+    entropy_varied_creds,
+    is_safe_mode,
+    jittered_reconnect_pause,
+    rtt_evidence,
+    skip_suite,
+)
 from honeypot_auditor.proxy_transport import create_connection, create_tls_connection
 from honeypot_auditor.settings import settings
 
 _K8S_SKIP = (
+    (
+        "kubernetes.arbitrary_auth",
+        "Kubernetes accepts two entropy-varied Bearer tokens on /version",
+        "arbitrary_auth",
+    ),
+    (
+        "kubernetes.state_nonpersist",
+        "Kubernetes /version metadata drifts or contradicts /apis discovery",
+        "state_nonpersist",
+    ),
     (
         "kubernetes.health_framing",
         "Kubernetes livez/healthz response is not ok",
@@ -39,6 +59,11 @@ _K8S_SKIP = (
     (
         "kubernetes.api_framing",
         "Kubernetes /api is not APIVersions-shaped",
+        "static_signature",
+    ),
+    (
+        "kubernetes.apis_framing",
+        "Kubernetes /apis is not APIGroupList-shaped",
         "static_signature",
     ),
     (
@@ -234,6 +259,14 @@ def _is_api_versions(doc: dict[str, Any] | None) -> bool:
     return kind == "APIVersions" and isinstance(versions, list)
 
 
+def _is_api_group_list(doc: dict[str, Any] | None) -> bool:
+    if not doc:
+        return False
+    kind = str(doc.get("kind") or "")
+    groups = doc.get("groups")
+    return kind == "APIGroupList" and isinstance(groups, list)
+
+
 def _is_api_resource_list(doc: dict[str, Any] | None) -> bool:
     if not doc:
         return False
@@ -306,6 +339,51 @@ def _stock_version_assessment(doc: dict[str, Any]) -> tuple[str | None, bool]:
     return "; ".join(hits), requires
 
 
+def _bearer_auth_header(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _version_identity(doc: dict[str, Any]) -> tuple[str, str]:
+    return (
+        str(doc.get("gitVersion") or "").strip(),
+        str(doc.get("gitCommit") or "").strip(),
+    )
+
+
+def _state_version_drift(
+    first: dict[str, Any],
+    *,
+    second: dict[str, Any] | None,
+    second_status: int,
+    apis_doc: dict[str, Any] | None,
+    apis_status: int,
+) -> tuple[bool, str]:
+    """Return (hit, detail) for reconnect drift or /apis discovery contradiction."""
+    notes: list[str] = []
+    gv1, gc1 = _version_identity(first)
+    if second_status == 200 and second is not None and _is_version_doc(second):
+        gv2, gc2 = _version_identity(second)
+        if gv1 and gv2 and gv1 != gv2:
+            notes.append(f"gitVersion drifted {gv1!r} → {gv2!r} across reconnect")
+        if gc1 and gc2 and gc1 != gc2:
+            notes.append(f"gitCommit drifted {gc1!r} → {gc2!r} across reconnect")
+    if apis_status == 200 and apis_doc is not None and _is_version_doc(apis_doc):
+        notes.append("GET /apis returned a version document (expected APIGroupList)")
+    elif (
+        apis_status == 200
+        and apis_doc is not None
+        and not _is_api_group_list(apis_doc)
+        and not _looks_like_api_not_found(apis_status, apis_doc)
+    ):
+        notes.append(
+            f"GET /apis status=200 is not APIGroupList-shaped "
+            f"(keys={sorted(apis_doc)[:8]})"
+        )
+    if notes:
+        return True, "; ".join(notes)
+    return False, "version identity stable across reconnect; /apis discovery coherent"
+
+
 def _probe_health(host: str, port: int) -> tuple[int, bytes, str, str]:
     """Try /livez then /healthz. Prefer the first ok body; else the last attempt.
 
@@ -344,6 +422,57 @@ def probe_kubernetes(host: str, port: int) -> list[Indicator]:
     health_ok = _is_health_ok(health_status, health_body)
     version_doc = _as_dict(_parse_json(ver_body))
     version_ok = _is_version_doc(version_doc)
+    auth_from_challenge = False
+    auth_ok = 0
+    auth_notes: list[str] = []
+    auth_err = ""
+    auth_skipped = False
+    low_user = ""
+    high_user = ""
+
+    # Auth-gated apiservers challenge GET /version. A skin that then accepts any
+    # Bearer token and returns a version document is an auth bypass. An already-open
+    # anonymous /version is not a bypass.
+    if (not version_ok or version_doc is None) and ver_status in (401, 403):
+        (low_user, low_pass), (high_user, high_pass) = entropy_varied_creds()
+        unlocked: tuple[int, bytes] | None = None
+        for label, user, password in (
+            ("low-entropy", low_user, low_pass),
+            ("high-entropy", high_user, high_pass),
+        ):
+            token = f"{user}:{password}"
+            a_status, _a_hdrs, a_body, a_err = _http_exchange(
+                host,
+                port,
+                "GET",
+                "/version",
+                extra_headers=_bearer_auth_header(token),
+            )
+            if a_err and a_status == 0 and not a_body:
+                auth_err = auth_err or a_err
+                auth_notes.append(f"{label}: unanswered ({a_err})")
+                continue
+            a_doc = _as_dict(_parse_json(a_body))
+            if a_status == 200 and _is_version_doc(a_doc):
+                auth_ok += 1
+                unlocked = (a_status, a_body)
+                version_doc = a_doc
+                auth_notes.append(f"{label}: Bearer unlocked /version (status=200)")
+            else:
+                auth_notes.append(f"{label}: Bearer status={a_status}")
+        if (
+            auth_ok == 2
+            and unlocked is not None
+            and version_doc is not None
+            and _is_version_doc(version_doc)
+        ):
+            ver_status, ver_body = unlocked
+            version_ok = True
+            auth_from_challenge = True
+        elif auth_ok == 0 and bool(auth_err) and auth_notes and all(
+            "unanswered" in n for n in auth_notes
+        ):
+            auth_skipped = True
 
     health_framing_hit = not health_ok and bool(health_body or health_status > 0)
     health_skipped = bool(health_err) and health_status == 0 and not health_body
@@ -365,7 +494,13 @@ def probe_kubernetes(host: str, port: int) -> list[Indicator]:
             f"body={health_body[:80]!r})"
         )
 
-    if version_ok and version_doc is not None:
+    if auth_from_challenge and version_ok and version_doc is not None:
+        version_detail = (
+            f"anonymous GET /version was challenged; version unlocked by arbitrary Bearer "
+            f"gitVersion={version_doc.get('gitVersion')!r} "
+            f"platform={version_doc.get('platform')!r}"
+        )
+    elif version_ok and version_doc is not None:
         version_detail = (
             f"version ok gitVersion={version_doc.get('gitVersion')!r} "
             f"platform={version_doc.get('platform')!r}"
@@ -548,7 +683,127 @@ def probe_kubernetes(host: str, port: int) -> list[Indicator]:
                 f"keys={sorted(v1_doc)[:8] if v1_doc else []}"
             )
 
+    # --- /apis discovery shape ---
+    apis_status, _apis_hdrs, apis_body, apis_err = _http_exchange(host, port, "GET", "/apis")
+    apis_doc = _as_dict(_parse_json(apis_body))
+    apis_skipped = bool(apis_err) and apis_status == 0 and not apis_body
+    apis_hit = False
+    apis_detail = "API group discovery not evaluated"
+    if not apis_skipped:
+        if apis_status == 200 and apis_doc is not None and _is_api_group_list(apis_doc):
+            groups = apis_doc.get("groups")
+            apis_detail = (
+                f"/apis ok groups={len(groups) if isinstance(groups, list) else 0}"
+            )
+        elif apis_status in {401, 403}:
+            apis_skipped = True
+            apis_detail = f"/apis denied (status={apis_status})"
+        elif apis_status == 200 and _is_version_doc(apis_doc):
+            apis_hit = True
+            apis_detail = (
+                "GET /apis returned a version-shaped document "
+                "(expected kind=APIGroupList)"
+            )
+        elif apis_status == 200:
+            apis_hit = True
+            apis_detail = (
+                f"GET /apis status=200 is not APIGroupList-shaped "
+                f"(keys={sorted(apis_doc)[:8] if apis_doc else []})"
+            )
+        elif _looks_like_api_not_found(apis_status, apis_doc) or apis_status >= 500:
+            # 404/5xx behind proxies is inconclusive — not a facade tell.
+            apis_skipped = True
+            apis_detail = f"/apis denied/unavailable (status={apis_status})"
+        else:
+            apis_detail = f"GET /apis status={apis_status}"
+
+    # --- arbitrary_auth ---
+    if auth_from_challenge:
+        auth_hit = auth_ok == 2
+        auth_detail = (
+            "anonymous GET /version challenged; two entropy-varied Bearer tokens "
+            "both returned a version document"
+            if auth_hit
+            else ("; ".join(auth_notes) if auth_notes else "Bearer challenge not bypassed")
+        )
+    elif auth_notes:
+        # Challenged anonymous /version; Bearer did not fully unlock.
+        auth_hit = False
+        auth_detail = (
+            "anonymous GET /version challenged; "
+            + ("; ".join(auth_notes) if auth_notes else "Bearer did not unlock /version")
+        )
+    else:
+        auth_hit = False
+        auth_detail = (
+            "anonymous GET /version already returned a version document; "
+            "Bearer is not a credential gate"
+        )
+
+    # --- state_nonpersist: reconnect /version drift + /apis coherence ---
+    pause_s = jittered_reconnect_pause()
+    v2_status, _v2_hdrs, v2_body, v2_err = _http_exchange(host, port, "GET", "/version")
+    v2_doc = _as_dict(_parse_json(v2_body))
+    state_err = v2_err or apis_err
+    if version_doc is None or not version_ok:
+        state_skipped = True
+        state_hit = False
+        state_detail = "no baseline /version for coherence check"
+    elif (v2_err and v2_status == 0 and not v2_body) and apis_skipped:
+        state_skipped = True
+        state_hit = False
+        state_detail = closed_reason(state_err or "reconnect failed")
+    else:
+        state_skipped = False
+        state_hit, state_detail = _state_version_drift(
+            version_doc,
+            second=v2_doc,
+            second_status=v2_status,
+            apis_doc=apis_doc,
+            apis_status=apis_status,
+        )
+        # Avoid double-counting pure /apis shape failures already scored as apis_framing.
+        if state_hit and apis_hit and "APIGroupList" in state_detail and "drifted" not in state_detail:
+            state_hit = False
+            state_detail = "version identity stable; /apis shape scored separately"
+    rtt_note = rtt_evidence(pause_s * 1000.0)
+    if rtt_note and state_hit:
+        state_detail = f"{state_detail}; pause_{rtt_note}"
+
     return [
+        Indicator(
+            id="kubernetes.arbitrary_auth",
+            title="Kubernetes accepts two entropy-varied Bearer tokens on /version",
+            category="arbitrary_auth",
+            triggered=auth_hit,
+            skipped=auth_skipped,
+            skip_reason=closed_reason(auth_err) if auth_skipped else "",
+            error=auth_err if auth_skipped else "",
+            protocol="kubernetes",
+            detail=auth_detail,
+            evidence=f"{low_user},{high_user}" if auth_hit else "",
+            remediation="Reject unknown Bearer tokens instead of always returning /version",
+            fidelity="decisive" if auth_hit else "medium",
+        ),
+        Indicator(
+            id="kubernetes.state_nonpersist",
+            title="Kubernetes /version metadata drifts or contradicts /apis discovery",
+            category="state_nonpersist",
+            triggered=state_hit,
+            skipped=state_skipped,
+            skip_reason=state_detail if state_skipped else "",
+            error=state_err if state_skipped else "",
+            protocol="kubernetes",
+            detail=state_detail,
+            evidence=(v2_body[:200] + apis_body[:200]).decode("utf-8", "replace")
+            if (v2_body or apis_body)
+            else "",
+            remediation=(
+                "Keep gitVersion/gitCommit stable across reconnects and serve "
+                "APIGroupList on GET /apis"
+            ),
+            fidelity="high" if state_hit else "medium",
+        ),
         Indicator(
             id="kubernetes.health_framing",
             title="Kubernetes livez/healthz response is not ok",
@@ -590,6 +845,20 @@ def probe_kubernetes(host: str, port: int) -> list[Indicator]:
             evidence=(api_body[:400].decode("utf-8", "replace") if api_body else ""),
             remediation="Return kind=APIVersions with a versions list on GET /api",
             fidelity="high" if api_hit else "medium",
+        ),
+        Indicator(
+            id="kubernetes.apis_framing",
+            title="Kubernetes /apis is not APIGroupList-shaped",
+            category="static_signature",
+            triggered=apis_hit,
+            skipped=apis_skipped,
+            skip_reason=apis_detail if apis_skipped else "",
+            error=apis_err,
+            protocol="kubernetes",
+            detail=apis_detail,
+            evidence=(apis_body[:400].decode("utf-8", "replace") if apis_body else ""),
+            remediation="Return kind=APIGroupList with a groups list on GET /apis",
+            fidelity="high" if apis_hit else "medium",
         ),
         Indicator(
             id="kubernetes.path_facade",

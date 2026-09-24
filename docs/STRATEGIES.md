@@ -11,7 +11,7 @@ with TCP fallback). Each uses up to **3** basic probe strategies:
 
 The **Strategies** column in the README port table is how many of those three
 are active for that protocol in this release — not Shodan, co-tenancy, or
-individual indicator checks (**72** active strategy slots across all protocols).
+individual indicator checks (**77** active strategy slots across all protocols).
 Source of truth: `PROTOCOL_STRATEGIES` in `src/honeypot_auditor/config/scoring.py`.
 
 Full per-protocol guides:
@@ -135,12 +135,15 @@ prefix and are deleted. See [`docs/tcp/REDIS.md`](tcp/REDIS.md) and the
 [Redis protocol spec](https://redis.io/docs/reference/protocol-spec/).
 
 The Kubernetes engine speaks the API server on **6443** / lab **16443** (TLS,
-read-only discovery paths) and scores decoy kube-API faces under
-**static_signature** only: `/livez`/`/healthz` framing, `/version` shape,
-`/api` APIVersions fidelity, unknown-path version-shaped 200s, method stubs,
-stock `gitVersion` lures, and corroboration-gated unauthenticated `/api/v1`
-object dumps. Never sends tokens or touches pods/secrets. See
-[`docs/tcp/KUBERNETES.md`](tcp/KUBERNETES.md).
+read-only discovery paths) and scores decoy kube-API faces under **all three**
+basic strategies: anonymous 401/403 then dual entropy-varied Bearer both return
+`/version` (**arbitrary_auth**; open anonymous `/version` is not a bypass),
+`/version` drift across reconnect or `/apis` contradiction
+(**state_nonpersist**), plus **static_signature** (`/livez`/`/healthz` framing,
+`/version` shape, `/api` APIVersions + `/apis` APIGroupList fidelity,
+unknown-path version-shaped 200s, method stubs, stock `gitVersion` lures, and
+corroboration-gated unauthenticated `/api/v1` object dumps). Never dumps
+pods/secrets collections. See [`docs/tcp/KUBERNETES.md`](tcp/KUBERNETES.md).
 
 The Elasticsearch engine speaks the HTTP JSON API on **9200** / lab **19200**
 and scores API non-compliance under all three basic strategies: anonymous
@@ -156,11 +159,14 @@ data. Strategies and probe flow:
 [`docs/tcp/ELASTICSEARCH.md`](tcp/ELASTICSEARCH.md).
 
 The Docker Engine API probe speaks the plain HTTP Engine API on **2375** / lab
-**12375** and scores API non-compliance under **static_signature** only
-(`/_ping` framing, `/version` Engine shape, path/method facades, thin `/info`
-stubs, stock version lure metadata). Read-only only — never
-create/start/exec/pull. TLS **2376** is out of scope. See
-[`docs/tcp/DOCKER.md`](tcp/DOCKER.md).
+**12375** and scores API non-compliance under **all three** basic strategies:
+anonymous 401/403 then dual entropy-varied Basic both return `/version`
+(**arbitrary_auth**; open anonymous version is not a bypass), `/version`
+`Version` vs `/info` `ServerVersion` mismatch (**state_nonpersist**), plus
+**static_signature** (`/_ping` framing, `/version` Engine shape, path/method
+facades, thin `/info` stubs, `/containers/json` list facade, stock version lure
+metadata). Read-only only — never create/start/exec/pull. TLS **2376** is out
+of scope. See [`docs/tcp/DOCKER.md`](tcp/DOCKER.md).
 
 The MQTT engine speaks OASIS MQTT v3.1.1 with **behavioral** honeypot detection
 (not banner IOCs): dual synthetic CONNECT credentials when anonymous is

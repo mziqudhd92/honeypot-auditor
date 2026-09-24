@@ -111,7 +111,7 @@
             "name": "Which protocols does honeypot-auditor support?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Twenty-nine protocol engines: SSH, Telnet, FTP, SMTP, POP3, IMAP, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, MongoDB, MQTT, SNMP, DNS, NTP, TFTP, SSDP/UPnP, Elasticsearch, Kubernetes API, Docker Engine API, IPP/CUPS, and Memcached. Each uses 1–3 basic detection strategies in the current release (72 active strategy slots). By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, IMAP 143 and 1143, MQTT 1883 and 11883, SNMP UDP 161 and 1161, DNS UDP 53 and 15353, NTP UDP 123 and 1123, TFTP UDP 69 and 1069, SSDP UDP 1900 and 11900, Redis 6379, Elasticsearch 9200 and 19200, Docker 2375 and 12375, IPP 631 and 1631, Kubernetes 6443 and 16443, Memcached 11211 and 21211, and so on). Ports 993/1993 are IMAPS, 8883/18883 are MQTTS (implicit TLS); STARTTLS on 143 is out of scope. SNMP, DNS, NTP, TFTP, and SSDP speak UDP with RFC non-compliance tells. DNS, NTP, Elasticsearch, IPP/CUPS, Memcached, HTTP, SIP, Git, and HTTP proxy each use all three basic strategies (arbitrary_auth + state_nonpersist + static_signature). Docker Engine API and Kubernetes API score protocol non-compliance under static_signature. Redis speaks RESP with dual AUTH, key-persist and DBSIZE state checks, and split command-facade indicators. -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
+              "text": "Twenty-nine protocol engines: SSH, Telnet, FTP, SMTP, POP3, IMAP, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, MongoDB, MQTT, SNMP, DNS, NTP, TFTP, SSDP/UPnP, Elasticsearch, Kubernetes API, Docker Engine API, IPP/CUPS, and Memcached. Each uses 1–3 basic detection strategies in the current release (77 active strategy slots). By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, IMAP 143 and 1143, MQTT 1883 and 11883, SNMP UDP 161 and 1161, DNS UDP 53 and 15353, NTP UDP 123 and 1123, TFTP UDP 69 and 1069, SSDP UDP 1900 and 11900, Redis 6379, Elasticsearch 9200 and 19200, Docker 2375 and 12375, IPP 631 and 1631, Kubernetes 6443 and 16443, Memcached 11211 and 21211, and so on). Ports 993/1993 are IMAPS, 8883/18883 are MQTTS (implicit TLS); STARTTLS on 143 is out of scope. SNMP, DNS, NTP, TFTP, and SSDP speak UDP with RFC non-compliance tells. DNS, NTP, Elasticsearch, IPP/CUPS, Memcached, HTTP, SIP, Git, and HTTP proxy each use all three basic strategies (arbitrary_auth + state_nonpersist + static_signature). Docker Engine API and Kubernetes API score protocol non-compliance under static_signature. Redis speaks RESP with dual AUTH, key-persist and DBSIZE state checks, and split command-facade indicators. -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
             }
           },
           {
@@ -448,7 +448,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
           probe strategies (arbitrary auth · state non-persistence · static signature). The
           <strong>Strategies</strong> column is how many of those three are active for that protocol
           in this release — not passive intel, co-tenancy, or individual indicator checks
-          (<strong>72</strong> active strategy slots across all protocols).
+          (<strong>77</strong> active strategy slots across all protocols).
         </p>
         <p>
           Full probe guides:
@@ -480,7 +480,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
               <tr><td>IMAP</td><td>TCP</td><td>143 · 1143</td><td>3</td></tr>
               <tr><td>HTTP</td><td>TCP</td><td>80 / 443 · 8081</td><td>3</td></tr>
               <tr><td>HTTP proxy</td><td>TCP</td><td>3128 · 8080</td><td>3</td></tr>
-              <tr><td>SMB</td><td>TCP</td><td>445 · 1445</td><td>2</td></tr>
+              <tr><td>SMB</td><td>TCP</td><td>445 · 1445</td><td>3</td></tr>
               <tr><td>Redis</td><td>TCP</td><td>6379 · 6379</td><td>3</td></tr>
               <tr><td>MQTT</td><td>TCP</td><td>1883 · 11883</td><td>3</td></tr>
               <tr><td>MySQL</td><td>TCP</td><td>3306 · 3306</td><td>2</td></tr>
@@ -491,8 +491,8 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
               <tr><td>RDP</td><td>TCP</td><td>3389 · 3389</td><td>2</td></tr>
               <tr><td>Git</td><td>TCP</td><td>9418 · 9418</td><td>3</td></tr>
               <tr><td>Elasticsearch</td><td>TCP</td><td>9200 · 19200</td><td>3</td></tr>
-              <tr><td>Docker</td><td>TCP</td><td>2375 · 12375</td><td>1</td></tr>
-              <tr><td>Kubernetes</td><td>TCP</td><td>6443 · 16443</td><td>1</td></tr>
+              <tr><td>Docker</td><td>TCP</td><td>2375 · 12375</td><td>3</td></tr>
+              <tr><td>Kubernetes</td><td>TCP</td><td>6443 · 16443</td><td>3</td></tr>
               <tr><td>IPP / CUPS</td><td>TCP</td><td>631 · 1631</td><td>3</td></tr>
               <tr><td>Memcached</td><td>TCP</td><td>11211 · 21211</td><td>3</td></tr>
               <tr><td>SIP</td><td>UDP→TCP</td><td>5060 · 5060</td><td>3</td></tr>
@@ -589,10 +589,11 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
         </p>
         <p>
           Docker Engine API speaks plain HTTP on <code>2375</code>/<code>12375</code> and scores
-          API non-compliance via <strong>static_signature</strong> only (<code>/_ping</code> framing,
-          <code>/version</code> Engine shape, path/method facades, thin <code>/info</code> stubs,
-          stock version lure metadata). Read-only — never create/start/exec/pull. TLS
-          <code>2376</code> is out of scope.
+          API non-compliance via <strong>all three</strong> basic strategies
+          (dual Basic after challenge, <code>/version</code> vs <code>/info</code> coherence,
+          plus <code>/_ping</code> framing, path/method facades, thin <code>/info</code> /
+          <code>/containers/json</code> stubs, stock version lure metadata). Read-only —
+          never create/start/exec/pull. TLS <code>2376</code> is out of scope.
           Guide: <a class="term-doc" href="tcp/DOCKER.md"><code>docs/tcp/DOCKER.md</code></a>.
         </p>
         <p>
