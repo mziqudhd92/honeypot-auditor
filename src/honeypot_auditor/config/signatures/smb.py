@@ -5,7 +5,6 @@ from honeypot_auditor.config.tells.smb import (
     SMB_SMB1_DIALECTS,
     SMB_STOCK_SHARE_GENERIC,
     SMB_STOCK_SHARE_TELLS,
-    STATUS_BAD_NETWORK_NAME,
     STATUS_OBJECT_NAME_NOT_FOUND,
 )
 

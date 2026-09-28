@@ -48,6 +48,7 @@ docs/tcp/
 | Memcached | 11211 | 21211 | [MEMCACHED.md](MEMCACHED.md) | all three |
 | Kubernetes | 6443 | 16443 | [KUBERNETES.md](KUBERNETES.md) | all three |
 | SIP | 5060 | 5060 | [SIP.md](SIP.md) | all three (UDP→TCP) |
+| PPTP | 1723 | 11723 | [PPTP.md](PPTP.md) | all three |
 
 Lab aliases come from the `docker-research` / `both` presets in
 `config/ports.py`.

@@ -6,14 +6,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-28
+
 ### Added
 
+- PPTP control channel (RFC 2637) on TCP/1723 (lab 11723): five checks across
+  all three basic strategies — `pptp.framing`, `pptp.version_facade`,
+  `pptp.echo_id`, `pptp.call_facade` (dual entropy-varied Outgoing-Call-Requests
+  answered Result=1 **without** the Peer's Call-ID echo or with a hollow Call
+  ID — pre-auth call establishment alone is RFC-honest and stays clean),
+  `pptp.control_stub` (no GRE / PPP)
+  (**30** engines · **80** active strategy slots)
+- SSDP / UPnP: four additional RFC / Device Architecture tells on existing
+  `M-SEARCH` replies (no extra packets) — `ssdp.ext_header` (empty `EXT:`,
+  corroboration-gated — real devices omit it often enough that a lone hit
+  never scores),
+  `ssdp.cache_control` (`max-age`), `ssdp.usn_st_coherence`, and
+  `ssdp.location_uri` (absolute `http(s)` LOCATION)
 - Docker and Kubernetes: activate **arbitrary_auth** + **state_nonpersist**
   (now all three basic strategies), plus discovery facades
   (`docker.containers_stub`, `kubernetes.apis_framing`)
 - SMB: **arbitrary_auth** (dual entropy-varied logins) and **ghost share**
   TREE_CONNECT tell, plus stock lure shares (`smb.stock_shares`) — SMB now
-  uses all three basic strategies (**77** active strategy slots)
+  uses all three basic strategies
 
 ### Fixed
 

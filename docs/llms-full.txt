@@ -1,6 +1,6 @@
 # honeypot-auditor — full brief for answer engines & agents
 
-Version: 1.0.0
+Version: 1.0.2
 License: MIT
 Canonical site: https://mziqudhd92.github.io/honeypot-auditor/
 Repository: https://github.com/mziqudhd92/honeypot-auditor
@@ -15,7 +15,7 @@ honeypot-auditor is a Python CLI that fingerprints whether a host behaves like a
 
 | Concept | Meaning |
 |---------|---------|
-| Basic probes | Passive intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB/MQTT/SNMP/DNS/NTP/TFTP/SSDP/Elasticsearch/Docker/Kubernetes/IPP/Memcached |
+| Basic probes | Passive intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB/MQTT/SNMP/DNS/NTP/TFTP/SSDP/PPTP/Elasticsearch/Docker/Kubernetes/IPP/Memcached |
 | Redis (RESP) | Dual AUTH · persist/DBSIZE · COMMAND/INFO/PING stubs · AUTH wall · QUIT zombie · no FLUSHALL (see REDIS.md) |
 | Subnet scan | IPv4 CIDR up to `/24` (254 hosts); `--scan-concurrency`; combined JSON report |
 | Deep mode (`--deep`) | Shell semantics, OS coherence, HASSH/TCP stack, protocol FSM, co-tenancy, temporal (serial + concurrent-load latency)/egress |
@@ -66,10 +66,10 @@ honeypot-auditor --target HOST --ports ftp=21,http=80,smb=445,ssh=9 --confirm-au
 # JSON out (single host)
 honeypot-auditor --target HOST --confirm-authorized --output report.json
 
-# Blue deception QA (v1.0.0)
+# Blue deception QA (v1.0.2)
 honeypot-auditor --target DECOY --preset deception-audit --deep -v --confirm-authorized
 
-# Red authorized OPSEC (v1.0.0)
+# Red authorized OPSEC (v1.0.2)
 honeypot-auditor --target HOST --safe-mode --passive-first --proxy socks5h://127.0.0.1:9050 --confirm-authorized
 
 # SARIF export
@@ -117,6 +117,7 @@ Default (`--preset both`) probes IANA **and** docker/lab ports. Closed ports are
 | NTP | 123 (UDP) | 1123 | 123 + 1123 |
 | TFTP | 69 (UDP) | 1069 | 69 + 1069 |
 | SSDP | 1900 (UDP) | 11900 | 1900 + 11900 |
+| PPTP | 1723 | 11723 | 1723 + 11723 |
 | Elasticsearch | 9200 | 19200 | 9200 + 19200 |
 | Kubernetes | 6443 | 16443 | 6443 + 16443 |
 | Docker | 2375 | 12375 | 2375 + 12375 |
@@ -183,6 +184,7 @@ UHBS (https://github.com/uhbs/uhbs-standard) grades decoy quality for builders. 
 - https://mziqudhd92.github.io/honeypot-auditor/udp/NTP.md
 - https://mziqudhd92.github.io/honeypot-auditor/udp/TFTP.md
 - https://mziqudhd92.github.io/honeypot-auditor/udp/SSDP.md
+- https://mziqudhd92.github.io/honeypot-auditor/tcp/PPTP.md
 - https://mziqudhd92.github.io/honeypot-auditor/ELASTICSEARCH.md
 - https://mziqudhd92.github.io/honeypot-auditor/KUBERNETES.md
 - https://mziqudhd92.github.io/honeypot-auditor/DOCKER.md

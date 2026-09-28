@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v1.0.0 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v1.0.2 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -67,7 +67,7 @@ Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ```
-  [ BASIC ]  passive intel · Nmap NSE · 29 protocol engines (TCP + UDP) · up to 3 strategies each
+  [ BASIC ]  passive intel · Nmap NSE · 30 protocol engines (TCP + UDP) · up to 3 strategies each
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
              · co-tenancy buffet detect · latency · latency-under-load · egress bait
              (flag: --deep · more intrusive · same authorization rules)
@@ -279,6 +279,7 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 | IPP / CUPS | TCP | 631 · 1631 | 3 | [IPP](docs/tcp/IPP.md) |
 | Memcached | TCP | 11211 · 21211 | 3 | [MEMCACHED](docs/tcp/MEMCACHED.md) |
 | SIP | UDP→TCP | 5060 · 5060 | 3 | [SIP](docs/tcp/SIP.md) |
+| PPTP | TCP | 1723 · 11723 | 3 | [PPTP](docs/tcp/PPTP.md) |
 | SNMP | UDP | 161 · 1161 | 2 | [SNMP](docs/SNMP.md) |
 | DNS | UDP | 53 · 15353 | 3 | [DNS](docs/udp/DNS.md) |
 | NTP | UDP | 123 · 1123 | 3 | [NTP](docs/udp/NTP.md) |
@@ -343,6 +344,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v1.0.0 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v1.0.2 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```

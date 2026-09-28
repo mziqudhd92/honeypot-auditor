@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 
 import honeypot_auditor.probes.smb as smb
 from honeypot_auditor.analyzer import build_report
-from honeypot_auditor.config import STATUS_ACCESS_DENIED, STATUS_BAD_NETWORK_NAME, STATUS_OBJECT_NAME_NOT_FOUND
+from honeypot_auditor.config import (
+    STATUS_ACCESS_DENIED,
+    STATUS_BAD_NETWORK_NAME,
+    STATUS_OBJECT_NAME_NOT_FOUND,
+)
 from honeypot_auditor.models import Indicator
 
 

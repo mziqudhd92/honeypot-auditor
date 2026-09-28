@@ -226,7 +226,9 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "state_nonpersist": "",
         "static_signature": (
             "M-SEARCH framing · header facade · ST echo · response clone · "
-            "stock SERVER lure · LOCATION loopback · method stub"
+            "stock SERVER lure · LOCATION loopback · method stub · "
+            "empty EXT · CACHE-CONTROL max-age · USN↔ST coherence · "
+            "absolute http(s) LOCATION URI"
         ),
     },
     "kubernetes": {
@@ -242,6 +244,19 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "/apis APIGroupList shape · unknown-path version facade · "
             "DELETE /version method stub · stock gitVersion/platform · "
             "unauthenticated /api/v1 object-list dump"
+        ),
+    },
+    "pptp": {
+        "arbitrary_auth": (
+            "dual entropy-varied Outgoing-Call-Requests accepted without the "
+            "Peer's Call-ID echo (or with a hollow Call ID)"
+        ),
+        "state_nonpersist": (
+            "Echo-Reply Identifier does not echo the Echo-Request"
+        ),
+        "static_signature": (
+            "SCCRP framing · protocol version facade / stock hostname-vendor · "
+            "unknown control type answered like successful SCCRP"
         ),
     },
     "mysql": {
