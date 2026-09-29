@@ -3,13 +3,15 @@
 UPnP Device Architecture discovery strategies (non-destructive unicast M-SEARCH
 only — never NOTIFY spam, multicast floods, or LOCATION HTTP fetch in v1):
   · static_signature — framing, header facade, ST echo, response clone,
-    stock SERVER lure tokens (gated), LOCATION loopback, method stub
+    stock SERVER lure tokens (gated), LOCATION loopback, method stub,
+    EXT / CACHE-CONTROL RFC headers, USN↔ST coherence, absolute LOCATION URI
 
 UDP/1900 (lab 11900). See docs/udp/SSDP.md.
 """
 
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -19,6 +21,9 @@ from honeypot_auditor.netutil import closed_reason, udp_exchange
 from honeypot_auditor.probes.common import is_safe_mode
 from honeypot_auditor.probes.udp._engine import UDPEngine
 
+# Full indicator registry (the ``_SKIP`` suffix matches the other probes'
+# convention): drives the closed/safe-mode skip suites, the framing-fail
+# suite, and ``_spec()`` lookups — not just skips.
 _SSDP_SKIP = (
     (
         "ssdp.framing",
@@ -55,6 +60,26 @@ _SSDP_SKIP = (
         "SSDP answers non-M-SEARCH garbage with 200 OK",
         "static_signature",
     ),
+    (
+        "ssdp.ext_header",
+        "SSDP 200 OK is missing the required empty EXT header",
+        "static_signature",
+    ),
+    (
+        "ssdp.cache_control",
+        "SSDP 200 OK CACHE-CONTROL is missing or not max-age",
+        "static_signature",
+    ),
+    (
+        "ssdp.usn_st_coherence",
+        "SSDP USN does not embed the response ST",
+        "static_signature",
+    ),
+    (
+        "ssdp.location_uri",
+        "SSDP LOCATION is not an absolute http(s) URI",
+        "static_signature",
+    ),
 )
 
 _REQUIRED_200_HEADERS = ("server", "st", "usn", "location")
@@ -72,6 +97,8 @@ _STOCK_TOKENS = (
 )
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+_MAX_AGE_RE = re.compile(r"(?:^|[,\s])max-age\s*=\s*(\d+)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -167,6 +194,34 @@ def _location_is_loopback(location: str) -> bool:
         return False
     host = (parsed.hostname or "").lower().strip("[]")
     return host in _LOOPBACK_HOSTS
+
+
+def _location_uri_ok(location: str) -> bool:
+    """UPnP LOCATION must be an absolute http(s) URI with a host."""
+    if not location or not location.strip():
+        return False
+    try:
+        parsed = urlparse(location.strip())
+    except Exception:
+        return False
+    if parsed.scheme.lower() not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").strip()
+    return bool(host)
+
+
+def _cache_control_ok(value: str) -> bool:
+    """M-SEARCH responses must carry CACHE-CONTROL with max-age=<seconds>."""
+    if not value or not value.strip():
+        return False
+    return _MAX_AGE_RE.search(value) is not None
+
+
+def _usn_embeds_st(usn: str, st: str) -> bool:
+    """USN for a matched search embeds the ST (typically uuid:…::ST)."""
+    if not usn or not st:
+        return False
+    return st.lower() in usn.lower()
 
 
 def _ind(
@@ -309,6 +364,79 @@ def probe_ssdp(host: str, port: int) -> list[Indicator]:
         else f"LOCATION={location!r}" if location else "no LOCATION header"
     )
 
+    # --- RFC / DA header honesty on baseline 200 OK (no extra packets) ---
+    # EXT (empty) and CACHE-CONTROL: max-age=N are required on M-SEARCH replies.
+    # USN must embed ST; LOCATION must be an absolute http(s) URI.
+    def _rfc_from_msg(msg: SsdpMessage) -> tuple[bool, str, bool, str, bool, str, bool, str]:
+        if msg.status_code != 200:
+            return (
+                False,
+                f"status={msg.status_code} (EXT not scored)",
+                False,
+                f"status={msg.status_code} (CACHE-CONTROL not scored)",
+                False,
+                f"status={msg.status_code} (USN coherence not scored)",
+                False,
+                f"status={msg.status_code} (LOCATION URI not scored)",
+            )
+        has_ext = "ext" in msg.headers
+        ext_hit = not has_ext
+        ext_detail = (
+            "200 OK missing EXT: (UPnP requires empty EXT on M-SEARCH replies)"
+            if ext_hit
+            else f"EXT={msg.headers.get('ext', '')!r}"
+        )
+
+        cc = msg.headers.get("cache-control", "")
+        cc_ok = _cache_control_ok(cc)
+        cc_hit = not cc_ok
+        cc_detail = (
+            "200 OK missing CACHE-CONTROL max-age"
+            if not cc
+            else (
+                f"CACHE-CONTROL={cc!r} lacks max-age=<seconds>"
+                if cc_hit
+                else f"CACHE-CONTROL={cc!r}"
+            )
+        )
+
+        usn = msg.headers.get("usn", "")
+        st_val = msg.headers.get("st", "")
+        usn_ok = _usn_embeds_st(usn, st_val) if st_val else False
+        # Missing ST is already ssdp.st_echo / header_facade; only score when ST present.
+        usn_hit = bool(st_val) and not usn_ok
+        usn_detail = (
+            f"USN={usn!r} does not embed ST={st_val!r}"
+            if usn_hit
+            else (
+                f"USN={usn!r} embeds ST={st_val!r}"
+                if st_val
+                else "no ST to compare against USN"
+            )
+        )
+
+        loc = msg.headers.get("location", "")
+        loc_ok = _location_uri_ok(loc)
+        # Empty LOCATION is already header_facade when required; score malformed URIs.
+        loc_uri_hit = bool(loc) and not loc_ok
+        loc_uri_detail = (
+            f"LOCATION={loc!r} is not an absolute http(s) URI"
+            if loc_uri_hit
+            else (f"LOCATION={loc!r}" if loc else "no LOCATION header")
+        )
+        return ext_hit, ext_detail, cc_hit, cc_detail, usn_hit, usn_detail, loc_uri_hit, loc_uri_detail
+
+    (
+        ext_hit,
+        ext_detail,
+        cc_hit,
+        cc_detail,
+        usn_hit,
+        usn_detail,
+        loc_uri_hit,
+        loc_uri_detail,
+    ) = _rfc_from_msg(base_msg)
+
     # 2) Distinct M-SEARCH — clone + additional ST check.
     second = udp_exchange(
         host,
@@ -347,6 +475,27 @@ def probe_ssdp(host: str, port: int) -> list[Indicator]:
                     loop_hit = True
                     loop_detail = f"LOCATION host is loopback ({loc2!r})"
                     location = loc2
+            # Prefer secondary RFC hits only when baseline was clean/thin.
+            (
+                ext2,
+                ext2_d,
+                cc2,
+                cc2_d,
+                usn2,
+                usn2_d,
+                loc2_hit,
+                loc2_d,
+            ) = _rfc_from_msg(second_msg)
+            if not ext_hit and ext2:
+                ext_hit, ext_detail = True, ext2_d
+            if not cc_hit and cc2:
+                cc_hit, cc_detail = True, cc2_d
+            if not usn_hit and usn2:
+                usn_hit, usn_detail = True, usn2_d
+            if not loc_uri_hit and loc2_hit:
+                loc_uri_hit, loc_uri_detail = True, loc2_d
+                if second_msg.headers.get("location"):
+                    location = second_msg.headers["location"]
     elif second.error and not second.data:
         clone_detail = f"no reply to secondary ST ({closed_reason(second.error)}; ok)"
 
@@ -422,6 +571,37 @@ def probe_ssdp(host: str, port: int) -> list[Indicator]:
             triggered=stub_hit,
             detail=stub_detail,
             evidence=(stub_ex.data[:200].decode("latin-1", "replace") if stub_ex.data else ""),
+            fidelity="high",
+        ),
+        _ind(
+            _spec("ssdp.ext_header"),
+            triggered=ext_hit,
+            detail=ext_detail,
+            evidence=evidence,
+            fidelity="high",
+            # Spec-required in UDA 1.0/1.1, but enough real devices omit it that
+            # a lone missing-EXT must not score without another tell alongside.
+            requires_corroboration=True,
+        ),
+        _ind(
+            _spec("ssdp.cache_control"),
+            triggered=cc_hit,
+            detail=cc_detail,
+            evidence=evidence,
+            fidelity="high",
+        ),
+        _ind(
+            _spec("ssdp.usn_st_coherence"),
+            triggered=usn_hit,
+            detail=usn_detail,
+            evidence=evidence,
+            fidelity="high",
+        ),
+        _ind(
+            _spec("ssdp.location_uri"),
+            triggered=loc_uri_hit,
+            detail=loc_uri_detail,
+            evidence=location[:200],
             fidelity="high",
         ),
     ]

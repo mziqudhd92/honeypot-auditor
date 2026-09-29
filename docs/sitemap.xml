@@ -47,6 +47,11 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/PPTP.md</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://mziqudhd92.github.io/honeypot-auditor/tcp/REDIS.md</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>

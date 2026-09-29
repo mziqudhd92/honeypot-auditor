@@ -10,7 +10,7 @@ Each service lives in its own module so reviewers can read one playbook at a tim
     probes/pop3.py      probes/imap.py       probes/mqtt.py
     probes/snmp.py      probes/elasticsearch.py
     probes/docker.py    probes/ipp.py       probes/memcached.py
-    probes/kubernetes.py
+    probes/kubernetes.py probes/pptp.py
 
 Every protocol uses the same three strategies: arbitrary auth, state non-persistence,
 static signature (see ``PROTOCOL_STRATEGIES`` in config).
@@ -40,6 +40,7 @@ from honeypot_auditor.probes.mssql import probe_mssql
 from honeypot_auditor.probes.mysql import probe_mysql
 from honeypot_auditor.probes.pop3 import probe_pop3
 from honeypot_auditor.probes.postgres import probe_postgres
+from honeypot_auditor.probes.pptp import probe_pptp
 from honeypot_auditor.probes.rdp import probe_rdp
 from honeypot_auditor.probes.redis import probe_redis
 from honeypot_auditor.probes.sip import probe_sip
@@ -78,6 +79,7 @@ PROBE_BY_PROTOCOL: dict[str, ProbeFn] = {
     "ipp": probe_ipp,
     "memcached": probe_memcached,
     "kubernetes": probe_kubernetes,
+    "pptp": probe_pptp,
 }
 
 try:
@@ -120,6 +122,7 @@ __all__ = [
     "probe_mysql",
     "probe_pop3",
     "probe_postgres",
+    "probe_pptp",
     "probe_rdp",
     "probe_redis",
     "probe_sip",

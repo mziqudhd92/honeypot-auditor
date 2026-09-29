@@ -56,8 +56,10 @@ from honeypot_auditor.config.signatures.redis import (
 )
 from honeypot_auditor.config.signatures.smb import (
     match_smb_bogus_pipe,
+    match_smb_ghost_share,
     match_smb_negotiate_deficit,
     match_smb_static_ntlm_challenge,
+    match_smb_stock_shares,
     match_smb_target_info_mismatch,
 )
 from honeypot_auditor.config.signatures.smtp import (
@@ -121,8 +123,10 @@ __all__ = [
     "match_redis_type_stub",
     "match_redis_unknown_core",
     "match_smb_bogus_pipe",
+    "match_smb_ghost_share",
     "match_smb_negotiate_deficit",
     "match_smb_static_ntlm_challenge",
+    "match_smb_stock_shares",
     "match_smb_target_info_mismatch",
     "match_smtp_extension_monotone",
     "match_smtp_lost_envelope",

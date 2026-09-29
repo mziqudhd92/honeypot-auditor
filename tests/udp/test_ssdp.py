@@ -216,6 +216,82 @@ def test_ssdp_method_stub_on_garbage_request():
     ), "expected a non-M-SEARCH probe exchange"
 
 
+def test_ssdp_ext_header_missing():
+    raw = ssdp.build_ssdp_response(
+        status="HTTP/1.1 200 OK",
+        headers={
+            "CACHE-CONTROL": "max-age=120",
+            "LOCATION": "http://192.0.2.10:8080/rootDesc.xml",
+            "SERVER": "Linux/5.10 UPnP/1.1 MiniUPnPd/2.3",
+            "ST": "upnp:rootdevice",
+            "USN": "uuid:11111111-2222-3333-4444-555555555555::upnp:rootdevice",
+        },
+    )
+    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    by_id = {i.id: i for i in inds}
+    assert by_id["ssdp.ext_header"].triggered
+    assert not by_id["ssdp.framing"].triggered
+
+
+def test_ssdp_cache_control_missing_max_age():
+    raw = ssdp.build_ssdp_response(
+        status="HTTP/1.1 200 OK",
+        headers={
+            "CACHE-CONTROL": "no-cache",
+            "EXT": "",
+            "LOCATION": "http://192.0.2.10:8080/rootDesc.xml",
+            "SERVER": "Linux/5.10 UPnP/1.1 MiniUPnPd/2.3",
+            "ST": "upnp:rootdevice",
+            "USN": "uuid:11111111-2222-3333-4444-555555555555::upnp:rootdevice",
+        },
+    )
+    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    by_id = {i.id: i for i in inds}
+    assert by_id["ssdp.cache_control"].triggered
+
+
+def test_ssdp_usn_st_coherence_mismatch():
+    raw = _ok_response(
+        st="upnp:rootdevice",
+        usn="uuid:11111111-2222-3333-4444-555555555555::urn:schemas-upnp-org:device:Basic:1",
+    )
+    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    by_id = {i.id: i for i in inds}
+    assert by_id["ssdp.usn_st_coherence"].triggered
+    assert by_id["ssdp.usn_st_coherence"].fidelity in {"high", "decisive"}
+
+
+def test_ssdp_location_uri_relative():
+    raw = _ok_response(location="/rootDesc.xml")
+    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    by_id = {i.id: i for i in inds}
+    assert by_id["ssdp.location_uri"].triggered
+    assert not by_id["ssdp.location_loopback"].triggered
+
+
+def test_ssdp_location_uri_file_scheme():
+    raw = _ok_response(location="file:///tmp/rootDesc.xml")
+    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    by_id = {i.id: i for i in inds}
+    assert by_id["ssdp.location_uri"].triggered
+
+
+def test_ssdp_helpers_cache_control_and_location_uri():
+    assert ssdp._cache_control_ok("max-age=1800")
+    assert ssdp._cache_control_ok("Max-Age = 60")
+    assert not ssdp._cache_control_ok("no-cache")
+    assert not ssdp._cache_control_ok("")
+    assert ssdp._location_uri_ok("http://192.0.2.10:8080/desc.xml")
+    assert ssdp._location_uri_ok("https://example.com/rootDesc.xml")
+    assert not ssdp._location_uri_ok("/desc.xml")
+    assert not ssdp._location_uri_ok("ftp://192.0.2.10/x")
+    assert ssdp._usn_embeds_st(
+        "uuid:aaaa::upnp:rootdevice",
+        "upnp:rootdevice",
+    )
+    assert not ssdp._usn_embeds_st("uuid:aaaa::ssdp:all", "upnp:rootdevice")
+
+
 def test_ssdp_registry_and_strategies():
     assert "ssdp" in PROBE_BY_PROTOCOL
     assert PROBE_BY_PROTOCOL["ssdp"] is ssdp.probe_ssdp

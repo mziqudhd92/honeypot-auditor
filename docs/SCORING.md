@@ -107,8 +107,24 @@ SSDP uses **static_signature** only (UDP discovery has no auth or session axis).
 | `ssdp.response_clone` | static_signature | Bitwise-identical replies for distinct `M-SEARCH` transactions |
 | `ssdp.stock_server` / `ssdp.location_loopback` | static_signature | Stock `SERVER` lure · `LOCATION` pointing at loopback (corroboration-gated) |
 | `ssdp.method_stub` | static_signature | Illegal HTTP method answered like `M-SEARCH` |
+| `ssdp.ext_header` / `ssdp.cache_control` | static_signature | Missing empty `EXT:` (corroboration-gated) · `CACHE-CONTROL` without `max-age` |
+| `ssdp.usn_st_coherence` / `ssdp.location_uri` | static_signature | `USN` does not embed `ST` · non-absolute / non-http(s) `LOCATION` |
 
 Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/SSDP.md`](udp/SSDP.md).
+
+### PPTP control-channel non-compliance (basic probe)
+
+PPTP uses **all three** basic strategies on TCP/1723 (lab 11723). Prefer
+control-message semantics over stock hostname/vendor IOCs alone — see
+[`tcp/PPTP.md`](tcp/PPTP.md). Never opens GRE or runs PPP.
+
+| ID | Category | Notes |
+|----|----------|-------|
+| `pptp.call_facade` | arbitrary_auth | Dual OCRQ accepted with fabricated semantics — no Peer's Call-ID echo / hollow Call ID (pre-auth establishment alone is RFC-honest) |
+| `pptp.echo_id` | state_nonpersist | Echo-Reply Identifier ≠ Echo-Request |
+| `pptp.framing` / `pptp.version_facade` / `pptp.control_stub` | static_signature | SCCRP framing · version ≠ `0x0100` / stock hostname-vendor · unknown control type answered like successful SCCRP |
+
+Full indicator list, ports, safe-mode, and non-destructive policy: [`tcp/PPTP.md`](tcp/PPTP.md).
 
 ### DNS RFC non-compliance (basic probe)
 

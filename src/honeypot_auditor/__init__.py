@@ -1,6 +1,6 @@
 """Package exports."""
 
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 
 from honeypot_auditor.engine import Auditor
 from honeypot_auditor.settings import ProbeProfile

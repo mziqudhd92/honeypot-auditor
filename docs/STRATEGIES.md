@@ -1,6 +1,6 @@
 # Probe strategies & protocol details
 
-**29** protocol engines (**24 TCP-capable** + **5 UDP-only**; SIP is UDP-first
+**30** protocol engines (**25 TCP-capable** + **5 UDP-only**; SIP is UDP-first
 with TCP fallback). Each uses up to **3** basic probe strategies:
 
 | Strategy | Role |
@@ -11,7 +11,7 @@ with TCP fallback). Each uses up to **3** basic probe strategies:
 
 The **Strategies** column in the README port table is how many of those three
 are active for that protocol in this release — not Shodan, co-tenancy, or
-individual indicator checks (**72** active strategy slots across all protocols).
+individual indicator checks (**80** active strategy slots across all protocols).
 Source of truth: `PROTOCOL_STRATEGIES` in `src/honeypot_auditor/config/scoring.py`.
 
 Full per-protocol guides:
@@ -34,8 +34,8 @@ Closed faces are skipped, not scored. Port matrix:
 `53`/`15353` → DNS (UDP), `123`/`1123` → NTP (UDP), `69`/`1069` → TFTP (UDP),
 `1900`/`11900` → SSDP (UDP), `9200`/`19200` → Elasticsearch,
 `2375`/`12375` → Docker, `6443`/`16443` → Kubernetes API, `631`/`1631` → IPP,
-`11211`/`21211` → Memcached, `5061` → SIP, `5000`/`5901` → VNC. Unknown numbers
-are probed as SSH.
+`11211`/`21211` → Memcached, `1723`/`11723` → PPTP, `5061` → SIP,
+`5000`/`5901` → VNC. Unknown numbers are probed as SSH.
 
 ## Per-protocol notes
 
@@ -97,8 +97,10 @@ completes a write. See [`docs/udp/TFTP.md`](udp/TFTP.md),
 The SSDP/UPnP engine speaks UDP/1900 (lab 11900) and scores discovery
 non-compliance under **static_signature** only: unicast `M-SEARCH` framing,
 HTTP header facades, `ST` echo fidelity, bitwise-identical response clones,
-corroboration-gated stock `SERVER` strings and loopback `LOCATION` URLs, and
-illegal-method stubs. Never joins multicast groups or floods `NOTIFY`. See
+corroboration-gated stock `SERVER` strings and loopback `LOCATION` URLs,
+illegal-method stubs, required empty `EXT` / `CACHE-CONTROL max-age`,
+USN↔ST coherence, and absolute `http(s)` `LOCATION` URIs. Never joins
+multicast groups or floods `NOTIFY`. See
 [`docs/udp/SSDP.md`](udp/SSDP.md) and
 [UPnP 1.0](https://openconnectivity.org/upnp/specs/UPnP_architecture_v1.0.pdf).
 
@@ -135,12 +137,15 @@ prefix and are deleted. See [`docs/tcp/REDIS.md`](tcp/REDIS.md) and the
 [Redis protocol spec](https://redis.io/docs/reference/protocol-spec/).
 
 The Kubernetes engine speaks the API server on **6443** / lab **16443** (TLS,
-read-only discovery paths) and scores decoy kube-API faces under
-**static_signature** only: `/livez`/`/healthz` framing, `/version` shape,
-`/api` APIVersions fidelity, unknown-path version-shaped 200s, method stubs,
-stock `gitVersion` lures, and corroboration-gated unauthenticated `/api/v1`
-object dumps. Never sends tokens or touches pods/secrets. See
-[`docs/tcp/KUBERNETES.md`](tcp/KUBERNETES.md).
+read-only discovery paths) and scores decoy kube-API faces under **all three**
+basic strategies: anonymous 401/403 then dual entropy-varied Bearer both return
+`/version` (**arbitrary_auth**; open anonymous `/version` is not a bypass),
+`/version` drift across reconnect or `/apis` contradiction
+(**state_nonpersist**), plus **static_signature** (`/livez`/`/healthz` framing,
+`/version` shape, `/api` APIVersions + `/apis` APIGroupList fidelity,
+unknown-path version-shaped 200s, method stubs, stock `gitVersion` lures, and
+corroboration-gated unauthenticated `/api/v1` object dumps). Never dumps
+pods/secrets collections. See [`docs/tcp/KUBERNETES.md`](tcp/KUBERNETES.md).
 
 The Elasticsearch engine speaks the HTTP JSON API on **9200** / lab **19200**
 and scores API non-compliance under all three basic strategies: anonymous
@@ -156,11 +161,14 @@ data. Strategies and probe flow:
 [`docs/tcp/ELASTICSEARCH.md`](tcp/ELASTICSEARCH.md).
 
 The Docker Engine API probe speaks the plain HTTP Engine API on **2375** / lab
-**12375** and scores API non-compliance under **static_signature** only
-(`/_ping` framing, `/version` Engine shape, path/method facades, thin `/info`
-stubs, stock version lure metadata). Read-only only — never
-create/start/exec/pull. TLS **2376** is out of scope. See
-[`docs/tcp/DOCKER.md`](tcp/DOCKER.md).
+**12375** and scores API non-compliance under **all three** basic strategies:
+anonymous 401/403 then dual entropy-varied Basic both return `/version`
+(**arbitrary_auth**; open anonymous version is not a bypass), `/version`
+`Version` vs `/info` `ServerVersion` mismatch (**state_nonpersist**), plus
+**static_signature** (`/_ping` framing, `/version` Engine shape, path/method
+facades, thin `/info` stubs, `/containers/json` list facade, stock version lure
+metadata). Read-only only — never create/start/exec/pull. TLS **2376** is out
+of scope. See [`docs/tcp/DOCKER.md`](tcp/DOCKER.md).
 
 The MQTT engine speaks OASIS MQTT v3.1.1 with **behavioral** honeypot detection
 (not banner IOCs): dual synthetic CONNECT credentials when anonymous is
@@ -192,6 +200,17 @@ drift across re-REGISTER (**state_nonpersist**), plus **static_signature**
 coherence and per-transaction CSeq echo — requests carry distinct CSeqs and
 randomized branches). Never sends INVITE/BYE/CANCEL or registers real users.
 See [`docs/tcp/SIP.md`](tcp/SIP.md).
+
+The PPTP engine speaks the RFC 2637 control channel on **TCP/1723** (lab
+**11723**) with five detection checks across **all three** strategies:
+fabricated Outgoing-Call acceptance — dual entropy-varied OCRQ answered
+Result=1 without the Peer's Call-ID echo or with a hollow Call ID
+(**arbitrary_auth**; pre-auth call establishment alone is RFC-honest, since
+PPP authentication only runs after the call is up), Echo-Reply Identifier
+mismatch (**state_nonpersist**), plus **static_signature** (SCCRP framing,
+protocol version / stock hostname-vendor façade, unknown control type
+answered like a successful SCCRP). Never opens GRE or runs PPP.
+See [`docs/tcp/PPTP.md`](tcp/PPTP.md).
 
 ## Deep mode & optional layers
 

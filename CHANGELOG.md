@@ -6,6 +6,39 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-28
+
+### Added
+
+- PPTP control channel (RFC 2637) on TCP/1723 (lab 11723): five checks across
+  all three basic strategies — `pptp.framing`, `pptp.version_facade`,
+  `pptp.echo_id`, `pptp.call_facade` (dual entropy-varied Outgoing-Call-Requests
+  answered Result=1 **without** the Peer's Call-ID echo or with a hollow Call
+  ID — pre-auth call establishment alone is RFC-honest and stays clean),
+  `pptp.control_stub` (no GRE / PPP)
+  (**30** engines · **80** active strategy slots)
+- SSDP / UPnP: four additional RFC / Device Architecture tells on existing
+  `M-SEARCH` replies (no extra packets) — `ssdp.ext_header` (empty `EXT:`,
+  corroboration-gated — real devices omit it often enough that a lone hit
+  never scores),
+  `ssdp.cache_control` (`max-age`), `ssdp.usn_st_coherence`, and
+  `ssdp.location_uri` (absolute `http(s)` LOCATION)
+- Docker and Kubernetes: activate **arbitrary_auth** + **state_nonpersist**
+  (now all three basic strategies), plus discovery facades
+  (`docker.containers_stub`, `kubernetes.apis_framing`)
+- SMB: **arbitrary_auth** (dual entropy-varied logins) and **ghost share**
+  TREE_CONNECT tell, plus stock lure shares (`smb.stock_shares`) — SMB now
+  uses all three basic strategies
+
+### Fixed
+
+- SMB ghost-share: treat ACCESS_DENIED / missing-share NTSTATUS class as clean;
+  pipe+ghost share share one session
+- Kubernetes auth detail when `/version` is challenged but Bearer is rejected
+  (no longer claims anonymous open); `/apis` 404/5xx skipped not scored
+- Docker state coherence re-fetches `/info` after pause; normalize Engine
+  version suffixes (`24.0.7` vs `24.0.7-ce`); stock share generics need ≥2 hits
+
 ## [1.0.0] - 2026-09-22
 
 ### Fixed

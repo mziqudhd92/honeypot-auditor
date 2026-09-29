@@ -34,6 +34,7 @@ _REQUIRED_CORE = frozenset(
         "ipp",
         "memcached",
         "kubernetes",
+        "pptp",
     }
 )
 

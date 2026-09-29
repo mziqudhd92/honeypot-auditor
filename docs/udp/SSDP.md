@@ -4,9 +4,11 @@ Honeypot-auditor’s SSDP engine speaks **UPnP Device Architecture** discovery
 over **UDP/1900** (lab **11900**): unicast `M-SEARCH` only.
 
 It targets IoT / UPnP honeypot stubs that answer discovery with canned
-HTTP/1.1 bodies, ignore search targets, advertise loopback `LOCATION` URLs, or
-treat any UDP datagram as a successful search. It does **not** multicast-flood,
-spam `NOTIFY`, or fetch device description documents over HTTP in v1.
+HTTP/1.1 bodies, ignore search targets, advertise loopback or non-absolute
+`LOCATION` URLs, omit required `EXT` / `CACHE-CONTROL` headers, break USN↔ST
+coherence, or treat any UDP datagram as a successful search. It does **not**
+multicast-flood, spam `NOTIFY`, or fetch device description documents over
+HTTP in v1.
 
 ## Strategies
 
@@ -16,7 +18,7 @@ SSDP activates one of the three basic scoring strategies
 | Strategy | Why it applies to SSDP |
 |----------|------------------------|
 | **arbitrary_auth** | **Empty.** SSDP discovery has no credential exchange. |
-| **static_signature** | Framing, header facade, ST echo, response clone, stock `SERVER`, loopback `LOCATION`, method stub. |
+| **static_signature** | Framing, header facade, ST echo, response clone, stock `SERVER`, loopback `LOCATION`, method stub, empty `EXT` (corroboration-gated), `CACHE-CONTROL max-age`, USN↔ST coherence, absolute `LOCATION` URI. |
 | **state_nonpersist** | **Not used.** Discovery is request/response with no session mailbox. |
 
 Detection philosophy:
@@ -27,6 +29,10 @@ Detection philosophy:
 4. **Clone check** — a second distinct `M-SEARCH` must not return a bitwise-identical body.
 5. **Lure / loopback** — stock `SERVER` tokens (gated) and `LOCATION` pointing at localhost.
 6. **Method stub** — garbage non-`M-SEARCH` must not earn a `200 OK` SSDP reply.
+7. **EXT** — UPnP requires an empty `EXT:` header on M-SEARCH replies (corroboration-gated: enough real devices omit it that a lone missing-EXT never scores alone).
+8. **CACHE-CONTROL** — must advertise `max-age=<seconds>`.
+9. **USN↔ST coherence** — `USN` must embed the response `ST` (typically `uuid:…::ST`).
+10. **LOCATION URI** — must be an absolute `http`/`https` URI with a host (not a relative path).
 
 ## Non-destructive policy
 
@@ -36,7 +42,7 @@ Detection philosophy:
 | Small `MX` (1) | `NOTIFY` spam |
 | Parse SSDP response headers only | Bulk HTTP GETs of `LOCATION` (optional same-host GET deferred; v1 stays UDP-only) |
 
-Packet budget: ≤ **4** UDP exchanges per host.
+Packet budget: ≤ **4** UDP exchanges per host (the four new RFC checks reuse the baseline / secondary replies — no extra packets).
 
 ## Ports
 
@@ -50,6 +56,8 @@ Packet budget: ≤ **4** UDP exchanges per host.
 ```text
 M-SEARCH ST: upnp:rootdevice  ──►  framing + header_facade + st_echo
         │                         + stock_server + location_loopback
+        │                         + ext_header + cache_control
+        │                         + usn_st_coherence + location_uri
         ├─ safe-mode ──► stop (framing only)
         │
         ├─ M-SEARCH ST: urn:…:Hpaudit-<nonce>:1
@@ -73,11 +81,16 @@ All exchanges use unconnected `udp_exchange` (peer port is evidence only).
 | `ssdp.stock_server` | static_signature | medium | **yes** | `SERVER` matches stock honeypot lure tokens. |
 | `ssdp.location_loopback` | static_signature | **high** | no | `LOCATION` host is `127.0.0.1` / `::1` / `localhost`. |
 | `ssdp.method_stub` | static_signature | high | no | Non-`M-SEARCH` garbage still answered with `200 OK` SSDP. |
+| `ssdp.ext_header` | static_signature | high | **yes** | `200 OK` missing required empty `EXT:` (UPnP DA). |
+| `ssdp.cache_control` | static_signature | high | no | `CACHE-CONTROL` missing or lacks `max-age=<seconds>`. |
+| `ssdp.usn_st_coherence` | static_signature | **high** | no | `USN` does not embed the response `ST`. |
+| `ssdp.location_uri` | static_signature | high | no | `LOCATION` is not an absolute `http`/`https` URI with a host. |
 
 ## Safe mode
 
 `--safe-mode` / `safe_mode`: only SSDP framing on the baseline `M-SEARCH` reply
-is evaluated. Header, ST, clone, stock, location, and method probes are skipped.
+is evaluated. Header, ST, clone, stock, location, method, and RFC header probes
+are skipped.
 
 ## Spec references
 
@@ -86,9 +99,10 @@ is evaluated. Header, ST, clone, stock, location, and method probes are skipped.
 
 ## Scoring
 
-`PROTOCOL_STRATEGIES["ssdp"]` activates **static_signature** only.
-High-signal examples: `ssdp.st_echo`, `ssdp.location_loopback`. See
-[`SCORING.md`](../SCORING.md) (rollup blurbs land after protocol merges).
+`PROTOCOL_STRATEGIES["ssdp"]` activates **static_signature** only (still **1**
+strategy slot in the README table). High-signal examples: `ssdp.st_echo`,
+`ssdp.location_loopback`, `ssdp.usn_st_coherence`. See
+[`SCORING.md`](../SCORING.md).
 
 ## FP notes
 
@@ -96,4 +110,9 @@ High-signal examples: `ssdp.st_echo`, `ssdp.location_loopback`. See
 - **Quiet devices** — no reply to an unknown synthetic URN is **clean** (real
   stacks often stay silent); only a reply with wrong `ST` or a cloned body scores.
 - **NAT / CGNAT LOCATION** — private RFC1918 hosts in `LOCATION` are **not**
-  scored; only loopback / localhost hostnames fire `location_loopback`.
+  scored as loopback; only loopback / localhost hostnames fire `location_loopback`.
+  Relative paths and non-http schemes fire `location_uri` instead.
+- **EXT present with empty value** — `EXT:` / `EXT: ` is **clean** (required shape).
+- **Real devices omitting `EXT`** — the spec requires it, but enough real stacks
+  ship without it that `ssdp.ext_header` is corroboration-gated: it scores only
+  alongside another triggered tell on the same face.

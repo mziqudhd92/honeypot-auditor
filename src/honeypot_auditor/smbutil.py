@@ -83,11 +83,27 @@ def collect_ntlm_challenges(host: str, port: int, *, timeout: int, count: int = 
 
 def probe_bogus_pipe(host: str, port: int, *, timeout: int) -> tuple[int | None, str, bool]:
     """Open a random IPC$ pipe. Returns (NTSTATUS or None, detail, accepted)."""
+    pipe_r, _ghost_r = probe_pipe_and_ghost_share(host, port, timeout=timeout)
+    return pipe_r
+
+
+def probe_ghost_share(host: str, port: int, *, timeout: int) -> tuple[int | None, str, bool]:
+    """TREE_CONNECT a random share name. Returns (NTSTATUS or None, detail, accepted)."""
+    _pipe_r, ghost_r = probe_pipe_and_ghost_share(host, port, timeout=timeout)
+    return ghost_r
+
+
+def probe_pipe_and_ghost_share(
+    host: str, port: int, *, timeout: int
+) -> tuple[tuple[int | None, str, bool], tuple[int | None, str, bool]]:
+    """Bogus IPC$ pipe + ghost share TREE_CONNECT on one session (fewer round-trips)."""
     SMBConnection, SessionError = optional_impacket()
+    no_imp = (None, "impacket not installed", False)
     if SMBConnection is None:
-        return None, "impacket not installed", False
+        return no_imp, no_imp
 
     pipe = f"hpaudit_{secrets.token_hex(4)}"
+    share = f"hpaudit_{secrets.token_hex(4)}"
     conn = None
     try:
         conn = SMBConnection(host, host, sess_port=port, timeout=timeout)
@@ -99,38 +115,91 @@ def probe_bogus_pipe(host: str, port: int, *, timeout: int) -> tuple[int | None,
             except Exception as exc:
                 login_error = str(exc)
         else:
-            detail = "no SMB session for pipe probe"
+            detail = "no SMB session for pipe/ghost probe"
             if login_error:
                 detail += f" ({login_error})"
-            return None, detail, False
+            skipped = (None, detail, False)
+            return skipped, skipped
 
+        pipe_result: tuple[int | None, str, bool]
         ipc = f"\\\\{host}\\IPC$"
-        tid = conn.connectTree(ipc)
         try:
-            conn.openFile(
-                tid,
-                pipe,
-                desiredAccess=0x120089,
-                shareMode=0x7,
-                creationOption=0,
-                fileAttributes=0,
-                creationDisposition=0x1,
-            )
-            return None, f"bogus pipe {pipe} opened", True
+            tid = conn.connectTree(ipc)
+            try:
+                conn.openFile(
+                    tid,
+                    pipe,
+                    desiredAccess=0x120089,
+                    shareMode=0x7,
+                    creationOption=0,
+                    fileAttributes=0,
+                    creationDisposition=0x1,
+                )
+                pipe_result = (None, f"bogus pipe {pipe} opened", True)
+            except SessionError as exc:
+                code = exc.get_error_code()
+                pipe_result = (code, f"NTSTATUS 0x{code:08X}", False)
+            finally:
+                with suppress(Exception):
+                    conn.disconnectTree(tid)
         except SessionError as exc:
             code = exc.get_error_code()
-            return code, f"NTSTATUS 0x{code:08X}", False
-        finally:
+            pipe_result = (code, f"IPC$ NTSTATUS 0x{code:08X}", False)
+        except Exception as exc:
+            pipe_result = (None, str(exc), False)
+
+        ghost_result: tuple[int | None, str, bool]
+        unc = f"\\\\{host}\\{share}"
+        try:
+            tid = conn.connectTree(unc)
             with suppress(Exception):
                 conn.disconnectTree(tid)
+            ghost_result = (None, f"ghost share {share} TREE_CONNECT accepted", True)
+        except SessionError as exc:
+            code = exc.get_error_code()
+            ghost_result = (code, f"NTSTATUS 0x{code:08X}", False)
+        except Exception as exc:
+            ghost_result = (None, str(exc), False)
+
+        return pipe_result, ghost_result
     except Exception as exc:
-        return None, str(exc), False
+        failed = (None, str(exc), False)
+        return failed, failed
     finally:
         if conn is not None:
             with suppress(Exception):
                 conn.logoff()
             with suppress(Exception):
                 conn.close()
+
+
+def probe_arbitrary_logins(
+    host: str, port: int, *, timeout: int, creds: list[tuple[str, str]]
+) -> tuple[int, list[str]]:
+    """Try synthetic logins. Returns (success_count, per-attempt notes)."""
+    SMBConnection, _SessionError = optional_impacket()
+    if SMBConnection is None:
+        return 0, ["impacket not installed"]
+
+    ok = 0
+    notes: list[str] = []
+    for label_i, (user, password) in enumerate(creds):
+        label = "low-entropy" if label_i == 0 else "high-entropy"
+        conn = None
+        try:
+            conn = SMBConnection(host, host, sess_port=port, timeout=timeout)
+            conn.login(user, password)
+            ok += 1
+            notes.append(f"{label}: login accepted")
+        except Exception as exc:
+            notes.append(f"{label}: rejected ({str(exc)[:80]})")
+        finally:
+            if conn is not None:
+                with suppress(Exception):
+                    conn.logoff()
+                with suppress(Exception):
+                    conn.close()
+    return ok, notes
 
 
 def smb_connection_summary(host: str, port: int, *, timeout: int) -> dict[str, Any]:
