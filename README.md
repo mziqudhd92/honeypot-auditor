@@ -286,7 +286,13 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 | TFTP | UDP | 69 · 1069 | 2 | [TFTP](docs/udp/TFTP.md) |
 | SSDP | UDP | 1900 · 11900 | 1 | [SSDP](docs/udp/SSDP.md) |
 
-See [`docs/STRATEGIES.md`](docs/STRATEGIES.md) for more details.
+See [`docs/STRATEGIES.md`](docs/STRATEGIES.md) for strategy narratives and
+[`docs/SCORING.md`](docs/SCORING.md) for fidelity / corroboration. Recent
+indicator expansions (still within the same strategy slots): MSSQL / MongoDB /
+MySQL / Redis / SSDP / SSH / Telnet / FTP — two additional protocol tells each
+(e.g. Redis `EX` TTL + `MULTI`/`EXEC`, SSDP `MAN`/`HOST` façades, SSH SFTP +
+hollow `direct-tcpip`, MySQL scramble freeze / 1045 clones). Per-protocol guides
+under [`docs/tcp/`](docs/tcp/) and [`docs/udp/`](docs/udp/).
 
 ---
 

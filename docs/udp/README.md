@@ -83,6 +83,11 @@ class UdpExchange:
 - No NTP monlist / mode-7
 - No DNS AXFR / IXFR / ANY floods
 - No TFTP DATA upload / bulk WRQ body
+- No SSDP multicast joins / `NOTIFY` floods (unicast `M-SEARCH` only)
+
+SSDP scores **static_signature** only, including corroboration-gated
+`ssdp.man_facade` (answers without `MAN: "ssdp:discover"`) and
+`ssdp.host_blind` (nonsense `HOST` still 200). See [SSDP.md](SSDP.md).
 
 ## ICMP refused vs timeout
 

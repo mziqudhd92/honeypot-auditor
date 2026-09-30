@@ -20,6 +20,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   - FTP: `ftp.feat_lie`, `ftp.quit_zombie` (ignores 421 closing class)
   - Safe-mode handshake-only paths for MSSQL / MongoDB / MySQL
 
+### Changed
+
+- Docs sync for the 16 new indicators: README strategy note, `docs/STRATEGIES.md`
+  SSH/Telnet/FTP/MySQL/MSSQL/MongoDB blurbs, `docs/SCORING.md` Redis/SSDP rows,
+  TCP/UDP indexes, site FAQ/`index.html`, `agents.md`, `llms.txt` (strategy-slot
+  count remains **80**)
+
 ## [1.0.2] - 2026-09-28
 
 ### Added

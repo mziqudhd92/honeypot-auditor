@@ -109,6 +109,7 @@ SSDP uses **static_signature** only (UDP discovery has no auth or session axis).
 | `ssdp.method_stub` | static_signature | Illegal HTTP method answered like `M-SEARCH` |
 | `ssdp.ext_header` / `ssdp.cache_control` | static_signature | Missing empty `EXT:` (corroboration-gated) · `CACHE-CONTROL` without `max-age` |
 | `ssdp.usn_st_coherence` / `ssdp.location_uri` | static_signature | `USN` does not embed `ST` · non-absolute / non-http(s) `LOCATION` |
+| `ssdp.man_facade` / `ssdp.host_blind` | static_signature | Answers without `MAN: "ssdp:discover"` · nonsense `HOST` still 200 (both corroboration-gated) |
 
 Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/SSDP.md`](udp/SSDP.md).
 
@@ -179,18 +180,20 @@ probe flow, and non-destructive policy: [`MEMCACHED.md`](MEMCACHED.md).
 ### Redis RESP non-compliance (basic probe)
 
 Redis uses all three basic strategies. Prefer RESP facade / state tells over banner
-IOCs alone — see [`REDIS.md`](REDIS.md).
+IOCs alone — see [`tcp/REDIS.md`](tcp/REDIS.md).
 
 | ID | Category | Notes |
 |----|----------|-------|
 | `redis.arbitrary_auth` | arbitrary_auth | Decisive when hit; two random `AUTH` passwords both `+OK` |
 | `redis.persist` / `redis.dbsize` | state_nonpersist | Key vanishes on reconnect; `DBSIZE` ignores successful `SET` |
+| `redis.ttl_enforcement` | state_nonpersist | High when `SET … EX 1` value is still served past the TTL window |
 | `redis.auth_wall` | static_signature | OpenCanary-class: always-invalid `AUTH` + `COMMAND` `NOAUTH` |
 | `redis.command_stub` / `redis.info_frozen` / `redis.ping_stub` | static_signature | Catalog / clock / `PING` facades (high fidelity) |
 | `redis.quit_zombie` / `redis.arity_facade` / `redis.echo_mismatch` | static_signature | Session + parser fidelity |
 | `redis.eval_stub` / `redis.config_stub` / `redis.type_stub` / `redis.incr_stub` | static_signature | Command-shape stubs |
+| `redis.multi_exec_stub` | static_signature | `MULTI` accepted but `EXEC` is not a reply array (read-only `GET` queued) |
 
-Full indicator list, probe flow, safe-mode, and non-destructive policy: [`REDIS.md`](REDIS.md).
+Full indicator list, probe flow, safe-mode, and non-destructive policy: [`tcp/REDIS.md`](tcp/REDIS.md).
 
 ### Elasticsearch API non-compliance (basic probe)
 

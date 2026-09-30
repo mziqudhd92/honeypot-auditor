@@ -212,6 +212,40 @@ protocol version / stock hostname-vendor façade, unknown control type
 answered like a successful SCCRP). Never opens GRE or runs PPP.
 See [`docs/tcp/PPTP.md`](tcp/PPTP.md).
 
+The SSH engine (TCP/22, lab **2222**) scores Cowrie/Kippo-class lures under
+**all three** strategies: dual random password acceptance, fake-PTY /
+missing-`exec` and missing-SFTP session lies, `/tmp` canary non-persist, plus
+banner / Twisted-Cowrie KEX façade / password-only auth / lure `whoami` /
+hollow `direct-tcpip` (accept then immediate EOF). See [`docs/tcp/SSH.md`](tcp/SSH.md).
+
+The Telnet engine (TCP/23, lab **2323**) pairs any-password login with canned
+reject dialogues, `/tmp` canary non-persist, identical post-login command
+deserts, IAC option spray, and corroboration-gated unanswered IAC AYT after
+speakership. See [`docs/tcp/TELNET.md`](tcp/TELNET.md).
+
+The FTP engine (TCP/21, lab **2121**) scores decoy logins, PASV/PORT bounce
+and STOR/SIZE non-persist, FEAT/PWD deserts, FEAT capability lies (advertised
+MLSD/UTF8 rejected as unknown), and QUIT zombies (ignores 421 closing class).
+See [`docs/tcp/FTP.md`](tcp/FTP.md).
+
+The MySQL engine (TCP/3306) uses **state_nonpersist** + **static_signature**
+(no dual-auth on the basic path): EOL 5.5.x Ubuntu greetings, stock handshake
+caps, frozen scramble salts across reconnects, drop-after-1045, Expected-seq
+FSM, SSL-request silent drops, and identical 1045 clones across usernames.
+`--safe-mode` is greeting/handshake only. See [`docs/tcp/MYSQL.md`](tcp/MYSQL.md).
+
+The MSSQL engine (TCP/1433) uses **state_nonpersist** + **static_signature**:
+canned nmap-shaped TDS prelogin, `ENCRYPT_NOT_SUP`, PRELOGIN option blindness
+(canned + corroboration-gated), LOGIN7 18456 / username-clone failures, and
+TLS close-after-NOT_SUP. `--safe-mode` is prelogin speakership only. See
+[`docs/tcp/MSSQL.md`](tcp/MSSQL.md).
+
+The MongoDB engine (TCP/27017) uses **state_nonpersist** + **static_signature**:
+frozen `connectionId: 1`, synthetic OP_MSG `requestId=9999`, `responseTo`
+mismatches on OP_REPLY/OP_MSG only, identical hello across reconnects, and
+unauthorized `ping` after hello. `--safe-mode` is hello speakership only. See
+[`docs/tcp/MONGODB.md`](tcp/MONGODB.md).
+
 ## Deep mode & optional layers
 
 `--deep` adds cross-protocol axes (shell semantics, HASSH/TCP stack, FSM fuzz,
