@@ -22,7 +22,7 @@ from honeypot_auditor.config import (
     match_uname_signature,
 )
 from honeypot_auditor.models import Indicator, skipped_indicator
-from honeypot_auditor.netutil import closed_reason, tcp_transact
+from honeypot_auditor.netutil import closed_reason, tcp_roundtrips, tcp_transact
 from honeypot_auditor.probes.common import is_safe_mode, random_creds, skip_suite
 from honeypot_auditor.probes.shell_cti import (
     CTI_SHELL_COMMANDS,
@@ -98,15 +98,25 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
             _TELNET_SKIP, closed_reason(banner_err), protocol="telnet", error=banner_err
         )
 
-    # AYT after speakership: drain any banner first, then send AYT on a fresh
-    # exchange. Empty/timeout alone is never a hit without speakership + gate.
+    # AYT after speakership: on a fresh connection, drain the banner separately,
+    # then send AYT and score only the post-AYT bytes (never the greeting).
     spoke = bool(banner_raw) and (
         bool(banner_text.strip())
         or b"\xff" in banner_raw
         or bool(match_telnet_cowrie_preamble(banner_raw))
     )
-    ayt_raw, ayt_err = tcp_transact(host, port, _IAC_AYT, recv_first=True)
-    if ayt_err and not ayt_raw:
+    ayt_replies, ayt_err = tcp_roundtrips(host, port, [_IAC_AYT], recv_first=True)
+    ayt_banner = ayt_replies[0] if ayt_replies else b""
+    ayt_raw = ayt_replies[1] if len(ayt_replies) > 1 else b""
+    spoke = spoke or (
+        bool(ayt_banner)
+        and (
+            bool(_telnet_text(ayt_banner).strip())
+            or b"\xff" in ayt_banner
+            or bool(match_telnet_cowrie_preamble(ayt_banner))
+        )
+    )
+    if ayt_err and not ayt_raw and not ayt_banner:
         ayt_hit = None  # transport fail / skip — not a honeypot tell
     else:
         ayt_hit = match_telnet_ayt_stub(ayt_raw, spoke=spoke)
@@ -181,8 +191,10 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
             title="Telnet IAC AYT is unanswered",
             category="static_signature",
             triggered=bool(ayt_hit),
-            skipped=bool(ayt_err) and not ayt_raw,
-            skip_reason=closed_reason(ayt_err) if ayt_err and not ayt_raw else "",
+            skipped=bool(ayt_err) and not ayt_raw and not ayt_banner,
+            skip_reason=(
+                closed_reason(ayt_err) if ayt_err and not ayt_raw and not ayt_banner else ""
+            ),
             protocol="telnet",
             detail=ayt_hit or "IAC AYT received a printable reply (or no speakership)",
             evidence=(ayt_raw[:120].hex() if ayt_raw else ""),

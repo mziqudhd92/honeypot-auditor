@@ -68,6 +68,8 @@ def match_mssql_login7_clone(raw_a: bytes, raw_b: bytes, user_a: str, user_b: st
     """Two LOGIN7 failures with distinct usernames return identical TDS payloads.
 
     Real SQL Server embeds the attempted username in the 18456 error (UTF-16LE).
+    Identical fixed "Login failed for user …" templates (wrong/fixed user) score.
+    Generic identical failures with no user-attributed wording are too weak alone.
     """
     a, b = raw_a or b"", raw_b or b""
     if not a or not b or a != b:
@@ -81,7 +83,10 @@ def match_mssql_login7_clone(raw_a: bytes, raw_b: bytes, user_a: str, user_b: st
     if ua in a or ub in a:
         # Identical bytes that somehow embed both users is still impossible; treat as clone.
         return "LOGIN7 failures bitwise-identical across distinct usernames"
-    return "LOGIN7 failures bitwise-identical (no per-user error embedding)"
+    # Canned skins often embed a fixed lure account ("sa", "test", …).
+    if b"for user" in a.lower() or "for user".encode("utf-16le") in a:
+        return "LOGIN7 failures bitwise-identical (fixed user embedding)"
+    return None
 
 
 def match_mssql_prelogin_blind(
@@ -91,7 +96,8 @@ def match_mssql_prelogin_blind(
 
     Real SQL Server often returns the same ENCRYPT_NOT_SUP template for encrypt
     ON vs OFF, so identity alone is not scored unless the reply already looks
-    like a canned/nmap lure (``canned_hint``) — callers should also set
+    like a canned/nmap lure (``canned_hint`` from ``match_mssql_canned_prelogin``
+    only — never from ENCRYPT_NOT_SUP alone). Callers should also set
     ``requires_corroboration``.
     """
     a, b = raw_a or b"", raw_b or b""

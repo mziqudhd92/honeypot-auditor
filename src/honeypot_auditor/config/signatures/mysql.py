@@ -88,7 +88,12 @@ def match_mysql_scramble_frozen(scramble_a: bytes, scramble_b: bytes) -> str | N
 
 
 def match_mysql_auth_error_clone(raw_a: bytes, raw_b: bytes, user_a: str, user_b: str) -> str | None:
-    """Two access-denied packets for distinct users are bitwise-identical."""
+    """Two access-denied packets for distinct users are bitwise-identical.
+
+    Real mysqld embeds ``user@host`` in the 1045 message. Identical fixed
+    "Access denied for user …" templates score; generic identical ERR packets
+    with no user-attributed wording are too weak alone.
+    """
     a, b = raw_a or b"", raw_b or b""
     if not a or not b or a != b:
         return None
@@ -102,4 +107,7 @@ def match_mysql_auth_error_clone(raw_a: bytes, raw_b: bytes, user_a: str, user_b
     ua, ub = user_a.encode("ascii", "replace"), user_b.encode("ascii", "replace")
     if ua in a or ub in a:
         return "access-denied packets bitwise-identical across distinct users"
-    return "access-denied packets bitwise-identical (no per-user embedding)"
+    low = a.lower()
+    if b"access denied for user" in low or b"for user '" in low or b'for user "' in low:
+        return "access-denied packets bitwise-identical (fixed user embedding)"
+    return None

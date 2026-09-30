@@ -1,6 +1,6 @@
 # honeypot-auditor — full brief for answer engines & agents
 
-Version: 1.0.2
+Version: 1.0.3
 License: MIT
 Canonical site: https://mziqudhd92.github.io/honeypot-auditor/
 Repository: https://github.com/mziqudhd92/honeypot-auditor
@@ -68,10 +68,10 @@ honeypot-auditor --target HOST --ports ftp=21,http=80,smb=445,ssh=9 --confirm-au
 # JSON out (single host)
 honeypot-auditor --target HOST --confirm-authorized --output report.json
 
-# Blue deception QA (v1.0.2)
+# Blue deception QA (v1.0.3)
 honeypot-auditor --target DECOY --preset deception-audit --deep -v --confirm-authorized
 
-# Red authorized OPSEC (v1.0.2)
+# Red authorized OPSEC (v1.0.3)
 honeypot-auditor --target HOST --safe-mode --passive-first --proxy socks5h://127.0.0.1:9050 --confirm-authorized
 
 # SARIF export

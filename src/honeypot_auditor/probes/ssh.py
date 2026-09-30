@@ -440,7 +440,8 @@ def _ssh_direct_tcpip_probe(client) -> tuple[bool, str]:
 
     Real OpenSSH refuses or fails the channel open when nothing listens / forwarding
     is disabled. Shell-only lures often accept the channel then EOF without a real
-    TCP connect. Accept alone is not enough (bastions may confirm then close).
+    TCP connect. Accept alone is not enough (bastions may confirm then close/RST):
+    we require an immediate empty ``recv`` (EOF), not merely ``closed`` after a sleep.
     """
     transport = client.get_transport()
     if transport is None:
@@ -457,24 +458,22 @@ def _ssh_direct_tcpip_probe(client) -> tuple[bool, str]:
         return False, f"direct-tcpip rejected ({exc})"
     try:
         with suppress(Exception):
-            chan.settimeout(0.5)
-        # Hollow: channel opens then immediately EOF / closes with no data path.
-        time.sleep(0.15)
-        closed_soon = bool(getattr(chan, "closed", False) or getattr(chan, "eof_received", False))
-        if not closed_soon:
-            try:
-                chunk = chan.recv(1)
-                if chunk == b"" and (
-                    getattr(chan, "closed", False) or getattr(chan, "eof_received", False)
-                ):
-                    closed_soon = True
-            except Exception:
-                closed_soon = bool(
-                    getattr(chan, "closed", False) or getattr(chan, "eof_received", False)
-                )
-        if closed_soon:
+            chan.settimeout(0.4)
+        try:
+            chunk = chan.recv(1)
+        except TimeoutError:
+            return False, "direct-tcpip channel stayed open after accept"
+        except OSError as exc:
+            # Bastion/refuse path: accept then RST/error — not a hollow lure EOF.
+            return False, f"direct-tcpip closed after accept ({exc})"
+        except Exception as exc:
+            # socket.timeout on some Python builds is not a TimeoutError subclass.
+            if "timed out" in str(exc).lower() or type(exc).__name__ == "timeout":
+                return False, "direct-tcpip channel stayed open after accept"
+            return False, f"direct-tcpip closed after accept ({exc})"
+        if chunk == b"":
             return True, "direct-tcpip to 127.0.0.1:9 accepted then immediate EOF (hollow)"
-        return False, "direct-tcpip channel stayed open after accept"
+        return False, "direct-tcpip produced data after accept"
     finally:
         with suppress(Exception):
             if chan is not None:

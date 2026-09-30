@@ -20,7 +20,7 @@ from honeypot_auditor.config import (
 )
 from honeypot_auditor.models import Indicator
 from honeypot_auditor.netutil import closed_reason, tcp_roundtrips, tcp_transact
-from honeypot_auditor.probes.common import is_safe_mode, random_creds, skip_suite
+from honeypot_auditor.probes.common import entropy_varied_creds, is_safe_mode, skip_suite
 
 _MSSQL_SKIP = (
     ("mssql.signature", "MSSQL prelogin is a canned nmap-shaped template", "static_signature"),
@@ -187,14 +187,18 @@ def probe_mssql(host: str, port: int) -> list[Indicator]:
         match_mssql_prelogin_blind(
             prelogin_reply,
             prelogin_off,
-            canned_hint=bool(nmap_hit or prelogin_hit),
+            # ENCRYPT_NOT_SUP alone is honest SQL Server behavior and often yields
+            # identical PRELOGIN for encrypt ON/OFF — only a canned/nmap shape
+            # may enable this tell (still requires_corroboration on the Indicator).
+            canned_hint=bool(nmap_hit),
         )
         if prelogin_reply and prelogin_off
         else None
     )
 
-    user, _ = random_creds()
-    user2, _ = random_creds()
+    (user, _), (user2, _) = entropy_varied_creds()
+    if user == user2:
+        user2 = f"{user2}_b"
     login_replies, login_err = tcp_roundtrips(
         host,
         port,

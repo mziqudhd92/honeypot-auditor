@@ -260,7 +260,9 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
         _redis_call(host, port, "DEL", key)
         _redis_call(host, port, "DEL", incr_key)
 
-        # TTL enforcement: SET … EX 1, wait past the window, GET must miss.
+        # TTL enforcement: SET … EX 1, wait just past the 1s window, GET must miss.
+        # 1.15s is enough for honest Redis expiry while keeping scan latency down
+        # (tests mock time.sleep).
         t0 = time.monotonic()
         ttl_set, ttl_set_err = _redis_call(
             host, port, "SET", ttl_key, REDIS_PROBE_VALUE, "EX", "1"
@@ -269,7 +271,9 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
             ttl_skipped = ttl_set_err or ttl_set.strip()[:80] or "SET EX rejected"
             ttl_detail = ttl_skipped
         else:
-            time.sleep(1.6)
+            remaining = 1.15 - (time.monotonic() - t0)
+            if remaining > 0:
+                time.sleep(remaining)
             ttl_got, ttl_get_err = _redis_call(host, port, "GET", ttl_key)
             ttl_elapsed = time.monotonic() - t0
             if ttl_get_err and not ttl_got:

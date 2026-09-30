@@ -258,17 +258,28 @@ def test_ssh_direct_tcpip_hollow_requires_eof():
     client.get_transport.return_value = transport
 
     live = MagicMock()
-    live.closed = False
-    live.eof_received = False
     live.recv.return_value = b"x"
     transport.open_channel.return_value = live
     hollow, detail = ssh._ssh_direct_tcpip_probe(client)
     assert not hollow
+    assert "produced data" in detail
+
+    open_wait = MagicMock()
+    open_wait.recv.side_effect = TimeoutError()
+    transport.open_channel.return_value = open_wait
+    hollow, detail = ssh._ssh_direct_tcpip_probe(client)
+    assert not hollow
     assert "stayed open" in detail
 
+    bastion = MagicMock()
+    bastion.recv.side_effect = OSError("Connection reset")
+    transport.open_channel.return_value = bastion
+    hollow, detail = ssh._ssh_direct_tcpip_probe(client)
+    assert not hollow
+    assert "closed after accept" in detail
+
     dead = MagicMock()
-    dead.closed = True
-    dead.eof_received = True
+    dead.recv.return_value = b""
     transport.open_channel.return_value = dead
     hollow, detail = ssh._ssh_direct_tcpip_probe(client)
     assert hollow

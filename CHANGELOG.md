@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `mssql.prelogin_blind` canned gate uses nmap/canned shape only (not
+  `ENCRYPT_NOT_SUP`), avoiding double-scoring honest SQL Server NOT_SUP speakers
+- SSH `direct-tcpip` hollow tell requires immediate empty `recv` (EOF); bastion
+  RST / stay-open paths stay clean
+- Redis TTL wait tightened to ~1.15s past `SET … EX 1`
+- MSSQL/MySQL auth-error clones require user-attributed fixed embedding; probes
+  use distinct `entropy_varied_creds`
+- Telnet AYT scores post-AYT bytes only (banner drained via `tcp_roundtrips`)
+
+## [1.0.3] - 2026-09-30
+
 ### Added
 
 - Database / shell / discovery honeypot tells — two new indicators each for

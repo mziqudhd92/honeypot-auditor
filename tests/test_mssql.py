@@ -97,12 +97,45 @@ def test_mssql_trapster_shaped_prelogin_encrypt(mock_tcp, mock_rt):
     by_id = {i.id: i for i in inds}
     assert by_id["mssql.prelogin"].triggered
     assert by_id["mssql.tls_drop"].triggered
+    # ENCRYPT_NOT_SUP + identical PRELOGIN without nmap/canned shape must not
+    # enable prelogin_blind (honest SQL often mirrors that pattern).
+    assert not by_id["mssql.signature"].triggered
+    assert not by_id["mssql.prelogin_blind"].triggered
+
+
+@patch.object(mssql, "tcp_roundtrips")
+@patch.object(mssql, "tcp_transact")
+def test_mssql_encrypt_not_sup_identical_prelogin_not_blind_without_canned(mock_tcp, mock_rt):
+    """Honest NOT_SUP + identical option replies must not fire prelogin_blind."""
+    mock_tcp.return_value = (_PRELOGIN_ENCRYPT, "")  # NOT_SUP but not nmap canned list
+    mock_rt.side_effect = [
+        ([_PRELOGIN_ENCRYPT], ""),
+        ([_PRELOGIN_ENCRYPT], ""),
+        ([_PRELOGIN_ENCRYPT, b"\x04\x01\x00\x10"], ""),
+        ([_PRELOGIN_ENCRYPT, b"\x04\x01\x00\x11"], ""),
+        ([_PRELOGIN_ENCRYPT, b"\x16\x03"], ""),
+    ]
+    # Ensure canned matcher does not treat this as nmap lure.
+    from honeypot_auditor.config.signatures.mssql import match_mssql_canned_prelogin
+
+    assert match_mssql_canned_prelogin(_PRELOGIN_ENCRYPT) is None
+    inds = mssql.probe_mssql("127.0.0.1", 1433)
+    by_id = {i.id: i for i in inds}
+    assert by_id["mssql.prelogin"].triggered
+    assert not by_id["mssql.prelogin_blind"].triggered
 
 
 def test_mssql_login7_clone_matcher():
     assert match_mssql_login7_clone(_LOGIN7_FAIL, _LOGIN7_FAIL, "alice", "bob")
     distinct = _LOGIN7_FAIL + b"\x00"
     assert match_mssql_login7_clone(_LOGIN7_FAIL, distinct, "alice", "bob") is None
+    # Generic identical failure without user-attributed wording is too weak.
+    generic = (
+        b"\x04\x01\x00\x20\x00\x36\x01\x00"
+        + "Login failed.".encode("utf-16le")
+        + b"\xfd\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    )
+    assert match_mssql_login7_clone(generic, generic, "alice", "bob") is None
 
 
 def test_mssql_prelogin_blind_matcher():

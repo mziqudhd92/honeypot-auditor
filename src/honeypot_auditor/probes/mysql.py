@@ -21,7 +21,7 @@ from honeypot_auditor.config import (
 )
 from honeypot_auditor.models import Indicator
 from honeypot_auditor.netutil import closed_reason, tcp_roundtrips
-from honeypot_auditor.probes.common import is_safe_mode, random_creds, skip_suite
+from honeypot_auditor.probes.common import entropy_varied_creds, is_safe_mode, skip_suite
 
 _MYSQL_SKIP = (
     ("mysql.signature", "MySQL greeting is an EOL 5.5.x ubuntu template", "static_signature"),
@@ -159,8 +159,9 @@ def _mysql_ssl_drop_probe(host: str, port: int) -> tuple[bool, str, str, bool]:
 
 
 def probe_mysql(host: str, port: int) -> list[Indicator]:
-    user, _password = random_creds()
-    user2, _password2 = random_creds()
+    (user, _password), (user2, _password2) = entropy_varied_creds()
+    if user == user2:
+        user2 = f"{user2}_b"
     replies, err = tcp_roundtrips(
         host, port, [_mysql_handshake_response(user), b"\x00"], recv_first=True
     )
