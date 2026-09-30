@@ -15,8 +15,8 @@ Redis activates all three basic scoring strategies
 | Strategy | Why it applies to Redis |
 |----------|-------------------------|
 | **arbitrary_auth** | `AUTH` is the credential gate. Real Redis rejects unknown passwords (or reports that no password is configured). Decoys often return `+OK` for any string. |
-| **state_nonpersist** | In-memory stubs often accept `SET` then lose the key on reconnect, or leave `DBSIZE` unchanged. |
-| **static_signature** | Most Redis honeypot tells are RESP facades: `COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP` text, missing `ECHO`/`SELECT`, OpenCanary AUTH+NOAUTH wall, arity/`TYPE`/`INCR` facades, QUIT zombies. |
+| **state_nonpersist** | In-memory stubs often accept `SET` then lose the key on reconnect, leave `DBSIZE` unchanged, or ignore `EX` TTLs. |
+| **static_signature** | Most Redis honeypot tells are RESP facades: `COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP` text, missing `ECHO`/`SELECT`, OpenCanary AUTH+NOAUTH wall, arity/`TYPE`/`INCR` facades, `MULTI`/`EXEC` stubs, QUIT zombies. |
 
 Detection philosophy:
 
@@ -70,6 +70,7 @@ PING  ──►  RESP speakership (+ optional PING stub)
 |----|---------|
 | `redis.persist` | After a successful `SET`, reconnect `GET` misses the value / returns null bulk. Fidelity **high** when hit. |
 | `redis.dbsize` | After a successful `SET`, `DBSIZE` stays flat (or returns `+OK`). Non-destructive stand-in for flush stubs. |
+| `redis.ttl_enforcement` | After `SET … EX 1`, reconnect `GET` still returns the value past the TTL window. |
 
 ### Static / RESP conformance
 
@@ -87,6 +88,7 @@ PING  ──►  RESP speakership (+ optional PING stub)
 | `redis.incr_stub` | `INCR` on a fresh probe key returns `+OK` instead of an integer. |
 | `redis.type_stub` | `TYPE` on a string probe key is not `+string`. |
 | `redis.arity_facade` | `GET` with no arguments returns `+OK` (or a value) instead of wrong-arity. |
+| `redis.multi_exec_stub` | `MULTI` accepted but `EXEC` returns `+OK` / unknown instead of a reply array. |
 | `redis.quit_zombie` | After `QUIT +OK`, the same TCP session still answers `PING`. |
 
 ## Safe mode

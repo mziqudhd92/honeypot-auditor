@@ -36,3 +36,36 @@ def match_mongo_op_msg_reply(raw: bytes) -> str | None:
     if request_id == 9999:
         return "synthetic reply requestId 9999"
     return None
+
+
+def match_mongo_response_to(raw: bytes, request_id: int) -> str | None:
+    """Wire reply responseTo does not echo the client's requestId.
+
+    Only scores OP_REPLY (1) / OP_MSG (2013) frames — garbage ≥16-byte payloads
+    are not Mongo speakers and must stay clean.
+    """
+    data = raw or b""
+    if len(data) < 16:
+        return None
+    _length, _rid, response_to, opcode = struct.unpack("<IIII", data[:16])
+    if opcode not in (1, 2013):
+        return None
+    if response_to == request_id:
+        return None
+    return f"responseTo={response_to} does not echo requestId={request_id}"
+
+
+def match_mongo_hello_clone(raw_a: bytes, raw_b: bytes) -> str | None:
+    """Two independent hello replies are bitwise-identical (frozen localTime/cid)."""
+    a, b = raw_a or b"", raw_b or b""
+    if len(a) < 16 or len(b) < 16 or a != b:
+        return None
+    looks = (
+        b"ismaster" in a
+        or b"maxWireVersion" in a
+        or b"maxBsonObjectSize" in a
+        or b"helloOk" in a
+    )
+    if not looks:
+        return None
+    return "hello replies bitwise-identical across reconnects"

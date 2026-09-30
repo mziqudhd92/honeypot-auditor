@@ -4,7 +4,8 @@ UPnP Device Architecture discovery strategies (non-destructive unicast M-SEARCH
 only — never NOTIFY spam, multicast floods, or LOCATION HTTP fetch in v1):
   · static_signature — framing, header facade, ST echo, response clone,
     stock SERVER lure tokens (gated), LOCATION loopback, method stub,
-    EXT / CACHE-CONTROL RFC headers, USN↔ST coherence, absolute LOCATION URI
+    EXT / CACHE-CONTROL RFC headers, USN↔ST coherence, absolute LOCATION URI,
+    MAN facade, HOST blindness
 
 UDP/1900 (lab 11900). See docs/udp/SSDP.md.
 """
@@ -80,6 +81,16 @@ _SSDP_SKIP = (
         "SSDP LOCATION is not an absolute http(s) URI",
         "static_signature",
     ),
+    (
+        "ssdp.man_facade",
+        "SSDP answers M-SEARCH without required MAN ssdp:discover",
+        "static_signature",
+    ),
+    (
+        "ssdp.host_blind",
+        "SSDP answers M-SEARCH with a nonsense HOST header",
+        "static_signature",
+    ),
 )
 
 _REQUIRED_200_HEADERS = ("server", "st", "usn", "location")
@@ -112,16 +123,32 @@ class SsdpMessage:
     status_code: int | None
 
 
-def build_msearch(host: str, port: int, *, st: str, mx: int = 1) -> bytes:
+def build_msearch(
+    host: str,
+    port: int,
+    *,
+    st: str,
+    mx: int = 1,
+    include_man: bool = True,
+    host_header: str | None = None,
+) -> bytes:
     """Build a unicast M-SEARCH discovery request."""
-    return (
-        "M-SEARCH * HTTP/1.1\r\n"
-        f"HOST: {host}:{port}\r\n"
-        'MAN: "ssdp:discover"\r\n'
-        f"MX: {int(mx)}\r\n"
-        f"ST: {st}\r\n"
-        "\r\n"
-    ).encode("ascii")
+    host_line = host_header if host_header is not None else f"{host}:{port}"
+    lines = [
+        "M-SEARCH * HTTP/1.1",
+        f"HOST: {host_line}",
+    ]
+    if include_man:
+        lines.append('MAN: "ssdp:discover"')
+    lines.extend(
+        [
+            f"MX: {int(mx)}",
+            f"ST: {st}",
+            "",
+            "",
+        ]
+    )
+    return "\r\n".join(lines).encode("ascii")
 
 
 def build_ssdp_response(*, status: str = "HTTP/1.1 200 OK", headers: dict[str, str]) -> bytes:
@@ -520,6 +547,60 @@ def probe_ssdp(host: str, port: int) -> list[Indicator]:
     elif stub_ex.error:
         stub_detail = f"non-M-SEARCH unanswered ({closed_reason(stub_ex.error)}; ok)"
 
+    # 4) MAN facade — M-SEARCH without required MAN: "ssdp:discover".
+    man_ex = udp_exchange(
+        host,
+        port,
+        build_msearch(host, port, st=st_primary, mx=1, include_man=False),
+        connected=False,
+    )
+    man_hit = False
+    man_detail = "M-SEARCH without MAN unanswered (ok)"
+    if man_ex.data and not man_ex.error:
+        man_msg = parse_ssdp_message(man_ex.data)
+        if man_msg is not None and man_msg.status_code == 200:
+            man_hit = True
+            man_detail = f"M-SEARCH without MAN answered with {man_msg.start_line}"
+        else:
+            man_detail = (
+                f"non-SSDP reply without MAN ({len(man_ex.data)} bytes)"
+                if man_msg is None
+                else f"without-MAN reply {man_msg.start_line}"
+            )
+    elif man_ex.error:
+        man_detail = f"M-SEARCH without MAN unanswered ({closed_reason(man_ex.error)}; ok)"
+
+    # 5) HOST blindness — nonsense HOST should not earn a 200 OK discovery reply.
+    host_ex = udp_exchange(
+        host,
+        port,
+        build_msearch(
+            host,
+            port,
+            st=st_primary,
+            mx=1,
+            host_header=f"hpaudit-invalid-{nonce}.invalid:9",
+        ),
+        connected=False,
+    )
+    host_hit = False
+    host_detail = "M-SEARCH with nonsense HOST unanswered (ok)"
+    if host_ex.data and not host_ex.error:
+        host_msg = parse_ssdp_message(host_ex.data)
+        if host_msg is not None and host_msg.status_code == 200:
+            host_hit = True
+            host_detail = f"nonsense HOST answered with {host_msg.start_line}"
+        else:
+            host_detail = (
+                f"non-SSDP reply for nonsense HOST ({len(host_ex.data)} bytes)"
+                if host_msg is None
+                else f"nonsense-HOST reply {host_msg.start_line}"
+            )
+    elif host_ex.error:
+        host_detail = (
+            f"M-SEARCH with nonsense HOST unanswered ({closed_reason(host_ex.error)}; ok)"
+        )
+
     evidence = baseline.data[:600].decode("latin-1", "replace")
 
     return [
@@ -603,6 +684,24 @@ def probe_ssdp(host: str, port: int) -> list[Indicator]:
             detail=loc_uri_detail,
             evidence=location[:200],
             fidelity="high",
+        ),
+        _ind(
+            _spec("ssdp.man_facade"),
+            triggered=man_hit,
+            detail=man_detail,
+            evidence=(man_ex.data[:200].decode("latin-1", "replace") if man_ex.data else ""),
+            fidelity="medium",
+            # Real unicast stacks often ignore MAN; alone this must not score.
+            requires_corroboration=True,
+        ),
+        _ind(
+            _spec("ssdp.host_blind"),
+            triggered=host_hit,
+            detail=host_detail,
+            evidence=(host_ex.data[:200].decode("latin-1", "replace") if host_ex.data else ""),
+            fidelity="medium",
+            # Unicast stacks often ignore HOST; alone this must not score.
+            requires_corroboration=True,
         ),
     ]
 

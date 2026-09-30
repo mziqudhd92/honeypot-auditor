@@ -137,13 +137,15 @@ IAC_BLIND = bytes.fromhex("fffb03fffb63") + b"\r\nUsername: "
 
 
 @patch.object(telnet, "_telnet_login_and_probe", return_value=(False, "", ""))
-@patch.object(telnet, "tcp_transact", return_value=(IAC_BLIND, ""))
+@patch.object(telnet, "tcp_transact")
 def test_telnet_blind_unknown_option(mock_tcp, mock_login):
+    mock_tcp.side_effect = [(IAC_BLIND, ""), (b"[Yes]\r\n", "")]
     inds = telnet.probe_telnet("127.0.0.1", 23)
     by_id = {i.id: i for i in inds}
     assert by_id["telnet.iac_negotiate"].triggered
-    mock_tcp.assert_called()
-    assert mock_tcp.call_args[0][2] == telnet._IAC_PROBE
+    assert mock_tcp.call_args_list[0][0][2] == telnet._IAC_PROBE
+    assert mock_tcp.call_args_list[1][0][2] == telnet._IAC_AYT
+    assert not by_id["telnet.ayt_stub"].triggered
 
 
 @patch.object(settings, "safe_mode", True)
@@ -160,3 +162,26 @@ def test_telnet_safe_mode_accepts_bytes_iac(mock_tcp):
     assert by_id["telnet.iac_negotiate"].triggered
     assert not by_id["telnet.banner"].error
     assert by_id["telnet.arbitrary_auth"].skipped
+
+
+def test_telnet_ayt_and_cmd_desert_matchers():
+    from honeypot_auditor.config.signatures.telnet import (
+        match_telnet_ayt_stub,
+        match_telnet_cmd_desert,
+    )
+
+    assert match_telnet_ayt_stub(b"", spoke=False) is None
+    assert match_telnet_ayt_stub(b"", spoke=True)
+    assert match_telnet_ayt_stub(b"[Yes]\r\n", spoke=True) is None
+    assert match_telnet_cmd_desert(
+        {"id": "command not found", "uname -a": "command not found", "echo $((7*9))": "command not found"}
+    )
+    assert match_telnet_cmd_desert({"id": "uid=0", "uname -a": "Linux host"}) is None
+
+
+def test_telnet_cmd_slice_avoids_substring_false_match():
+    # "id" must not match inside "invalid" / "gid"
+    assert telnet._telnet_cmd_slice("invalid user\ngid=0", "id") is None
+    out = telnet._telnet_cmd_slice("user$ id\nuid=0(root)\nuser$ ", "id")
+    assert out is not None
+    assert "uid=0" in out

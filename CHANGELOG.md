@@ -6,6 +6,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Database / shell / discovery honeypot tells — two new indicators each for
+  MSSQL, MongoDB, MySQL, Redis, SSDP, SSH, Telnet, and FTP:
+  - MSSQL: `mssql.prelogin_blind` (canned+corroboration-gated), `mssql.login7_clone`
+  - MongoDB: `mongodb.response_to` (OP_MSG/OP_REPLY only), `mongodb.hello_clone`
+  - MySQL: `mysql.scramble_frozen`, `mysql.auth_error_clone`
+  - Redis: `redis.ttl_enforcement`, `redis.multi_exec_stub` (read-only MULTI/GET)
+  - SSDP: `ssdp.man_facade`, `ssdp.host_blind` (both corroboration-gated)
+  - SSH: `ssh.sftp_subsystem`, `ssh.direct_tcpip_hollow` (accept+immediate EOF)
+  - Telnet: `telnet.ayt_stub` (speakership+corroboration), `telnet.cmd_desert`
+  - FTP: `ftp.feat_lie`, `ftp.quit_zombie` (ignores 421 closing class)
+  - Safe-mode handshake-only paths for MSSQL / MongoDB / MySQL
+
 ## [1.0.2] - 2026-09-28
 
 ### Added

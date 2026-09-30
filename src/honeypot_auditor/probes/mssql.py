@@ -1,7 +1,8 @@
 """MSSQL / TDS fingerprint engine.
 
-Strategies: static signature (canned nmap prelogin, PRELOGIN encrypt NOT SUP) ·
-state non-persistence (canned LOGIN7 18456 failure, TLS close after ENCRYPT_NOT_SUP).
+Strategies: static signature (canned nmap prelogin, PRELOGIN encrypt NOT SUP,
+PRELOGIN option blindness) · state non-persistence (canned LOGIN7 18456 failure,
+LOGIN7 error clone across usernames, TLS close after ENCRYPT_NOT_SUP).
 Arbitrary auth is not on the basic path.
 """
 
@@ -13,16 +14,28 @@ from honeypot_auditor.config import (
     MSSQL_NMAP_PRELOGIN_PAYLOAD,
     match_mssql_canned_prelogin,
     match_mssql_login7_canned,
+    match_mssql_login7_clone,
+    match_mssql_prelogin_blind,
     match_mssql_prelogin_encrypt,
 )
 from honeypot_auditor.models import Indicator
 from honeypot_auditor.netutil import closed_reason, tcp_roundtrips, tcp_transact
-from honeypot_auditor.probes.common import random_creds, skip_suite
+from honeypot_auditor.probes.common import is_safe_mode, random_creds, skip_suite
 
 _MSSQL_SKIP = (
     ("mssql.signature", "MSSQL prelogin is a canned nmap-shaped template", "static_signature"),
     ("mssql.prelogin", "MSSQL PRELOGIN advertises encryption NOT SUP", "static_signature"),
+    (
+        "mssql.prelogin_blind",
+        "MSSQL PRELOGIN ignores distinct option sets",
+        "static_signature",
+    ),
     ("mssql.login7", "MSSQL LOGIN7 gets a canned 18456 failure", "state_nonpersist"),
+    (
+        "mssql.login7_clone",
+        "MSSQL LOGIN7 failures are identical across usernames",
+        "state_nonpersist",
+    ),
     ("mssql.tls_drop", "MSSQL closes on TLS after advertising ENCRYPT_NOT_SUP", "state_nonpersist"),
 )
 
@@ -39,13 +52,13 @@ def _tds_prelogin_probe() -> bytes:
     return _tds_packet(0x12, MSSQL_NMAP_PRELOGIN_PAYLOAD)
 
 
-def _tds_client_prelogin() -> bytes:
+def _tds_client_prelogin(*, encrypt: int = 1, thread_id: int = 0) -> bytes:
     data = (
         b"\x0f\x00\x07\xd0\x00\x00"  # version
-        b"\x01"  # encrypt ON (client asks)
-        b"\x00"  # instance
-        b"\x00\x00\x00\x00"  # thread id
-        b"\x00"  # mars
+        + bytes([encrypt & 0xFF])  # encrypt
+        + b"\x00"  # instance
+        + struct.pack(">I", thread_id & 0xFFFFFFFF)  # thread id
+        + b"\x00"  # mars
     )
     options = (
         b"\x00\x00\x15\x00\x06"
@@ -142,11 +155,46 @@ def probe_mssql(host: str, port: int) -> list[Indicator]:
         return skip_suite(_MSSQL_SKIP, "not a TDS speaker", protocol="mssql")
     nmap_hit = match_mssql_canned_prelogin(raw)
 
-    pre_replies, pre_err = tcp_roundtrips(host, port, [_tds_client_prelogin()], recv_first=False)
+    if is_safe_mode():
+        reason = "safe-mode: handshake-only probe"
+        out: list[Indicator] = []
+        for iid, title, cat in _MSSQL_SKIP:
+            if iid == "mssql.signature":
+                out.append(
+                    Indicator(
+                        id=iid,
+                        title=title,
+                        category=cat,
+                        triggered=bool(nmap_hit),
+                        protocol="mssql",
+                        detail=nmap_hit or f"{len(raw)} byte TDS response",
+                        evidence=raw[:80].hex(),
+                    )
+                )
+            else:
+                out.extend(skip_suite(((iid, title, cat),), reason, protocol="mssql"))
+        return out
+
+    pre_on = _tds_client_prelogin(encrypt=1, thread_id=0x11111111)
+    pre_off = _tds_client_prelogin(encrypt=0, thread_id=0x22222222)
+    pre_replies, pre_err = tcp_roundtrips(host, port, [pre_on], recv_first=False)
     prelogin_reply = pre_replies[0] if pre_replies else b""
     prelogin_hit = match_mssql_prelogin_encrypt(prelogin_reply)
 
+    pre_off_replies, pre_off_err = tcp_roundtrips(host, port, [pre_off], recv_first=False)
+    prelogin_off = pre_off_replies[0] if pre_off_replies else b""
+    blind_hit = (
+        match_mssql_prelogin_blind(
+            prelogin_reply,
+            prelogin_off,
+            canned_hint=bool(nmap_hit or prelogin_hit),
+        )
+        if prelogin_reply and prelogin_off
+        else None
+    )
+
     user, _ = random_creds()
+    user2, _ = random_creds()
     login_replies, login_err = tcp_roundtrips(
         host,
         port,
@@ -155,6 +203,19 @@ def probe_mssql(host: str, port: int) -> list[Indicator]:
     )
     login_reply = login_replies[1] if len(login_replies) > 1 else b""
     login_hit = match_mssql_login7_canned(login_reply)
+
+    login2_replies, login2_err = tcp_roundtrips(
+        host,
+        port,
+        [_tds_client_prelogin(), _minimal_login7(user2)],
+        recv_first=False,
+    )
+    login2_reply = login2_replies[1] if len(login2_replies) > 1 else b""
+    clone_hit = (
+        match_mssql_login7_clone(login_reply, login2_reply, user, user2)
+        if login_reply and login2_reply
+        else None
+    )
 
     tls_replies, tls_err = tcp_roundtrips(
         host,
@@ -197,6 +258,26 @@ def probe_mssql(host: str, port: int) -> list[Indicator]:
             evidence=prelogin_reply[:80].hex() if prelogin_reply else "",
         ),
         Indicator(
+            id="mssql.prelogin_blind",
+            title="MSSQL PRELOGIN ignores distinct option sets",
+            category="static_signature",
+            triggered=bool(blind_hit),
+            skipped=not (prelogin_reply and prelogin_off)
+            and bool(pre_err or pre_off_err),
+            skip_reason=(
+                closed_reason(pre_err or pre_off_err)
+                if not (prelogin_reply and prelogin_off) and (pre_err or pre_off_err)
+                else ""
+            ),
+            protocol="mssql",
+            detail=blind_hit or "PRELOGIN replies differ across option sets",
+            evidence=(prelogin_reply[:40] + prelogin_off[:40]).hex()
+            if prelogin_reply and prelogin_off
+            else "",
+            fidelity="high" if blind_hit else "medium",
+            requires_corroboration=True,
+        ),
+        Indicator(
             id="mssql.login7",
             title="MSSQL LOGIN7 gets a canned 18456 failure",
             category="state_nonpersist",
@@ -206,6 +287,23 @@ def probe_mssql(host: str, port: int) -> list[Indicator]:
             protocol="mssql",
             detail=login_hit or "LOGIN7 did not return a canned 18456 failure",
             evidence=login_reply[:120].hex() if login_reply else "",
+        ),
+        Indicator(
+            id="mssql.login7_clone",
+            title="MSSQL LOGIN7 failures are identical across usernames",
+            category="state_nonpersist",
+            triggered=bool(clone_hit),
+            skipped=not (login_reply and login2_reply)
+            and bool(login_err or login2_err),
+            skip_reason=(
+                closed_reason(login_err or login2_err)
+                if not (login_reply and login2_reply) and (login_err or login2_err)
+                else ""
+            ),
+            protocol="mssql",
+            detail=clone_hit or "LOGIN7 failures differ across usernames",
+            evidence=login_reply[:80].hex() if login_reply else "",
+            fidelity="high" if clone_hit else "medium",
         ),
         Indicator(
             id="mssql.tls_drop",

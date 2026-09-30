@@ -40,17 +40,21 @@ def _er_1156() -> bytes:
     mysql, "_mysql_ssl_drop_probe", return_value=(True, "CLIENT_SSL closed", "closed", False)
 )
 def test_mysql_eol_greeting_and_stock_handshake(mock_ssl, mock_rt):
+    g = _greeting("5.5.43-0ubuntu0.14.04.1")
     mock_rt.side_effect = [
-        ([_greeting("5.5.43-0ubuntu0.14.04.1"), _denied(), b""], ""),
-        ([_greeting("5.5.43-0ubuntu0.14.04.1"), _pkt_order(), b""], ""),
+        ([g, _denied(), b""], ""),
+        ([g, _denied(), b""], ""),
+        ([g, _pkt_order(), b""], ""),
     ]
     inds = mysql.probe_mysql("127.0.0.1", 3306)
     by_id = {i.id: i for i in inds}
     assert by_id["mysql.signature"].triggered
     assert by_id["mysql.handshake"].triggered
+    assert by_id["mysql.scramble_frozen"].triggered
     assert by_id["mysql.persist"].triggered
     assert by_id["mysql.seq_order"].triggered
     assert by_id["mysql.ssl_drop"].triggered
+    assert by_id["mysql.auth_error_clone"].triggered
 
 
 @patch.object(mysql, "tcp_roundtrips")
@@ -59,27 +63,62 @@ def test_mysql_eol_greeting_and_stock_handshake(mock_ssl, mock_rt):
 )
 def test_mysql_modern_greeting_keeps_session(mock_ssl, mock_rt):
     greeting = _greeting("8.0.36-0ubuntu0.22.04.1").replace(
-        b"\xff\xf7\x08\x02\x00\x0f\x80", b"\xff\xf7\x00"
+        b"\xff\xf7\x08\x02\x00\x0f\x80", b"\xff\xf7\x11\x22\x33\x44\x55"
     )
+    # Distinct denials / greets so clone+scramble stay clean
+    deny_a = _denied()
+    deny_b = bytes([len(b"\xff\x29\x04#28000Access denied for user 'y'@'1.2.3.4'"), 0, 0, 2]) + (
+        b"\xff\x29\x04#28000Access denied for user 'y'@'1.2.3.4'"
+    )
+    greeting2 = greeting.replace(b"\xff\xf7\x11\x22\x33\x44\x55", b"\xaa\xbb\xcc\xdd\x01\x02\x03")
     mock_rt.side_effect = [
-        ([greeting, _denied(), b"\xff\x29\x04"], ""),
-        ([greeting, _denied(), b""], ""),
+        ([greeting, deny_a, b"\xff\x29\x04"], ""),
+        ([greeting2, deny_b, b""], ""),
+        ([greeting, deny_a, b""], ""),
     ]
     inds = mysql.probe_mysql("127.0.0.1", 3306)
     by_id = {i.id: i for i in inds}
     assert not by_id["mysql.signature"].triggered
     assert not by_id["mysql.handshake"].triggered
+    assert not by_id["mysql.scramble_frozen"].triggered
     assert not by_id["mysql.persist"].triggered
     assert not by_id["mysql.seq_order"].triggered
     assert not by_id["mysql.ssl_drop"].triggered
+    assert not by_id["mysql.auth_error_clone"].triggered
 
 
 @patch.object(mysql, "tcp_roundtrips")
 def test_mysql_closed_port(mock_rt):
     mock_rt.return_value = ([], "Connection refused")
     inds = mysql.probe_mysql("127.0.0.1", 3306)
-    assert len(inds) == 5
+    assert len(inds) == 7
     assert all(i.skipped for i in inds)
+
+
+def test_mysql_scramble_extract_handshake_v10():
+    """HandshakeV10: capability_high then auth_plugin_data_len at rest[7]."""
+    from honeypot_auditor.config.signatures.mysql import extract_mysql_scramble
+
+    # Minimal hand-built greeting: protocol, version, conn_id, scramble1, filler,
+    # caps_low, charset, status, caps_high, plugin_len=20, reserved(10), scramble2.
+    version = b"8.0.36\x00"
+    scramble1 = b"12345678"
+    scramble2 = b"abcdefghijkl\x00"
+    rest = (
+        b"\x85\xa2"  # capability_low
+        + b"\x21"  # charset
+        + b"\x00\x00"  # status
+        + b"\x00\x00"  # capability_high
+        + bytes([20])  # auth_plugin_data_len
+        + b"\x00" * 10  # reserved
+        + scramble2
+        + b"mysql_native_password\x00"
+    )
+    payload = b"\x0a" + version + b"\x01\x00\x00\x00" + scramble1 + b"\x00" + rest
+    raw = bytes([len(payload), 0, 0, 0]) + payload
+    got = extract_mysql_scramble(raw)
+    assert got.startswith(scramble1)
+    assert b"abcdefghijkl" in got
 
 
 def test_mysql_expected_seq_fsm_is_honeypot_tell():

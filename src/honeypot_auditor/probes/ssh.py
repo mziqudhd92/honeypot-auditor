@@ -39,8 +39,18 @@ _SSH_SKIP = (
         "SSH exec channel missing after login (fake shell only)",
         "state_nonpersist",
     ),
+    (
+        "ssh.sftp_subsystem",
+        "SSH sftp subsystem missing after login (shell-only lure)",
+        "state_nonpersist",
+    ),
     ("ssh.uname", "SSH uname/cpuinfo / Cowrie identity", "static_signature"),
     ("ssh.whoami", "SSH whoami/prompt is the random lure account", "static_signature"),
+    (
+        "ssh.direct_tcpip_hollow",
+        "SSH direct-tcpip accepted then immediately hollow",
+        "static_signature",
+    ),
     ("ssh.session_persist", "SSH filesystem does not persist across sessions", "state_nonpersist"),
 )
 
@@ -156,6 +166,10 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
     cpuinfo = ""
     transcript = ""
     persist_out = ""
+    sftp_denied = False
+    sftp_detail = ""
+    tcpip_hollow = False
+    tcpip_detail = ""
     err = hs_err if (hs_err and not hs_raw) else ""
     client = paramiko.SSHClient()
     # This is a host-key fingerprinting probe, not a trusted SSH client session.
@@ -201,6 +215,8 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
                 chunks.append(_ssh_exec(client, f"echo {canary} > {canary_path}"))
                 chunks.append(_ssh_exec(client, f"cat {canary_path}"))
                 transcript = "\n".join(chunks)
+            sftp_denied, sftp_detail = _ssh_sftp_probe(client)
+            tcpip_hollow, tcpip_detail = _ssh_direct_tcpip_probe(client)
     except Exception as exc:
         err = str(exc)
     finally:
@@ -282,6 +298,31 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
             protocol="ssh",
         ),
         Indicator(
+            id="ssh.sftp_subsystem",
+            title="SSH sftp subsystem missing after login (shell-only lure)",
+            category="state_nonpersist",
+            triggered=sftp_denied,
+            protocol="ssh",
+            skipped=not auth_ok,
+            skip_reason="" if auth_ok else "no session (auth failed)",
+            detail=sftp_detail
+            or (
+                "sftp subsystem unavailable after login"
+                if sftp_denied
+                else "sftp subsystem opened after login"
+            ),
+            evidence=sftp_detail[:400],
+            fidelity="high" if sftp_denied else "medium",
+        )
+        if auth_ok
+        else skipped_indicator(
+            "ssh.sftp_subsystem",
+            "SSH sftp subsystem missing after login (shell-only lure)",
+            "state_nonpersist",
+            "no session (auth failed)",
+            protocol="ssh",
+        ),
+        Indicator(
             id="ssh.uname",
             title="SSH uname/cpuinfo / Cowrie identity",
             category="static_signature",
@@ -324,6 +365,31 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
             protocol="ssh",
         ),
         Indicator(
+            id="ssh.direct_tcpip_hollow",
+            title="SSH direct-tcpip accepted then immediately hollow",
+            category="static_signature",
+            triggered=tcpip_hollow,
+            protocol="ssh",
+            skipped=not auth_ok,
+            skip_reason="" if auth_ok else "no session (auth failed)",
+            detail=tcpip_detail
+            or (
+                "direct-tcpip to discard accepted then EOF"
+                if tcpip_hollow
+                else "direct-tcpip not a hollow accept"
+            ),
+            evidence=tcpip_detail[:400],
+            fidelity="high" if tcpip_hollow else "medium",
+        )
+        if auth_ok
+        else skipped_indicator(
+            "ssh.direct_tcpip_hollow",
+            "SSH direct-tcpip accepted then immediately hollow",
+            "static_signature",
+            "no session (auth failed)",
+            protocol="ssh",
+        ),
+        Indicator(
             id="ssh.session_persist",
             title="SSH filesystem does not persist across sessions",
             category="state_nonpersist",
@@ -356,6 +422,63 @@ def probe_ssh(host: str, port: int) -> list[Indicator]:
 def _exec_looks_denied(text: str) -> bool:
     low = (text or "").lower()
     return low.startswith("(exec failed:") or "channel closed" in low
+
+
+def _ssh_sftp_probe(client) -> tuple[bool, str]:
+    """Return (denied, detail). Shell-only lures often reject the sftp subsystem."""
+    try:
+        sftp = client.open_sftp()
+    except Exception as exc:
+        return True, f"sftp subsystem failed: {exc}"
+    with suppress(Exception):
+        sftp.close()
+    return False, "sftp subsystem opened"
+
+
+def _ssh_direct_tcpip_probe(client) -> tuple[bool, str]:
+    """direct-tcpip to 127.0.0.1:9 — accept-then-immediate-EOF is a hollow forward.
+
+    Real OpenSSH refuses or fails the channel open when nothing listens / forwarding
+    is disabled. Shell-only lures often accept the channel then EOF without a real
+    TCP connect. Accept alone is not enough (bastions may confirm then close).
+    """
+    transport = client.get_transport()
+    if transport is None:
+        return False, "no transport for direct-tcpip"
+    chan = None
+    try:
+        chan = transport.open_channel(
+            "direct-tcpip",
+            ("127.0.0.1", 9),
+            ("127.0.0.1", 0),
+            timeout=min(4.0, settings.timeout_seconds),
+        )
+    except Exception as exc:
+        return False, f"direct-tcpip rejected ({exc})"
+    try:
+        with suppress(Exception):
+            chan.settimeout(0.5)
+        # Hollow: channel opens then immediately EOF / closes with no data path.
+        time.sleep(0.15)
+        closed_soon = bool(getattr(chan, "closed", False) or getattr(chan, "eof_received", False))
+        if not closed_soon:
+            try:
+                chunk = chan.recv(1)
+                if chunk == b"" and (
+                    getattr(chan, "closed", False) or getattr(chan, "eof_received", False)
+                ):
+                    closed_soon = True
+            except Exception:
+                closed_soon = bool(
+                    getattr(chan, "closed", False) or getattr(chan, "eof_received", False)
+                )
+        if closed_soon:
+            return True, "direct-tcpip to 127.0.0.1:9 accepted then immediate EOF (hollow)"
+        return False, "direct-tcpip channel stayed open after accept"
+    finally:
+        with suppress(Exception):
+            if chan is not None:
+                chan.close()
 
 
 def _ssh_exec(client, command: str) -> str:

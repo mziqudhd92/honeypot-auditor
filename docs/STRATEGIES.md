@@ -99,9 +99,9 @@ non-compliance under **static_signature** only: unicast `M-SEARCH` framing,
 HTTP header facades, `ST` echo fidelity, bitwise-identical response clones,
 corroboration-gated stock `SERVER` strings and loopback `LOCATION` URLs,
 illegal-method stubs, required empty `EXT` / `CACHE-CONTROL max-age`,
-USN↔ST coherence, and absolute `http(s)` `LOCATION` URIs. Never joins
-multicast groups or floods `NOTIFY`. See
-[`docs/udp/SSDP.md`](udp/SSDP.md) and
+USN↔ST coherence, absolute `http(s)` `LOCATION` URIs, missing-`MAN` answers,
+and corroboration-gated nonsense-`HOST` answers. Never joins multicast groups
+or floods `NOTIFY`. See [`docs/udp/SSDP.md`](udp/SSDP.md) and
 [UPnP 1.0](https://openconnectivity.org/upnp/specs/UPnP_architecture_v1.0.pdf).
 
 The IPP/CUPS engine speaks HTTP (with TLS fallback) on **631** / lab **1631**
@@ -128,10 +128,10 @@ stand-in, noreply façade). Never sends `flush_all`; probe keys use an
 
 The Redis engine speaks RESP on TCP/6379 with **protocol non-compliance**
 detection: dual random `AUTH` (decisive when both `+OK`), reconnect key
-persistence + `DBSIZE` coherence, plus split static tells (`PING` stub,
-`COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP`,
+persistence + `DBSIZE` coherence + `EX` TTL enforcement, plus split static tells
+(`PING` stub, `COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP`,
 missing/mismatched `ECHO`/`SELECT`, OpenCanary AUTH+NOAUTH wall, `TYPE`/`INCR`
-facades, wrong-arity `GET`, QUIT zombie). Never sends
+facades, wrong-arity `GET`, `MULTI`/`EXEC` stubs, QUIT zombie). Never sends
 `FLUSHALL`/`FLUSHDB`/`CONFIG SET`/`SCRIPT LOAD`; probe keys use an `hpaudit_`
 prefix and are deleted. See [`docs/tcp/REDIS.md`](tcp/REDIS.md) and the
 [Redis protocol spec](https://redis.io/docs/reference/protocol-spec/).

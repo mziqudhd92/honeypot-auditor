@@ -4,24 +4,33 @@ from honeypot_auditor.config.signatures.common import claimed_os_from_banner
 from honeypot_auditor.config.signatures.ftp import (
     match_ftp_auth_lure,
     match_ftp_command_desert,
+    match_ftp_feat_lie,
     match_ftp_port_bounce,
+    match_ftp_quit_zombie,
     match_ftp_stale_banner,
 )
 from honeypot_auditor.config.signatures.git import match_git_always_missing
 from honeypot_auditor.config.signatures.http import match_http_proxy_lure, match_tls_stock_cert
 from honeypot_auditor.config.signatures.mongo import (
+    match_mongo_hello_clone,
     match_mongo_op_msg_reply,
     match_mongo_ping_unauthorized,
+    match_mongo_response_to,
     match_mongo_stock_hello,
 )
 from honeypot_auditor.config.signatures.mssql import (
     match_mssql_canned_prelogin,
     match_mssql_login7_canned,
+    match_mssql_login7_clone,
+    match_mssql_prelogin_blind,
     match_mssql_prelogin_encrypt,
 )
 from honeypot_auditor.config.signatures.mysql import (
+    extract_mysql_scramble,
+    match_mysql_auth_error_clone,
     match_mysql_eol_banner,
     match_mysql_pkt_order,
+    match_mysql_scramble_frozen,
     match_mysql_stock_handshake,
 )
 from honeypot_auditor.config.signatures.nmap import match_nmap_service_tell
@@ -49,8 +58,10 @@ from honeypot_auditor.config.signatures.redis import (
     match_redis_help_client,
     match_redis_incr_stub,
     match_redis_info_template,
+    match_redis_multi_exec_stub,
     match_redis_ping_stub,
     match_redis_quit_zombie,
+    match_redis_ttl_alive,
     match_redis_type_stub,
     match_redis_unknown_core,
 )
@@ -75,31 +86,42 @@ from honeypot_auditor.config.signatures.ssh import (
     normalize_uname,
 )
 from honeypot_auditor.config.signatures.telnet import (
+    match_telnet_ayt_stub,
     match_telnet_banner,
     match_telnet_blind_option,
     match_telnet_canned_reject,
+    match_telnet_cmd_desert,
     match_telnet_cowrie_preamble,
     match_telnet_option_spray,
 )
 
 __all__ = [
     "claimed_os_from_banner",
+    "extract_mysql_scramble",
     "match_cowrie_identity",
     "match_cpuinfo_signature",
     "match_ftp_auth_lure",
     "match_ftp_command_desert",
+    "match_ftp_feat_lie",
     "match_ftp_port_bounce",
+    "match_ftp_quit_zombie",
     "match_ftp_stale_banner",
     "match_git_always_missing",
     "match_http_proxy_lure",
+    "match_mongo_hello_clone",
     "match_mongo_op_msg_reply",
     "match_mongo_ping_unauthorized",
+    "match_mongo_response_to",
     "match_mongo_stock_hello",
     "match_mssql_canned_prelogin",
     "match_mssql_login7_canned",
+    "match_mssql_login7_clone",
+    "match_mssql_prelogin_blind",
     "match_mssql_prelogin_encrypt",
+    "match_mysql_auth_error_clone",
     "match_mysql_eol_banner",
     "match_mysql_pkt_order",
+    "match_mysql_scramble_frozen",
     "match_mysql_stock_handshake",
     "match_nmap_service_tell",
     "match_postgres_auth_c_blob",
@@ -118,8 +140,10 @@ __all__ = [
     "match_redis_help_client",
     "match_redis_incr_stub",
     "match_redis_info_template",
+    "match_redis_multi_exec_stub",
     "match_redis_ping_stub",
     "match_redis_quit_zombie",
+    "match_redis_ttl_alive",
     "match_redis_type_stub",
     "match_redis_unknown_core",
     "match_smb_bogus_pipe",
@@ -132,9 +156,11 @@ __all__ = [
     "match_smtp_lost_envelope",
     "match_smtp_placeholder_identity",
     "match_ssh_banner",
+    "match_telnet_ayt_stub",
     "match_telnet_banner",
     "match_telnet_blind_option",
     "match_telnet_canned_reject",
+    "match_telnet_cmd_desert",
     "match_telnet_cowrie_preamble",
     "match_telnet_option_spray",
     "match_tls_stock_cert",

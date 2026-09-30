@@ -42,7 +42,7 @@ def _ssh_exec_dispatch(_client, cmd: str) -> str:
 def test_ssh_skipped_without_paramiko():
     with patch.object(ssh, "optional_import", return_value=None):
         inds = ssh.probe_ssh("127.0.0.1", 22)
-    assert len(inds) == 8
+    assert len(inds) == 10
     assert all(i.skipped for i in inds)
     assert {i.id for i in inds} == {
         "ssh.banner",
@@ -50,8 +50,10 @@ def test_ssh_skipped_without_paramiko():
         "ssh.password_only",
         "ssh.arbitrary_auth",
         "ssh.exec_denied",
+        "ssh.sftp_subsystem",
         "ssh.uname",
         "ssh.whoami",
+        "ssh.direct_tcpip_hollow",
         "ssh.session_persist",
     }
 
@@ -105,7 +107,7 @@ def test_ssh_connection_error(mock_import, mock_hs, mock_methods):
     client.get_transport.return_value = None
 
     inds = ssh.probe_ssh("127.0.0.1", 22)
-    assert len(inds) == 8
+    assert len(inds) == 10
     assert all(i.skipped for i in inds)
 
 
@@ -248,3 +250,34 @@ def test_find_kexinit_skips_banner_prefix():
     assert "OpenSSH_8.9" in banner
     assert kex is not None
     assert kex.host_key.startswith("ssh-rsa")
+
+
+def test_ssh_direct_tcpip_hollow_requires_eof():
+    client = MagicMock()
+    transport = MagicMock()
+    client.get_transport.return_value = transport
+
+    live = MagicMock()
+    live.closed = False
+    live.eof_received = False
+    live.recv.return_value = b"x"
+    transport.open_channel.return_value = live
+    hollow, detail = ssh._ssh_direct_tcpip_probe(client)
+    assert not hollow
+    assert "stayed open" in detail
+
+    dead = MagicMock()
+    dead.closed = True
+    dead.eof_received = True
+    transport.open_channel.return_value = dead
+    hollow, detail = ssh._ssh_direct_tcpip_probe(client)
+    assert hollow
+    assert "EOF" in detail or "hollow" in detail.lower()
+
+
+def test_ssh_sftp_subsystem_denied():
+    client = MagicMock()
+    client.open_sftp.side_effect = OSError("Channel closed.")
+    denied, detail = ssh._ssh_sftp_probe(client)
+    assert denied
+    assert "failed" in detail.lower()
