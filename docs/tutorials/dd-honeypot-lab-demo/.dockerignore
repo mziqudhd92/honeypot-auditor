@@ -1,0 +1,7 @@
+# Runtime artifacts the honeypot writes while running (recreated on startup)
+**/data_store.db
+**/bound_port
+.DS_Store
+*.json
+*.txt
+TUTORIAL.md

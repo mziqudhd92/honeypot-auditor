@@ -1,0 +1,19 @@
+{"command": "ls", "response": "bin      etc      home     var      tmp      usr"}
+{"command": "pwd", "response": "/"}
+{"command": "whoami", "response": "admin"}
+{"command": "id", "response": "uid=0(admin) gid=0(root)"}
+{"command": "uname -a", "response": "Linux D-Link 4.19.183 #1 SMP Wed Jan 5 18:33:17 CST 2022 armv7l GNU/Linux"}
+{"command": "ps", "response": "  PID USER     TIME  COMMAND\n    1 admin     0:01 init\n   45 admin     0:00 telnetd\n   52 admin     0:00 -ash"}
+{"command": "cat /etc/passwd", "response": "root:x:0:0:root:/root:/bin/sh\nadmin:x:1000:1000:admin:/home/admin:/bin/sh"}
+{"command": "uptime", "response": " 21:14:53 up 3 days,  4:21,  load average: 0.05, 0.08, 0.12"}
+{"command": "ifconfig", "response": "eth0      Link encap:Ethernet  HWaddr 00:1D:7E:0B:C4:83\n          inet addr:192.168.0.1  Bcast:192.168.0.255  Mask:255.255.255.0"}
+{"command": "hostname", "response": "D-Link"}
+{"command": "echo $((7*9))", "response": "63"}
+{"command": "cat /etc/hostname", "response": "D-Link"}
+{"command": "cat /proc/cpuinfo", "response": "processor       : 0\nmodel name      : ARMv7 Processor rev 5 (v7l)\nBogoMIPS        : 120.00\nFeatures        : half thumb fastmult vfp edsp neon\nCPU implementer : 0x41\nCPU architecture: 7"}
+{"command": "tty", "response": "/dev/pts/0"}
+{"command": "cat /etc/passwd | grep root | awk '{print $1}'", "response": "root:x:0:0:root:/root:/bin/sh"}
+{"command": "ls -l /dev/null /dev/ptmx /dev/urandom 2>/dev/null", "response": "crw-rw-rw-    1 root     root       1,   3 Jan  1 00:00 /dev/null\ncrw-rw-rw-    1 root     root       5,   2 Jan  1 00:00 /dev/ptmx\ncrw-rw-rw-    1 root     root       1,   9 Jan  1 00:00 /dev/urandom"}
+{"command": "cat /sys/class/dmi/id/product_name 2>/dev/null", "response": "cat: can't open '/sys/class/dmi/id/product_name': No such file or directory"}
+{"command": "ls -l", "response": "drwxr-xr-x    2 admin    admin         4096 Jan  1  2022 bin\ndrwxr-xr-x    4 admin    admin         4096 Jan  1  2022 etc\ndrwxr-xr-x    2 admin    admin         4096 Jan  1  2022 home\ndrwxr-xr-x    2 admin    admin         4096 Jan  1  2022 tmp\ndrwxr-xr-x    3 admin    admin         4096 Jan  1  2022 usr\ndrwxr-xr-x    2 admin    admin         4096 Jan  1  2022 var"}
+{"command": "cat /proc/version", "response": "Linux version 4.19.183 (gcc version 8.3.0) #1 SMP Wed Jan 5 18:33:17 CST 2022"}

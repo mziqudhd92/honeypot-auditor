@@ -1,0 +1,13 @@
+{"command": "SELECT version()", "response": "[{\"version\": \"PostgreSQL 15.4 (Debian 15.4-1.pgdg120+1) on aarch64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14) 12.2.0, 64-bit\"}]"}
+{"command": "select version()", "response": "[{\"version\": \"PostgreSQL 15.4 (Debian 15.4-1.pgdg120+1) on aarch64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14) 12.2.0, 64-bit\"}]"}
+{"command": "SELECT current_user", "response": "[{\"current_user\": \"postgres\"}]"}
+{"command": "select current_user", "response": "[{\"current_user\": \"postgres\"}]"}
+{"command": "SELECT current_database()", "response": "[{\"current_database\": \"postgres\"}]"}
+{"command": "select current_database()", "response": "[{\"current_database\": \"postgres\"}]"}
+{"command": "SELECT datname FROM pg_database", "response": "[{\"datname\": \"postgres\"}, {\"datname\": \"template1\"}, {\"datname\": \"template0\"}]"}
+{"command": "select datname from pg_database", "response": "[{\"datname\": \"postgres\"}, {\"datname\": \"template1\"}, {\"datname\": \"template0\"}]"}
+{"command": "SELECT usename FROM pg_user", "response": "[{\"usename\": \"postgres\"}]"}
+{"command": "select usename from pg_user", "response": "[{\"usename\": \"postgres\"}]"}
+{"command": "SELECT table_name FROM information_schema.tables WHERE table_schema='public'", "response": "[]"}
+{"command": "SHOW server_version", "response": "[{\"server_version\": \"15.4\"}]"}
+{"command": "show server_version", "response": "[{\"server_version\": \"15.4\"}]"}

@@ -1,0 +1,14 @@
+services:
+  dd-honeypot:
+    build: .
+    image: dd-honeypot-lab:latest
+    container_name: dd-honeypot-lab
+    ports:
+      # host:container — Redis and PostgreSQL live on 6380/5433 on the host
+      # because 6379/5432 are commonly taken by real local dev services.
+      - "127.0.0.1:22:22"     # SSH
+      - "127.0.0.1:23:23"     # Telnet
+      - "127.0.0.1:3306:3306" # MySQL
+      - "127.0.0.1:6380:6379" # Redis
+      - "127.0.0.1:5433:5432" # PostgreSQL
+    restart: unless-stopped
