@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- dd-honeypot beginner lab (`docs/tutorials/dd-honeypot-lab-demo/`): canonical
+  path-only onboarding, SSH host port **2222**, accurate Telnet/deep expectations,
+  expected Bedrock/MySQL log-noise note; drop `demo/` recorder scripts and local
+  `.dockerignore` / `.gitignore`
+
 ### Fixed
 
 - `mssql.prelogin_blind` canned gate uses nmap/canned shape only (not

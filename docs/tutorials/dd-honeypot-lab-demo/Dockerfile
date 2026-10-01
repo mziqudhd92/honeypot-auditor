@@ -4,11 +4,12 @@
 # on top of the official DataTrap image, so one `docker build` + one
 # `docker run` gives you a fully configured local honeypot to audit.
 #
-# Build:   docker build -t dd-honeypot-lab .
-# Run:     docker run -d --name dd-honeypot-lab \
-#            -p 127.0.0.1:22:22 -p 127.0.0.1:23:23 -p 127.0.0.1:3306:3306 \
-#            -p 127.0.0.1:6380:6379 -p 127.0.0.1:5433:5432 \
-#            dd-honeypot-lab
+# Lab path: docs/tutorials/dd-honeypot-lab-demo/
+# Build:    docker build -t dd-honeypot-lab .
+# Run:      docker run -d --name dd-honeypot-lab \
+#             -p 127.0.0.1:2222:22 -p 127.0.0.1:23:23 -p 127.0.0.1:3306:3306 \
+#             -p 127.0.0.1:6380:6379 -p 127.0.0.1:5433:5432 \
+#             dd-honeypot-lab
 
 FROM ghcr.io/thalesgroup/dd-honeypot:latest
 

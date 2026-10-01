@@ -1,8 +1,0 @@
-# Runtime artifacts the honeypot writes when the configs are run from a
-# volume mount (regenerated on every container start)
-honeypot/**/data_store.db
-honeypot/**/bound_port
-.DS_Store
-
-# Local audit reports produced by following the tutorial
-honeypot-audit-*.json
