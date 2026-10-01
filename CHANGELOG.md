@@ -6,17 +6,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Changed
-
-- README / site live demo: show **v1.0.3** dd-honeypot (DataTrap) GIF instead of the
-  v1.0.0 three-face lab tour (`docs/tutorials/dd-honeypot-lab-demo/…`)
-- dd-honeypot beginner lab (`docs/tutorials/dd-honeypot-lab-demo/`): canonical
-  path-only onboarding, SSH host port **2222**, accurate Telnet/deep expectations,
-  expected Bedrock/MySQL log-noise note; drop `demo/` recorder scripts and local
-  `.dockerignore` / `.gitignore`
-
 ### Fixed
 
+- CI: ruff import order in `tests/test_mongodb.py`; security workflow audits
+  product deps before installing Semgrep (avoids Semgrep’s pinned PyJWT CVE noise)
 - `mssql.prelogin_blind` canned gate uses nmap/canned shape only (not
   `ENCRYPT_NOT_SUP`), avoiding double-scoring honest SQL Server NOT_SUP speakers
 - SSH `direct-tcpip` hollow tell requires immediate empty `recv` (EOF); bastion
@@ -25,6 +18,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - MSSQL/MySQL auth-error clones require user-attributed fixed embedding; probes
   use distinct `entropy_varied_creds`
 - Telnet AYT scores post-AYT bytes only (banner drained via `tcp_roundtrips`)
+
+### Changed
+
+- README / site live demo: show **v1.0.3** dd-honeypot (DataTrap) GIF instead of the
+  v1.0.0 three-face lab tour (`docs/tutorials/dd-honeypot-lab-demo/…`)
+- dd-honeypot beginner lab (`docs/tutorials/dd-honeypot-lab-demo/`): canonical
+  path-only onboarding, SSH host port **2222**, accurate Telnet/deep expectations,
+  expected Bedrock/MySQL log-noise note; drop `demo/` recorder scripts and local
+  `.dockerignore` / `.gitignore`
 
 ## [1.0.3] - 2026-09-30
 
