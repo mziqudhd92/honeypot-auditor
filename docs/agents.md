@@ -121,9 +121,12 @@ docs/                   GitHub Pages site + llms/agents briefs
 
 Animated GIFs (authorized lab captures):
 
+- https://mziqudhd92.github.io/honeypot-auditor/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif (v1.0.3 · dd-honeypot / DataTrap)
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-lab-tour-v1.0.0.gif
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-cowrie-demo.gif
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-dionaea-demo.gif
+
+Beginner lab: `docs/tutorials/dd-honeypot-lab-demo/TUTORIAL.md`
 
 ## Security
 

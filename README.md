@@ -21,16 +21,16 @@
 
 ```
   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-  █  >>> LIVE DEMO · v1.0.0 · 3-FACE LAB TOUR · -v / --deep / TARPIT <<<   █
+  █  >>> LIVE DEMO · v1.0.3 · DD-HONEYPOT · 5 SERVICES · -v / --deep <<<   █
   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 ```
 
-![Lab tour demo v1.0.0 — Cowrie, OpenCanary/dd-stack, tarpit](docs/demo/honeypot-auditor-lab-tour-v1.0.0.gif)
+![dd-honeypot (DataTrap) demo v1.0.3 — SSH, Telnet, MySQL, Redis, PostgreSQL](docs/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif)
 
 ```
-  "three faces, three lenses: KEX facade with -v, deep on the buffet,
-   silent-accept on the tarpit. same fingerprinter — different tells."
-                                              — lab tour · v1.0.0 · authorized only
+  "five DataTrap faces on loopback: map the ports, run -v, then --deep.
+   Honeyscore 100% — Confirmed Honeypot. same fingerprinter, new decoy."
+                        — dd-honeypot lab · v1.0.3 · authorized only
 ```
 
 ```

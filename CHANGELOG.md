@@ -8,6 +8,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- README / site live demo: show **v1.0.3** dd-honeypot (DataTrap) GIF instead of the
+  v1.0.0 three-face lab tour (`docs/tutorials/dd-honeypot-lab-demo/…`)
 - dd-honeypot beginner lab (`docs/tutorials/dd-honeypot-lab-demo/`): canonical
   path-only onboarding, SSH host port **2222**, accurate Telnet/deep expectations,
   expected Bedrock/MySQL log-noise note; drop `demo/` recorder scripts and local
