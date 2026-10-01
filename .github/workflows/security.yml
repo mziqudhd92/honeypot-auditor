@@ -17,14 +17,21 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install security toolchain
-        run: pip install -e ".[security]"
+      # Audit the product deps first. Semgrep currently pins PyJWT<2.14 (CVE stream
+      # in pip-audit); install it only after the audit so CI is not blocked on a
+      # toolchain pin outside this project's dependency tree.
+      - name: Install project and audit toolchain
+        run: |
+          pip install -e ".[full,dev]"
+          pip install "bandit>=1.9" "detect-secrets>=1.5" "pip-audit>=2.10"
+      - name: Dependency vulnerabilities
+        run: pip-audit
+      - name: Install Semgrep
+        run: pip install "semgrep>=1.176"
       - name: Semgrep
         run: semgrep scan --config p/python --config p/security-audit --config p/secrets --error --metrics off .
       - name: Bandit
         run: bandit -c pyproject.toml -r src honeypot-auditor.py
-      - name: Dependency vulnerabilities
-        run: pip-audit
       - name: Secret candidates
         shell: bash
         run: |

@@ -118,8 +118,5 @@ def test_mongo_matchers():
 
 
 def test_mongo_response_to_ignores_non_mongo_opcode():
-    from honeypot_auditor.config.signatures.mongo import match_mongo_response_to
-    import struct
-
     garbage = struct.pack("<IIII", 32, 1, 99, 0) + b"\x00" * 16  # opcode 0
     assert match_mongo_response_to(garbage, 1) is None
