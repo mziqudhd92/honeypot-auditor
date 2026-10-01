@@ -55,3 +55,58 @@ def match_mssql_login7_canned(raw: bytes) -> str | None:
         if b"Login failed" in data or "Login failed".encode("utf-16le") in data:
             return "canned LOGIN7 failure with fixed trailer"
     return None
+
+
+def _mssql_looks_like_login_fail(raw: bytes) -> bool:
+    data = raw or b""
+    return bool(data) and (
+        b"Login failed" in data or "Login failed".encode("utf-16le") in data or b"\xfd\x02" in data
+    )
+
+
+def match_mssql_login7_clone(raw_a: bytes, raw_b: bytes, user_a: str, user_b: str) -> str | None:
+    """Two LOGIN7 failures with distinct usernames return identical TDS payloads.
+
+    Real SQL Server embeds the attempted username in the 18456 error (UTF-16LE).
+    Identical fixed "Login failed for user …" templates (wrong/fixed user) score.
+    Generic identical failures with no user-attributed wording are too weak alone.
+    """
+    a, b = raw_a or b"", raw_b or b""
+    if not a or not b or a != b:
+        return None
+    if not (_mssql_looks_like_login_fail(a) and _mssql_looks_like_login_fail(b)):
+        return None
+    if not user_a or not user_b or user_a == user_b:
+        return None
+    ua = user_a.encode("utf-16le")
+    ub = user_b.encode("utf-16le")
+    if ua in a or ub in a:
+        # Identical bytes that somehow embed both users is still impossible; treat as clone.
+        return "LOGIN7 failures bitwise-identical across distinct usernames"
+    # Canned skins often embed a fixed lure account ("sa", "test", …).
+    if b"for user" in a.lower() or "for user".encode("utf-16le") in a:
+        return "LOGIN7 failures bitwise-identical (fixed user embedding)"
+    return None
+
+
+def match_mssql_prelogin_blind(
+    raw_a: bytes, raw_b: bytes, *, canned_hint: bool = False
+) -> str | None:
+    """Distinct PRELOGIN option sets get a bitwise-identical canned reply.
+
+    Real SQL Server often returns the same ENCRYPT_NOT_SUP template for encrypt
+    ON vs OFF, so identity alone is not scored unless the reply already looks
+    like a canned/nmap lure (``canned_hint`` from ``match_mssql_canned_prelogin``
+    only — never from ENCRYPT_NOT_SUP alone). Callers should also set
+    ``requires_corroboration``.
+    """
+    a, b = raw_a or b"", raw_b or b""
+    if len(a) < 8 or len(b) < 8:
+        return None
+    if a[0] != 0x04 or b[0] != 0x04:
+        return None
+    if a != b:
+        return None
+    if not canned_hint:
+        return None
+    return "PRELOGIN replies identical for distinct option sets (canned template)"

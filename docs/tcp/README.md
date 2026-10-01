@@ -58,13 +58,17 @@ Lab aliases come from the `docker-research` / `both` presets in
 - Every engine uses the same three basic strategies when enabled:
   **arbitrary_auth**, **state_nonpersist**, **static_signature** (see
   `PROTOCOL_STRATEGIES` in config). Empty strategy strings mean that axis is
-  inactive for the protocol.
+  inactive for the protocol. Strategy-slot counts in README/tables are axis
+  counts — not indicator counts. Recent expansions add two indicators each on
+  SSH, Telnet, FTP, MySQL, MSSQL, MongoDB, and Redis without changing those
+  slot totals (see the per-protocol guides).
 - Ports and strategies stay in **config** — probe modules never feed config
   (avoids circular imports).
 - Prefer protocol non-compliance over product honeypot brand IOCs.
 - Closed / refused ports → suite skip (`closed_reason`), not a honeypot hit.
 - `--safe-mode` limits each engine to framing / low-impact static checks; see
-  the per-protocol guide.
+  the per-protocol guide. MySQL / MSSQL / MongoDB safe-mode is handshake /
+  greeting / hello speakership only (multi-roundtrip auth clones are skipped).
 
 ## UDP siblings
 

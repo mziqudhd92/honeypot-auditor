@@ -51,3 +51,54 @@ def match_ftp_auth_lure(
         if tell.lower() in low:
             return tell
     return None
+
+
+def match_ftp_feat_lie(feat_resp: str, follow_resp: str, *, advertised: str) -> str | None:
+    """FEAT advertises a capability that the follow-up verb rejects as unknown."""
+    feat = feat_resp or ""
+    follow = follow_resp or ""
+    if not advertised or advertised.upper() not in feat.upper():
+        return None
+    low = follow.lower()
+    code = follow.strip().split(None, 1)[0] if follow.strip() else ""
+    if code.startswith("5") and ("unknown" in low or "unrecognized" in low or "not understood" in low):
+        return f"FEAT advertises {advertised} but follow-up is {code} unknown"
+    return None
+
+
+def match_ftp_quit_zombie(quit_resp: str, post_quit: str) -> str | None:
+    """After QUIT 221, the same TCP session still answers a live command.
+
+    Closing-class 4xx (421 Service not available) and transport errors are clean —
+    only a still-open control channel that returns a normal reply codes as a zombie.
+    """
+    quit_text = (quit_resp or "").strip()
+    post = (post_quit or "").strip()
+    if not quit_text.startswith("221"):
+        return None
+    if not post:
+        return None
+    # Transport / closed-socket noise from ftplib exceptions.
+    low = post.lower()
+    if any(
+        tok in low
+        for tok in (
+            "broken pipe",
+            "connection reset",
+            "connection refused",
+            "timed out",
+            "eof",
+            "not connected",
+            "socket is not connected",
+        )
+    ):
+        return None
+    code = post.split(None, 1)[0] if post else ""
+    if not code.isdigit() or len(code) != 3:
+        return None
+    # 421/425/426 are closing / transfer-abort class — not a live zombie session.
+    if code.startswith("42"):
+        return None
+    if code.startswith(("2", "5")):
+        return f"session still answers after QUIT ({post.splitlines()[0][:60]})"
+    return None

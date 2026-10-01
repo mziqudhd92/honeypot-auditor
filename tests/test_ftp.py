@@ -47,7 +47,7 @@ def test_ftp_reconnect_failure_still_returns_banner():
     with patch.object(ftp, "optional_import", return_value=mock_ftplib):
         inds = ftp.probe_ftp("127.0.0.1", 8021)
 
-    assert len(inds) == 6
+    assert len(inds) == 8
     persist = next(i for i in inds if i.id == "ftp.persist")
     banner = next(i for i in inds if i.id == "ftp.banner")
     lure = next(i for i in inds if i.id == "ftp.auth_lure")
@@ -167,3 +167,17 @@ def test_ftp_stock_test_account_pasv_mismatch_and_broken_quit():
     assert by_id["ftp.banner"].triggered
     assert by_id["ftp.bounce"].triggered
     assert not by_id["ftp.desert"].triggered
+
+
+def test_ftp_feat_lie_and_quit_zombie_matchers():
+    from honeypot_auditor.config.signatures.ftp import match_ftp_feat_lie, match_ftp_quit_zombie
+
+    assert match_ftp_feat_lie(
+        "211-Features:\n MLSD\n211 End",
+        "500 Unknown command",
+        advertised="MLSD",
+    )
+    assert match_ftp_feat_lie("211 End", "500 Unknown", advertised="MLSD") is None
+    assert match_ftp_quit_zombie("221 Goodbye", "200 NOOP ok")
+    assert match_ftp_quit_zombie("221 Goodbye", "421 Service not available") is None
+    assert match_ftp_quit_zombie("221 Goodbye", "Broken pipe") is None

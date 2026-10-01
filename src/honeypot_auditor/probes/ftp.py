@@ -1,6 +1,8 @@
 """FTP fingerprint engine.
 
-Strategies: arbitrary auth (stock decoy login) · state non-persistence (PASV mismatch, canned 530, STOR) · static signature (stock 220).
+Strategies: arbitrary auth (stock decoy login) · state non-persistence (PASV
+mismatch, canned 530, STOR, FEAT/PWD desert, QUIT zombie) · static signature
+(stock 220, PORT bounce, FEAT capability lie).
 """
 
 from __future__ import annotations
@@ -17,7 +19,9 @@ from honeypot_auditor.config import (
     FTP_WELCOME_TELLS,
     match_ftp_auth_lure,
     match_ftp_command_desert,
+    match_ftp_feat_lie,
     match_ftp_port_bounce,
+    match_ftp_quit_zombie,
     match_ftp_stale_banner,
 )
 from honeypot_auditor.models import Indicator, optional_import, skipped_indicator
@@ -32,6 +36,12 @@ _FTP_SKIP = (
     ("ftp.arbitrary_auth", "FTP accepts random or stock decoy credentials", "arbitrary_auth"),
     ("ftp.bounce", "FTP PORT accepts an external bounce address", "static_signature"),
     ("ftp.desert", "FTP command set is a shallow unknown-command desert", "state_nonpersist"),
+    (
+        "ftp.feat_lie",
+        "FTP FEAT advertises a capability the follow-up rejects",
+        "static_signature",
+    ),
+    ("ftp.quit_zombie", "FTP still answers after QUIT", "state_nonpersist"),
 )
 
 
@@ -62,6 +72,12 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
     upload_names: list[str] = []
     upload_ok = False
     upload_err = ""
+    feat_resp = ""
+    feat_lie_hit = None
+    quit_resp = ""
+    post_quit = ""
+    quit_zombie_hit = None
+    quit_attempted = False
 
     try:
         # FTP is intentionally the protocol under audit; only synthetic credentials are used.
@@ -108,7 +124,23 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
             cmd_tells.append(f"PASV error: {exc}")
 
         with suppress(Exception):
-            ftp.sendcmd("FEAT")
+            feat_resp = str(ftp.sendcmd("FEAT") or "")
+        if feat_resp and "MLSD" in feat_resp.upper():
+            try:
+                mlsd_resp = str(ftp.sendcmd("MLSD") or "")
+            except Exception as exc:
+                mlsd_resp = str(exc)
+            feat_lie_hit = match_ftp_feat_lie(feat_resp, mlsd_resp, advertised="MLSD")
+            if feat_lie_hit:
+                cmd_tells.append(feat_lie_hit)
+        elif feat_resp and "UTF8" in feat_resp.upper():
+            try:
+                utf_resp = str(ftp.sendcmd("OPTS UTF8 ON") or "")
+            except Exception as exc:
+                utf_resp = str(exc)
+            feat_lie_hit = match_ftp_feat_lie(feat_resp, utf_resp, advertised="UTF8")
+            if feat_lie_hit:
+                cmd_tells.append(feat_lie_hit)
 
         with suppress(Exception):
             syst_line = ftp.sendcmd("SYST")
@@ -161,10 +193,23 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
                 cmd_tells.append(f"STOR {name} failed: {upload_err}")
 
         try:
-            ftp.quit()
+            quit_resp = str(ftp.voidcmd("QUIT") or "")
+            quit_attempted = True
         except Exception as exc:
+            quit_attempted = True
+            quit_resp = str(exc)
             q = closed_reason(str(exc))
             cmd_tells.append(f"QUIT {q}")
+        if quit_attempted:
+            try:
+                post_quit = str(ftp.sendcmd("NOOP") or "")
+            except Exception as exc:
+                post_quit = str(exc)
+            quit_zombie_hit = match_ftp_quit_zombie(quit_resp, post_quit)
+            if quit_zombie_hit:
+                cmd_tells.append(quit_zombie_hit)
+        with suppress(Exception):
+            ftp.close()
     except Exception as exc:
         return _ftp_suite(
             skipped_indicator(
@@ -189,6 +234,11 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
             bounce_attempted=bounce_attempted,
             desert_hit=desert_hit,
             desert_evidence=desert_evidence,
+            feat_lie_hit=feat_lie_hit,
+            feat_attempted=bool(feat_resp),
+            quit_zombie_hit=quit_zombie_hit,
+            quit_attempted=quit_attempted,
+            quit_evidence=f"QUIT {quit_resp[:80]!r}; post {post_quit[:80]!r}",
         )
 
     banner_ind = _ftp_banner_indicator(
@@ -262,6 +312,11 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
                 bounce_attempted=bounce_attempted,
                 desert_hit=desert_hit,
                 desert_evidence=desert_evidence,
+                feat_lie_hit=feat_lie_hit,
+                feat_attempted=bool(feat_resp),
+                quit_zombie_hit=quit_zombie_hit,
+                quit_attempted=quit_attempted,
+                quit_evidence=f"QUIT {quit_resp[:80]!r}; post {post_quit[:80]!r}",
             )
         return _ftp_suite(
             skipped_indicator(
@@ -280,6 +335,11 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
             bounce_attempted=bounce_attempted,
             desert_hit=desert_hit,
             desert_evidence=desert_evidence,
+            feat_lie_hit=feat_lie_hit,
+            feat_attempted=bool(feat_resp),
+            quit_zombie_hit=quit_zombie_hit,
+            quit_attempted=quit_attempted,
+            quit_evidence=f"QUIT {quit_resp[:80]!r}; post {post_quit[:80]!r}",
         )
 
     fake_upload_surface = pasv_private or (not upload_ok and bool(upload_names))
@@ -323,6 +383,11 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
         bounce_attempted=bounce_attempted,
         desert_hit=desert_hit,
         desert_evidence=desert_evidence,
+        feat_lie_hit=feat_lie_hit,
+        feat_attempted=bool(feat_resp),
+        quit_zombie_hit=quit_zombie_hit,
+        quit_attempted=quit_attempted,
+        quit_evidence=f"QUIT {quit_resp[:80]!r}; post {post_quit[:80]!r}",
     )
 
 
@@ -469,6 +534,11 @@ def _ftp_suite(
     bounce_attempted: bool = False,
     desert_hit: str | None = None,
     desert_evidence: str = "",
+    feat_lie_hit: str | None = None,
+    feat_attempted: bool = False,
+    quit_zombie_hit: str | None = None,
+    quit_attempted: bool = False,
+    quit_evidence: str = "",
 ) -> list[Indicator]:
     banner = banner_ind or _ftp_banner_indicator(
         welcome,
@@ -500,7 +570,30 @@ def _ftp_suite(
         detail=desert_hit or "FEAT/PWD/PASV/NOOP are not a uniform 500 desert",
         evidence=desert_evidence[:800],
     )
-    return [persist, banner, lure, auth, bounce, desert]
+    feat_lie = Indicator(
+        id="ftp.feat_lie",
+        title="FTP FEAT advertises a capability the follow-up rejects",
+        category="static_signature",
+        triggered=bool(feat_lie_hit),
+        skipped=not feat_attempted,
+        skip_reason="" if feat_attempted else "FEAT not probed",
+        protocol="ftp",
+        detail=feat_lie_hit or "FEAT capabilities match follow-up verbs",
+        fidelity="high" if feat_lie_hit else "medium",
+    )
+    quit_zombie = Indicator(
+        id="ftp.quit_zombie",
+        title="FTP still answers after QUIT",
+        category="state_nonpersist",
+        triggered=bool(quit_zombie_hit),
+        skipped=not quit_attempted,
+        skip_reason="" if quit_attempted else "QUIT not issued",
+        protocol="ftp",
+        detail=quit_zombie_hit or "session closed (or stayed quiet) after QUIT",
+        evidence=quit_evidence[:400],
+        fidelity="high" if quit_zombie_hit else "medium",
+    )
+    return [persist, banner, lure, auth, bounce, desert, feat_lie, quit_zombie]
 
 
 def _ftp_banner_indicator(

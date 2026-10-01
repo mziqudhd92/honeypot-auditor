@@ -1,9 +1,9 @@
 """Redis fingerprint engine.
 
 Strategies: arbitrary auth (two random AUTH passwords) · state non-persistence
-(key vanishes after reconnect / DBSIZE incoherent) · static signature (PING,
-COMMAND, INFO, HELP, ECHO/SELECT, EVAL/CONFIG, AUTH wall, arity, TYPE/INCR,
-QUIT zombie).
+(key vanishes after reconnect / DBSIZE incoherent / TTL ignored) · static
+signature (PING, COMMAND, INFO, HELP, ECHO/SELECT, EVAL/CONFIG, AUTH wall,
+arity, TYPE/INCR, MULTI/EXEC stub, QUIT zombie).
 
 Never sends FLUSHALL/FLUSHDB/CONFIG SET/SCRIPT LOAD. Probe keys use a unique
 ``hpaudit_`` prefix and are DELeted after checks.
@@ -12,6 +12,7 @@ Never sends FLUSHALL/FLUSHDB/CONFIG SET/SCRIPT LOAD. Probe keys use a unique
 from __future__ import annotations
 
 import secrets
+import time
 
 from honeypot_auditor.config import (
     REDIS_PROBE_KEY_PREFIX,
@@ -27,8 +28,10 @@ from honeypot_auditor.config import (
     match_redis_help_client,
     match_redis_incr_stub,
     match_redis_info_template,
+    match_redis_multi_exec_stub,
     match_redis_ping_stub,
     match_redis_quit_zombie,
+    match_redis_ttl_alive,
     match_redis_type_stub,
     match_redis_unknown_core,
 )
@@ -40,6 +43,11 @@ _REDIS_SKIP = (
     ("redis.arbitrary_auth", "Redis AUTH accepts two random passwords", "arbitrary_auth"),
     ("redis.persist", "Redis key does not persist across reconnect", "state_nonpersist"),
     ("redis.dbsize", "Redis DBSIZE does not reflect a successful SET", "state_nonpersist"),
+    (
+        "redis.ttl_enforcement",
+        "Redis serves a probe key after its EX TTL has elapsed",
+        "state_nonpersist",
+    ),
     ("redis.ping_stub", "Redis PING does not return +PONG", "static_signature"),
     ("redis.command_stub", "Redis COMMAND is a stub instead of a catalog", "static_signature"),
     ("redis.info_frozen", "Redis INFO looks like a frozen dump", "static_signature"),
@@ -52,6 +60,11 @@ _REDIS_SKIP = (
     ("redis.incr_stub", "Redis INCR does not return an integer", "static_signature"),
     ("redis.type_stub", "Redis TYPE does not return +string for a string key", "static_signature"),
     ("redis.arity_facade", "Redis accepts GET with no arguments", "static_signature"),
+    (
+        "redis.multi_exec_stub",
+        "Redis MULTI/EXEC does not return a reply array",
+        "static_signature",
+    ),
     ("redis.quit_zombie", "Redis still answers after QUIT", "static_signature"),
 )
 
@@ -165,6 +178,27 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
     config_reply, _ = _redis_call(host, port, "CONFIG", "GET", "*")
     arity_reply, _ = _redis_call(host, port, "GET")
 
+    multi_key = f"{REDIS_PROBE_KEY_PREFIX}m{secrets.token_hex(3)}"
+    multi_replies, multi_err = tcp_roundtrips(
+        host,
+        port,
+        [
+            _resp("MULTI"),
+            # Queue a read-only GET of a missing key — EXEC still returns an array
+            # without writing state. DEL is best-effort cleanup if a stub wrote.
+            _resp("GET", multi_key),
+            _resp("EXEC"),
+            _resp("DEL", multi_key),
+        ],
+    )
+    multi_text = multi_replies[0].decode("utf-8", "replace") if multi_replies else ""
+    exec_text = multi_replies[2].decode("utf-8", "replace") if len(multi_replies) > 2 else ""
+    multi_hit = (
+        match_redis_multi_exec_stub(multi_text, exec_text)
+        if multi_text or exec_text
+        else None
+    )
+
     wall_hit = match_redis_auth_wall(auth_reply_for_wall, command_reply)
     command_hit = match_redis_command_stub(command_reply)
     info_hit = match_redis_info_template(info1, info2)
@@ -191,6 +225,7 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
 
     key = f"{REDIS_PROBE_KEY_PREFIX}{secrets.token_hex(4)}"
     incr_key = f"{REDIS_PROBE_KEY_PREFIX}i{secrets.token_hex(4)}"
+    ttl_key = f"{REDIS_PROBE_KEY_PREFIX}t{secrets.token_hex(4)}"
     dbsize_before, _ = _redis_call(host, port, "DBSIZE")
     set_reply, set_err = _redis_call(host, port, "SET", key, REDIS_PROBE_VALUE)
     set_ok = _resp_ok(set_reply)
@@ -200,9 +235,14 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
     dbsize_hit = None
     type_hit = None
     incr_hit = None
+    ttl_hit = None
+    ttl_skipped = ""
+    ttl_detail = ""
+    ttl_elapsed = 0.0
 
     if not set_ok:
         persist_skipped = set_err or set_reply.strip()[:80] or "SET rejected"
+        ttl_skipped = persist_skipped
     else:
         dbsize_after, _ = _redis_call(host, port, "DBSIZE")
         dbsize_hit = match_redis_dbsize_incoherent(True, dbsize_before, dbsize_after)
@@ -219,6 +259,33 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
             persist_detail = f"GET after reconnect: {got[:160]!r}"
         _redis_call(host, port, "DEL", key)
         _redis_call(host, port, "DEL", incr_key)
+
+        # TTL enforcement: SET … EX 1, wait just past the 1s window, GET must miss.
+        # 1.15s is enough for honest Redis expiry while keeping scan latency down
+        # (tests mock time.sleep).
+        t0 = time.monotonic()
+        ttl_set, ttl_set_err = _redis_call(
+            host, port, "SET", ttl_key, REDIS_PROBE_VALUE, "EX", "1"
+        )
+        if not _resp_ok(ttl_set):
+            ttl_skipped = ttl_set_err or ttl_set.strip()[:80] or "SET EX rejected"
+            ttl_detail = ttl_skipped
+        else:
+            remaining = 1.15 - (time.monotonic() - t0)
+            if remaining > 0:
+                time.sleep(remaining)
+            ttl_got, ttl_get_err = _redis_call(host, port, "GET", ttl_key)
+            ttl_elapsed = time.monotonic() - t0
+            if ttl_get_err and not ttl_got:
+                ttl_skipped = closed_reason(ttl_get_err)
+                ttl_detail = ttl_skipped
+            else:
+                ttl_hit = match_redis_ttl_alive(ttl_got, REDIS_PROBE_VALUE)
+                ttl_detail = (
+                    ttl_hit
+                    or f"GET after EX TTL: {ttl_got[:120]!r} (elapsed={ttl_elapsed:.1f}s)"
+                )
+            _redis_call(host, port, "DEL", ttl_key)
 
     auth_skipped = bool(auth_err) and not (auth1 or auth2)
     return [
@@ -261,6 +328,18 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
             skip_reason=persist_skipped,
             detail=dbsize_hit or persist_skipped or "DBSIZE increased after SET",
             fidelity="high" if dbsize_hit else "medium",
+        ),
+        _ind(
+            id="redis.ttl_enforcement",
+            title="Redis serves a probe key after its EX TTL has elapsed",
+            category="state_nonpersist",
+            triggered=bool(ttl_hit),
+            skipped=bool(ttl_skipped),
+            skip_reason=ttl_skipped,
+            detail=ttl_detail or ttl_skipped or "TTL enforcement not evaluated",
+            evidence=f"EX=1; elapsed_s={ttl_elapsed:.1f}",
+            fidelity="high" if ttl_hit else "medium",
+            remediation="Honor SET EX / EXPIRE: keys past their TTL must not be served",
         ),
         _ind(
             id="redis.ping_stub",
@@ -370,6 +449,19 @@ def probe_redis(host: str, port: int) -> list[Indicator]:
             detail=arity_hit or "GET with no arguments returned wrong-arity (or NOAUTH)",
             evidence=arity_reply[:120],
             fidelity="high" if arity_hit else "medium",
+        ),
+        _ind(
+            id="redis.multi_exec_stub",
+            title="Redis MULTI/EXEC does not return a reply array",
+            category="static_signature",
+            triggered=bool(multi_hit),
+            skipped=bool(multi_err) and not (multi_text or exec_text),
+            skip_reason=closed_reason(multi_err)
+            if multi_err and not (multi_text or exec_text)
+            else "",
+            detail=multi_hit or "MULTI/EXEC returned a reply array (or MULTI rejected)",
+            evidence=f"MULTI {multi_text[:40]!r}; EXEC {exec_text[:60]!r}",
+            fidelity="high" if multi_hit else "medium",
         ),
         _ind(
             id="redis.quit_zombie",

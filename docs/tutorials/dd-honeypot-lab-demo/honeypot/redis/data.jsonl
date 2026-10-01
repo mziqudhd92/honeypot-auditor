@@ -1,0 +1,8 @@
+{"command": "PING", "response": "+PONG\\r\\n"}
+{"command": "SET test 123", "response": "+OK\\r\\n"}
+{"command": "GET test", "response": "$3\\r\\n123\\r\\n"}
+{"command": "INFO", "response": "$1000\r\n# Server\r\nredis_version:7.2.4\r\nredis_mode:standalone\r\nos:Linux 5.15.0 x86_64\r\n"}
+{"command": "info", "response": "$1000\r\n# Server\r\nredis_version:7.2.4\r\nredis_mode:standalone\r\nos:Linux 5.15.0 x86_64\r\n"}
+{"command": "CONFIG GET requirepass", "response": "*2\r\n$13\r\nrequirepass\r\n$0\r\n\r\n"}
+{"command": "SELECT 0", "response": "+OK\r\n"}
+{"command": "CLIENT LIST", "response": "id=3 addr=127.0.0.1:51234 fd=8 name= age=10 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=26 qbuf-free=2048 obl=0 oll=0 omem=0 events=r cmd=client\r\n"}

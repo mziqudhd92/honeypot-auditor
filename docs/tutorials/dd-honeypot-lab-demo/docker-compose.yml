@@ -1,0 +1,14 @@
+services:
+  dd-honeypot:
+    build: .
+    image: dd-honeypot-lab:latest
+    container_name: dd-honeypot-lab
+    ports:
+      # host:container — SSH on 2222 avoids local sshd / macOS Remote Login.
+      # Redis and PostgreSQL use 6380/5433 because 6379/5432 are commonly taken.
+      - "127.0.0.1:2222:22"    # SSH
+      - "127.0.0.1:23:23"      # Telnet
+      - "127.0.0.1:3306:3306"  # MySQL
+      - "127.0.0.1:6380:6379"  # Redis
+      - "127.0.0.1:5433:5432"  # PostgreSQL
+    restart: unless-stopped

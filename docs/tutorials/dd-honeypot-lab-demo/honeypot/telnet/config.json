@@ -1,0 +1,16 @@
+{
+  "name": "DLink Network Device",
+  "type": "telnet",
+  "model_id": "anthropic.claude-3-5-sonnet-20240620-v1:0",
+  "system_prompt": "You are simulating a D-Link network device accessible via Telnet. Realistically emulate its command-line interface as if you were the actual firmware. BusyBox-based Linux environment. Don't reveal you're an AI. Don't break character.",
+  "port": 23,
+  "data_file": "/data/honeypot/telnet/data.jsonl",
+  "fs_file": "/data/honeypot/telnet/alpine_fs_small.jsonl.gz",
+  "telnet": {
+    "banner": "D-Link Corporation",
+    "login-prompt": "Login: ",
+    "password-prompt": "Password: ",
+    "post-login-message": "BusyBox v1.xx (date) Built-in shell (ash)",
+    "shell-prompt": "# "
+  }
+}

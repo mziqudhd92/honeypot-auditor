@@ -1,6 +1,8 @@
 """Telnet fingerprint engine.
 
-Strategies: arbitrary auth (any-password) · state non-persistence (canned reject, /tmp canary) · static signature (UAV / IAC spray, whoami).
+Strategies: arbitrary auth (any-password) · state non-persistence (canned reject,
+/tmp canary, identical canned command replies) · static signature (UAV / IAC spray,
+AYT stub, whoami).
 """
 
 from __future__ import annotations
@@ -10,15 +12,17 @@ import secrets
 
 from honeypot_auditor.config import (
     match_cowrie_identity,
+    match_telnet_ayt_stub,
     match_telnet_banner,
     match_telnet_blind_option,
     match_telnet_canned_reject,
+    match_telnet_cmd_desert,
     match_telnet_cowrie_preamble,
     match_telnet_option_spray,
     match_uname_signature,
 )
 from honeypot_auditor.models import Indicator, skipped_indicator
-from honeypot_auditor.netutil import closed_reason, tcp_transact
+from honeypot_auditor.netutil import closed_reason, tcp_roundtrips, tcp_transact
 from honeypot_auditor.probes.common import is_safe_mode, random_creds, skip_suite
 from honeypot_auditor.probes.shell_cti import (
     CTI_SHELL_COMMANDS,
@@ -33,6 +37,7 @@ _TELNET_SKIP = (
         "Telnet IAC accepts unknown options or resets on AUTH/NAWS",
         "static_signature",
     ),
+    ("telnet.ayt_stub", "Telnet IAC AYT is unanswered", "static_signature"),
     ("telnet.arbitrary_auth", "Telnet arbitrary credential acceptance", "arbitrary_auth"),
     ("telnet.auth_lure", "Telnet canned auth reject (fake login FSM)", "state_nonpersist"),
     ("telnet.uname", "Telnet uname/cpuinfo / Cowrie identity", "static_signature"),
@@ -40,6 +45,11 @@ _TELNET_SKIP = (
     (
         "telnet.session_persist",
         "Telnet filesystem does not persist across sessions",
+        "state_nonpersist",
+    ),
+    (
+        "telnet.cmd_desert",
+        "Telnet returns identical canned replies for distinct commands",
         "state_nonpersist",
     ),
 )
@@ -70,6 +80,7 @@ _IAC_PROBE = bytes(
         240,
     ]
 )
+_IAC_AYT = bytes([255, 246])
 
 
 def probe_telnet(host: str, port: int) -> list[Indicator]:
@@ -86,6 +97,29 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
         return skip_suite(
             _TELNET_SKIP, closed_reason(banner_err), protocol="telnet", error=banner_err
         )
+
+    # AYT after speakership: on a fresh connection, drain the banner separately,
+    # then send AYT and score only the post-AYT bytes (never the greeting).
+    spoke = bool(banner_raw) and (
+        bool(banner_text.strip())
+        or b"\xff" in banner_raw
+        or bool(match_telnet_cowrie_preamble(banner_raw))
+    )
+    ayt_replies, ayt_err = tcp_roundtrips(host, port, [_IAC_AYT], recv_first=True)
+    ayt_banner = ayt_replies[0] if ayt_replies else b""
+    ayt_raw = ayt_replies[1] if len(ayt_replies) > 1 else b""
+    spoke = spoke or (
+        bool(ayt_banner)
+        and (
+            bool(_telnet_text(ayt_banner).strip())
+            or b"\xff" in ayt_banner
+            or bool(match_telnet_cowrie_preamble(ayt_banner))
+        )
+    )
+    if ayt_err and not ayt_raw and not ayt_banner:
+        ayt_hit = None  # transport fail / skip — not a honeypot tell
+    else:
+        ayt_hit = match_telnet_ayt_stub(ayt_raw, spoke=spoke)
 
     auth_ok, session_out, auth_err = _telnet_login_and_probe(
         host,
@@ -113,6 +147,15 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
     persist_missing = bool(auth_ok and auth2_ok and canary and canary not in session2)
     id_bits = identity_tells(session_out)
     whoami_hit = bool(auth_ok and whoami_matches_lure(session_out, user))
+    desert_hit = None
+    if auth_ok and session_out:
+        # Only CTI commands that were actually sent in the login probe.
+        desert_outputs: dict[str, str] = {}
+        for cmd in ("id", "uname -a", "echo $((7*9))"):
+            sliced = _telnet_cmd_slice(session_out, cmd)
+            if sliced is not None:
+                desert_outputs[cmd] = sliced
+        desert_hit = match_telnet_cmd_desert(desert_outputs)
     auth_detail = (
         f"random {user}:**** accepted"
         + (
@@ -142,6 +185,21 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
             protocol="telnet",
             detail=iac_hit or "unknown option 99 declined (WONT/DONT) or ignored",
             evidence=banner_raw[:200].decode("utf-8", "replace"),
+        ),
+        Indicator(
+            id="telnet.ayt_stub",
+            title="Telnet IAC AYT is unanswered",
+            category="static_signature",
+            triggered=bool(ayt_hit),
+            skipped=bool(ayt_err) and not ayt_raw and not ayt_banner,
+            skip_reason=(
+                closed_reason(ayt_err) if ayt_err and not ayt_raw and not ayt_banner else ""
+            ),
+            protocol="telnet",
+            detail=ayt_hit or "IAC AYT received a printable reply (or no speakership)",
+            evidence=(ayt_raw[:120].hex() if ayt_raw else ""),
+            fidelity="medium",
+            requires_corroboration=True,
         ),
         Indicator(
             id="telnet.arbitrary_auth",
@@ -236,7 +294,55 @@ def probe_telnet(host: str, port: int) -> list[Indicator]:
             "need two sessions to verify persist",
             protocol="telnet",
         ),
+        Indicator(
+            id="telnet.cmd_desert",
+            title="Telnet returns identical canned replies for distinct commands",
+            category="state_nonpersist",
+            triggered=bool(desert_hit),
+            protocol="telnet",
+            skipped=not auth_ok,
+            skip_reason="" if auth_ok else "no session (auth failed)",
+            detail=desert_hit or "distinct commands returned distinct output",
+            evidence=(session_out or "")[:800],
+            fidelity="high" if desert_hit else "medium",
+        )
+        if auth_ok
+        else skipped_indicator(
+            "telnet.cmd_desert",
+            "Telnet returns identical canned replies for distinct commands",
+            "state_nonpersist",
+            "no session (auth failed)",
+            protocol="telnet",
+        ),
     ]
+
+
+def _telnet_cmd_slice(transcript: str, cmd: str) -> str | None:
+    """Extract output following a command echo; None if the command was not found.
+
+    Matches the command as a whole token (line-anchored / non-alnum boundaries)
+    so ``id`` does not hit inside ``gid`` / ``invalid``.
+    """
+    text = transcript or ""
+    if not text or not cmd:
+        return None
+    # Escape and require non-alnum boundaries around the command.
+    pat = re.compile(
+        rf"(?:^|[^A-Za-z0-9_])({re.escape(cmd)})(?:[^A-Za-z0-9_]|\r?\n|$)",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    m = pat.search(text)
+    if not m:
+        return None
+    start = m.end(1)
+    chunk = text[start : start + 160]
+    for marker in ("\n$", "\n#", "\n>", "\nlogin:"):
+        cut = chunk.find(marker)
+        if cut > 0:
+            chunk = chunk[:cut]
+            break
+    return " ".join(chunk.split())[:120]
+
 
 
 def strip_telnet_iac(data: bytes) -> bytes:

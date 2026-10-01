@@ -99,9 +99,9 @@ non-compliance under **static_signature** only: unicast `M-SEARCH` framing,
 HTTP header facades, `ST` echo fidelity, bitwise-identical response clones,
 corroboration-gated stock `SERVER` strings and loopback `LOCATION` URLs,
 illegal-method stubs, required empty `EXT` / `CACHE-CONTROL max-age`,
-USN↔ST coherence, and absolute `http(s)` `LOCATION` URIs. Never joins
-multicast groups or floods `NOTIFY`. See
-[`docs/udp/SSDP.md`](udp/SSDP.md) and
+USN↔ST coherence, absolute `http(s)` `LOCATION` URIs, missing-`MAN` answers,
+and corroboration-gated nonsense-`HOST` answers. Never joins multicast groups
+or floods `NOTIFY`. See [`docs/udp/SSDP.md`](udp/SSDP.md) and
 [UPnP 1.0](https://openconnectivity.org/upnp/specs/UPnP_architecture_v1.0.pdf).
 
 The IPP/CUPS engine speaks HTTP (with TLS fallback) on **631** / lab **1631**
@@ -128,10 +128,10 @@ stand-in, noreply façade). Never sends `flush_all`; probe keys use an
 
 The Redis engine speaks RESP on TCP/6379 with **protocol non-compliance**
 detection: dual random `AUTH` (decisive when both `+OK`), reconnect key
-persistence + `DBSIZE` coherence, plus split static tells (`PING` stub,
-`COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP`,
+persistence + `DBSIZE` coherence + `EX` TTL enforcement, plus split static tells
+(`PING` stub, `COMMAND`/`EVAL`/`CONFIG` stubs, frozen `INFO`, redis-cli `HELP`,
 missing/mismatched `ECHO`/`SELECT`, OpenCanary AUTH+NOAUTH wall, `TYPE`/`INCR`
-facades, wrong-arity `GET`, QUIT zombie). Never sends
+facades, wrong-arity `GET`, `MULTI`/`EXEC` stubs, QUIT zombie). Never sends
 `FLUSHALL`/`FLUSHDB`/`CONFIG SET`/`SCRIPT LOAD`; probe keys use an `hpaudit_`
 prefix and are deleted. See [`docs/tcp/REDIS.md`](tcp/REDIS.md) and the
 [Redis protocol spec](https://redis.io/docs/reference/protocol-spec/).
@@ -211,6 +211,40 @@ mismatch (**state_nonpersist**), plus **static_signature** (SCCRP framing,
 protocol version / stock hostname-vendor façade, unknown control type
 answered like a successful SCCRP). Never opens GRE or runs PPP.
 See [`docs/tcp/PPTP.md`](tcp/PPTP.md).
+
+The SSH engine (TCP/22, lab **2222**) scores Cowrie/Kippo-class lures under
+**all three** strategies: dual random password acceptance, fake-PTY /
+missing-`exec` and missing-SFTP session lies, `/tmp` canary non-persist, plus
+banner / Twisted-Cowrie KEX façade / password-only auth / lure `whoami` /
+hollow `direct-tcpip` (accept then immediate EOF). See [`docs/tcp/SSH.md`](tcp/SSH.md).
+
+The Telnet engine (TCP/23, lab **2323**) pairs any-password login with canned
+reject dialogues, `/tmp` canary non-persist, identical post-login command
+deserts, IAC option spray, and corroboration-gated unanswered IAC AYT after
+speakership. See [`docs/tcp/TELNET.md`](tcp/TELNET.md).
+
+The FTP engine (TCP/21, lab **2121**) scores decoy logins, PASV/PORT bounce
+and STOR/SIZE non-persist, FEAT/PWD deserts, FEAT capability lies (advertised
+MLSD/UTF8 rejected as unknown), and QUIT zombies (ignores 421 closing class).
+See [`docs/tcp/FTP.md`](tcp/FTP.md).
+
+The MySQL engine (TCP/3306) uses **state_nonpersist** + **static_signature**
+(no dual-auth on the basic path): EOL 5.5.x Ubuntu greetings, stock handshake
+caps, frozen scramble salts across reconnects, drop-after-1045, Expected-seq
+FSM, SSL-request silent drops, and identical 1045 clones across usernames.
+`--safe-mode` is greeting/handshake only. See [`docs/tcp/MYSQL.md`](tcp/MYSQL.md).
+
+The MSSQL engine (TCP/1433) uses **state_nonpersist** + **static_signature**:
+canned nmap-shaped TDS prelogin, `ENCRYPT_NOT_SUP`, PRELOGIN option blindness
+(canned + corroboration-gated), LOGIN7 18456 / username-clone failures, and
+TLS close-after-NOT_SUP. `--safe-mode` is prelogin speakership only. See
+[`docs/tcp/MSSQL.md`](tcp/MSSQL.md).
+
+The MongoDB engine (TCP/27017) uses **state_nonpersist** + **static_signature**:
+frozen `connectionId: 1`, synthetic OP_MSG `requestId=9999`, `responseTo`
+mismatches on OP_REPLY/OP_MSG only, identical hello across reconnects, and
+unauthorized `ping` after hello. `--safe-mode` is hello speakership only. See
+[`docs/tcp/MONGODB.md`](tcp/MONGODB.md).
 
 ## Deep mode & optional layers
 

@@ -6,6 +6,49 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- README / site live demo: show **v1.0.3** dd-honeypot (DataTrap) GIF instead of the
+  v1.0.0 three-face lab tour (`docs/tutorials/dd-honeypot-lab-demo/…`)
+- dd-honeypot beginner lab (`docs/tutorials/dd-honeypot-lab-demo/`): canonical
+  path-only onboarding, SSH host port **2222**, accurate Telnet/deep expectations,
+  expected Bedrock/MySQL log-noise note; drop `demo/` recorder scripts and local
+  `.dockerignore` / `.gitignore`
+
+### Fixed
+
+- `mssql.prelogin_blind` canned gate uses nmap/canned shape only (not
+  `ENCRYPT_NOT_SUP`), avoiding double-scoring honest SQL Server NOT_SUP speakers
+- SSH `direct-tcpip` hollow tell requires immediate empty `recv` (EOF); bastion
+  RST / stay-open paths stay clean
+- Redis TTL wait tightened to ~1.15s past `SET … EX 1`
+- MSSQL/MySQL auth-error clones require user-attributed fixed embedding; probes
+  use distinct `entropy_varied_creds`
+- Telnet AYT scores post-AYT bytes only (banner drained via `tcp_roundtrips`)
+
+## [1.0.3] - 2026-09-30
+
+### Added
+
+- Database / shell / discovery honeypot tells — two new indicators each for
+  MSSQL, MongoDB, MySQL, Redis, SSDP, SSH, Telnet, and FTP:
+  - MSSQL: `mssql.prelogin_blind` (canned+corroboration-gated), `mssql.login7_clone`
+  - MongoDB: `mongodb.response_to` (OP_MSG/OP_REPLY only), `mongodb.hello_clone`
+  - MySQL: `mysql.scramble_frozen`, `mysql.auth_error_clone`
+  - Redis: `redis.ttl_enforcement`, `redis.multi_exec_stub` (read-only MULTI/GET)
+  - SSDP: `ssdp.man_facade`, `ssdp.host_blind` (both corroboration-gated)
+  - SSH: `ssh.sftp_subsystem`, `ssh.direct_tcpip_hollow` (accept+immediate EOF)
+  - Telnet: `telnet.ayt_stub` (speakership+corroboration), `telnet.cmd_desert`
+  - FTP: `ftp.feat_lie`, `ftp.quit_zombie` (ignores 421 closing class)
+  - Safe-mode handshake-only paths for MSSQL / MongoDB / MySQL
+
+### Changed
+
+- Docs sync for the 16 new indicators: README strategy note, `docs/STRATEGIES.md`
+  SSH/Telnet/FTP/MySQL/MSSQL/MongoDB blurbs, `docs/SCORING.md` Redis/SSDP rows,
+  TCP/UDP indexes, site FAQ/`index.html`, `agents.md`, `llms.txt` (strategy-slot
+  count remains **80**)
+
 ## [1.0.2] - 2026-09-28
 
 ### Added

@@ -16,10 +16,14 @@ COWRIE_SHELL = (
     "user_a15@svr04:~$ uname -a\r\nLinux svr04 6.1.0-21-amd64 #1 SMP Debian x86_64 GNU/Linux\r\n"
 )
 
+# Banner drain + printable AYT reply so ayt_stub stays clean unless under test.
+_AYT_OK = ([b"Welcome telnet\r\n", b"[Yes]\r\n"], "")
+
 
 @patch.object(telnet, "_telnet_login_and_probe", return_value=(False, "", "auth failed"))
+@patch.object(telnet, "tcp_roundtrips", return_value=_AYT_OK)
 @patch.object(telnet, "tcp_transact", return_value=(b"Welcome telnet\r\n", ""))
-def test_telnet_auth_rejected(mock_tcp, mock_login):
+def test_telnet_auth_rejected(mock_tcp, mock_rt, mock_login):
     inds = telnet.probe_telnet("127.0.0.1", 23)
     by_id = {i.id: i for i in inds}
     assert not by_id["telnet.arbitrary_auth"].triggered
@@ -35,8 +39,9 @@ def test_telnet_auth_rejected(mock_tcp, mock_login):
     "_telnet_login_and_probe",
     side_effect=[(True, KIPPO_UNAME, ""), (False, "", "auth failed")],
 )
+@patch.object(telnet, "tcp_roundtrips", return_value=_AYT_OK)
 @patch.object(telnet, "tcp_transact", return_value=(b"Welcome telnet\r\n", ""))
-def test_telnet_single_login_not_arbitrary_auth(mock_tcp, mock_login):
+def test_telnet_single_login_not_arbitrary_auth(mock_tcp, mock_rt, mock_login):
     inds = telnet.probe_telnet("127.0.0.1", 23)
     by_id = {i.id: i for i in inds}
     assert not by_id["telnet.arbitrary_auth"].triggered
@@ -49,8 +54,9 @@ def test_telnet_single_login_not_arbitrary_auth(mock_tcp, mock_login):
     "_telnet_login_and_probe",
     side_effect=[(True, KIPPO_UNAME, ""), (True, KIPPO_UNAME, "")],
 )
+@patch.object(telnet, "tcp_roundtrips", return_value=_AYT_OK)
 @patch.object(telnet, "tcp_transact", return_value=(b"Welcome telnet\r\n", ""))
-def test_telnet_auth_accepted(mock_tcp, mock_login):
+def test_telnet_auth_accepted(mock_tcp, mock_rt, mock_login):
     inds = telnet.probe_telnet("127.0.0.1", 23)
     by_id = {i.id: i for i in inds}
     assert by_id["telnet.arbitrary_auth"].triggered
@@ -67,8 +73,9 @@ def test_telnet_auth_accepted(mock_tcp, mock_login):
         (True, "user_a99@svr04:~$ cat /tmp/hpaudit_dead\r\ncat: No such file\r\n", ""),
     ],
 )
+@patch.object(telnet, "tcp_roundtrips", return_value=([b"login: ", b"[Yes]\r\n"], ""))
 @patch.object(telnet, "tcp_transact", return_value=(b"login: ", ""))
-def test_telnet_cowrie_hostname(mock_tcp, mock_login, mock_creds):
+def test_telnet_cowrie_hostname(mock_tcp, mock_rt, mock_login, mock_creds):
     inds = telnet.probe_telnet("127.0.0.1", 23)
     by_id = {i.id: i for i in inds}
     assert by_id["telnet.uname"].triggered
@@ -91,8 +98,11 @@ def test_strip_telnet_iac_keeps_printable_banner():
 
 
 @patch.object(telnet, "_telnet_login_and_probe", return_value=(False, CISCO_REJECT, ""))
+@patch.object(
+    telnet, "tcp_roundtrips", return_value=([CISCO_IAC_BANNER, b"[Yes]\r\n"], "")
+)
 @patch.object(telnet, "tcp_transact", return_value=(CISCO_IAC_BANNER, ""))
-def test_telnet_cisco_lure_without_any_password(mock_tcp, mock_login):
+def test_telnet_cisco_lure_without_any_password(mock_tcp, mock_rt, mock_login):
     inds = telnet.probe_telnet("127.0.0.1", 23)
     by_id = {i.id: i for i in inds}
     assert not by_id["telnet.arbitrary_auth"].triggered
@@ -107,8 +117,11 @@ IAC_COWRIE_PREAMBLE = b"\xff\xfd\x1flogin: "
 
 
 @patch.object(telnet, "_telnet_login_and_probe", return_value=(False, "login: ", ""))
+@patch.object(
+    telnet, "tcp_roundtrips", return_value=([IAC_COWRIE_PREAMBLE, b"[Yes]\r\n"], "")
+)
 @patch.object(telnet, "tcp_transact", return_value=(IAC_COWRIE_PREAMBLE, ""))
-def test_telnet_cowrie_preamble(mock_tcp, mock_login):
+def test_telnet_cowrie_preamble(mock_tcp, mock_rt, mock_login):
     inds = telnet.probe_telnet("127.0.0.1", 23)
     by_id = {i.id: i for i in inds}
     assert by_id["telnet.banner"].triggered
@@ -123,8 +136,11 @@ IAC_OPTION_SPRAY = bytes.fromhex("fffb03fffb00fffd00fffd1ffffd18fffd27fffd22") +
 @patch.object(
     telnet, "_telnet_login_and_probe", return_value=(False, "Password: Login incorrect\r\n", "")
 )
+@patch.object(
+    telnet, "tcp_roundtrips", return_value=([IAC_OPTION_SPRAY, b"[Yes]\r\n"], "")
+)
 @patch.object(telnet, "tcp_transact", return_value=(IAC_OPTION_SPRAY, ""))
-def test_telnet_option_spray_then_username_prompt(mock_tcp, mock_login):
+def test_telnet_option_spray_then_username_prompt(mock_tcp, mock_rt, mock_login):
     inds = telnet.probe_telnet("127.0.0.1", 23)
     by_id = {i.id: i for i in inds}
     assert by_id["telnet.banner"].triggered
@@ -137,13 +153,25 @@ IAC_BLIND = bytes.fromhex("fffb03fffb63") + b"\r\nUsername: "
 
 
 @patch.object(telnet, "_telnet_login_and_probe", return_value=(False, "", ""))
+@patch.object(telnet, "tcp_roundtrips", return_value=([IAC_BLIND, b"[Yes]\r\n"], ""))
 @patch.object(telnet, "tcp_transact", return_value=(IAC_BLIND, ""))
-def test_telnet_blind_unknown_option(mock_tcp, mock_login):
+def test_telnet_blind_unknown_option(mock_tcp, mock_rt, mock_login):
     inds = telnet.probe_telnet("127.0.0.1", 23)
     by_id = {i.id: i for i in inds}
     assert by_id["telnet.iac_negotiate"].triggered
-    mock_tcp.assert_called()
-    assert mock_tcp.call_args[0][2] == telnet._IAC_PROBE
+    assert mock_tcp.call_args_list[0][0][2] == telnet._IAC_PROBE
+    assert mock_rt.call_args_list[0][0][2] == [telnet._IAC_AYT]
+    assert not by_id["telnet.ayt_stub"].triggered
+
+
+@patch.object(telnet, "_telnet_login_and_probe", return_value=(False, "", ""))
+@patch.object(telnet, "tcp_roundtrips", return_value=([IAC_BLIND, b""], ""))
+@patch.object(telnet, "tcp_transact", return_value=(IAC_BLIND, ""))
+def test_telnet_ayt_unanswered_after_speakership(mock_tcp, mock_rt, mock_login):
+    """Post-AYT empty (banner drained separately) is the stub tell."""
+    inds = telnet.probe_telnet("127.0.0.1", 23)
+    by_id = {i.id: i for i in inds}
+    assert by_id["telnet.ayt_stub"].triggered
 
 
 @patch.object(settings, "safe_mode", True)
@@ -160,3 +188,30 @@ def test_telnet_safe_mode_accepts_bytes_iac(mock_tcp):
     assert by_id["telnet.iac_negotiate"].triggered
     assert not by_id["telnet.banner"].error
     assert by_id["telnet.arbitrary_auth"].skipped
+
+
+def test_telnet_ayt_and_cmd_desert_matchers():
+    from honeypot_auditor.config.signatures.telnet import (
+        match_telnet_ayt_stub,
+        match_telnet_cmd_desert,
+    )
+
+    assert match_telnet_ayt_stub(b"", spoke=False) is None
+    assert match_telnet_ayt_stub(b"", spoke=True)
+    assert match_telnet_ayt_stub(b"[Yes]\r\n", spoke=True) is None
+    assert match_telnet_cmd_desert(
+        {
+            "id": "command not found",
+            "uname -a": "command not found",
+            "echo $((7*9))": "command not found",
+        }
+    )
+    assert match_telnet_cmd_desert({"id": "uid=0", "uname -a": "Linux host"}) is None
+
+
+def test_telnet_cmd_slice_avoids_substring_false_match():
+    # "id" must not match inside "invalid" / "gid"
+    assert telnet._telnet_cmd_slice("invalid user\ngid=0", "id") is None
+    out = telnet._telnet_cmd_slice("user$ id\nuid=0(root)\nuser$ ", "id")
+    assert out is not None
+    assert "uid=0" in out

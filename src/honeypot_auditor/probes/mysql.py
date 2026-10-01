@@ -1,9 +1,10 @@
 """MySQL fingerprint engine.
 
-Strategies: static signature (EOL 5.5.x ubuntu greeting, stock handshake caps) ·
-state non-persistence (session dropped after one 1045, emulator Expected-seq FSM, SSL-request
-silent drop). Arbitrary auth is not on the basic path (deny-all is also a real
-server with the wrong password).
+Strategies: static signature (EOL 5.5.x ubuntu greeting, stock handshake caps,
+frozen scramble salt) · state non-persistence (session dropped after one 1045,
+emulator Expected-seq FSM, SSL-request silent drop, identical 1045 across users).
+Arbitrary auth is not on the basic path (deny-all is also a real server with the
+wrong password).
 """
 
 from __future__ import annotations
@@ -11,13 +12,16 @@ from __future__ import annotations
 import struct
 
 from honeypot_auditor.config import (
+    extract_mysql_scramble,
+    match_mysql_auth_error_clone,
     match_mysql_eol_banner,
     match_mysql_pkt_order,
+    match_mysql_scramble_frozen,
     match_mysql_stock_handshake,
 )
 from honeypot_auditor.models import Indicator
 from honeypot_auditor.netutil import closed_reason, tcp_roundtrips
-from honeypot_auditor.probes.common import random_creds, skip_suite
+from honeypot_auditor.probes.common import entropy_varied_creds, is_safe_mode, skip_suite
 
 _MYSQL_SKIP = (
     ("mysql.signature", "MySQL greeting is an EOL 5.5.x ubuntu template", "static_signature"),
@@ -26,9 +30,19 @@ _MYSQL_SKIP = (
         "MySQL handshake uses stock capability/auth-plugin template",
         "static_signature",
     ),
+    (
+        "mysql.scramble_frozen",
+        "MySQL handshake scramble is frozen across reconnects",
+        "static_signature",
+    ),
     ("mysql.persist", "MySQL drops the session after one access-denied", "state_nonpersist"),
     ("mysql.seq_order", "MySQL returns an emulator seq FSM on wrong auth packet sequence", "state_nonpersist"),
     ("mysql.ssl_drop", "MySQL silently drops on CLIENT_SSL handshake request", "state_nonpersist"),
+    (
+        "mysql.auth_error_clone",
+        "MySQL access-denied packets are identical across usernames",
+        "state_nonpersist",
+    ),
 )
 
 # CLIENT_PROTOCOL_41 | CLIENT_SECURE_CONNECTION | CLIENT_PLUGIN_AUTH-ish baseline used elsewhere
@@ -145,7 +159,9 @@ def _mysql_ssl_drop_probe(host: str, port: int) -> tuple[bool, str, str, bool]:
 
 
 def probe_mysql(host: str, port: int) -> list[Indicator]:
-    user, _password = random_creds()
+    (user, _password), (user2, _password2) = entropy_varied_creds()
+    if user == user2:
+        user2 = f"{user2}_b"
     replies, err = tcp_roundtrips(
         host, port, [_mysql_handshake_response(user), b"\x00"], recv_first=True
     )
@@ -160,6 +176,54 @@ def probe_mysql(host: str, port: int) -> list[Indicator]:
     dropped = _mysql_access_denied(deny) and not follow
     eol_hit = match_mysql_eol_banner(version)
     handshake_hit = match_mysql_stock_handshake(greeting)
+    scramble1 = extract_mysql_scramble(greeting)
+
+    if is_safe_mode():
+        reason = "safe-mode: handshake-only probe"
+        out: list[Indicator] = []
+        for iid, title, cat in _MYSQL_SKIP:
+            if iid == "mysql.signature":
+                out.append(
+                    Indicator(
+                        id=iid,
+                        title=title,
+                        category=cat,
+                        triggered=bool(eol_hit),
+                        protocol="mysql",
+                        detail=eol_hit or f"version={version}",
+                        evidence=greeting[:200].decode("utf-8", "replace"),
+                    )
+                )
+            elif iid == "mysql.handshake":
+                out.append(
+                    Indicator(
+                        id=iid,
+                        title=title,
+                        category=cat,
+                        triggered=bool(handshake_hit),
+                        protocol="mysql",
+                        detail=handshake_hit or "handshake capability/auth plugin look normal",
+                        evidence=greeting[:200].decode("utf-8", "replace"),
+                    )
+                )
+            else:
+                out.extend(skip_suite(((iid, title, cat),), reason, protocol="mysql"))
+        return out
+
+    replies2, err2 = tcp_roundtrips(
+        host, port, [_mysql_handshake_response(user2), b"\x00"], recv_first=True
+    )
+    greeting2 = replies2[0] if replies2 else b""
+    deny2 = replies2[1] if len(replies2) > 1 else b""
+    scramble2 = extract_mysql_scramble(greeting2) if greeting2 else b""
+    scramble_hit = (
+        match_mysql_scramble_frozen(scramble1, scramble2) if scramble1 and scramble2 else None
+    )
+    clone_hit = (
+        match_mysql_auth_error_clone(deny, deny2, user, user2)
+        if deny and deny2 and _mysql_access_denied(deny) and _mysql_access_denied(deny2)
+        else None
+    )
 
     seq_replies, seq_err = tcp_roundtrips(
         host,
@@ -193,6 +257,18 @@ def probe_mysql(host: str, port: int) -> list[Indicator]:
             protocol="mysql",
             detail=handshake_hit or "handshake capability/auth plugin look normal",
             evidence=greeting[:200].decode("utf-8", "replace"),
+        ),
+        Indicator(
+            id="mysql.scramble_frozen",
+            title="MySQL handshake scramble is frozen across reconnects",
+            category="static_signature",
+            triggered=bool(scramble_hit),
+            skipped=not greeting2 and bool(err2),
+            skip_reason=closed_reason(err2) if err2 and not greeting2 else "",
+            protocol="mysql",
+            detail=scramble_hit or "handshake scramble rotates across reconnects",
+            evidence=scramble1.hex() if scramble1 else "",
+            fidelity="high" if scramble_hit else "medium",
         ),
         Indicator(
             id="mysql.persist",
@@ -230,5 +306,17 @@ def probe_mysql(host: str, port: int) -> list[Indicator]:
             protocol="mysql",
             detail=ssl_detail,
             evidence=ssl_evidence,
+        ),
+        Indicator(
+            id="mysql.auth_error_clone",
+            title="MySQL access-denied packets are identical across usernames",
+            category="state_nonpersist",
+            triggered=bool(clone_hit),
+            skipped=not (deny and deny2),
+            skip_reason="" if (deny and deny2) else "need two access-denied replies",
+            protocol="mysql",
+            detail=clone_hit or "access-denied packets differ across usernames",
+            evidence=deny[:80].hex() if deny else "",
+            fidelity="high" if clone_hit else "medium",
         ),
     ]

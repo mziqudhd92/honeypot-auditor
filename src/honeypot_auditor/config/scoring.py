@@ -44,18 +44,18 @@ STRATEGY_LABELS: dict[str, str] = {
 PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     "ssh": {
         "arbitrary_auth": "any-password (2 random users)",
-        "state_nonpersist": "exec vs fake PTY · /tmp canary",
-        "static_signature": "banner · KEX facade · lure whoami · honeyfs",
+        "state_nonpersist": "exec vs fake PTY · sftp subsystem · /tmp canary",
+        "static_signature": "banner · KEX facade · lure whoami · honeyfs · hollow direct-tcpip",
     },
     "telnet": {
         "arbitrary_auth": "any-password (2 random users)",
-        "state_nonpersist": "canned reject · /tmp canary",
-        "static_signature": "UAV / IAC spray · unknown-option WILL · lure whoami · fake tty/pipes",
+        "state_nonpersist": "canned reject · /tmp canary · identical command desert",
+        "static_signature": "UAV / IAC spray · AYT stub · unknown-option WILL · lure whoami · fake tty/pipes",
     },
     "ftp": {
         "arbitrary_auth": "stock decoy login (test)",
-        "state_nonpersist": "PASV mismatch · canned 530 · STOR/SIZE · FEAT/PWD desert",
-        "static_signature": "stock 220 · SYST L8 · PORT bounce",
+        "state_nonpersist": "PASV mismatch · canned 530 · STOR/SIZE · FEAT/PWD desert · QUIT zombie",
+        "static_signature": "stock 220 · SYST L8 · PORT bounce · FEAT capability lie",
     },
     "smtp": {
         "arbitrary_auth": "AUTH any-password · open relay",
@@ -110,11 +110,11 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "redis": {
         "arbitrary_auth": "two random AUTH passwords both +OK",
-        "state_nonpersist": "key vanishes after reconnect · DBSIZE ignores SET",
+        "state_nonpersist": "key vanishes after reconnect · DBSIZE ignores SET · EX TTL ignored",
         "static_signature": (
             "PING stub · COMMAND/EVAL/CONFIG stub · AUTH-invalid+COMMAND NOAUTH wall · "
             "frozen INFO · HELP redis-cli · missing/mismatched ECHO/SELECT · "
-            "TYPE/INCR facade · GET arity facade · QUIT zombie"
+            "TYPE/INCR facade · GET arity facade · MULTI/EXEC stub · QUIT zombie"
         ),
     },
     "mqtt": {
@@ -228,7 +228,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "M-SEARCH framing · header facade · ST echo · response clone · "
             "stock SERVER lure · LOCATION loopback · method stub · "
             "empty EXT · CACHE-CONTROL max-age · USN↔ST coherence · "
-            "absolute http(s) LOCATION URI"
+            "absolute http(s) LOCATION URI · MAN facade · HOST blindness"
         ),
     },
     "kubernetes": {
@@ -261,8 +261,11 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "mysql": {
         "arbitrary_auth": "",
-        "state_nonpersist": "drop after 1045 · emulator Expected-seq FSM · SSL-request silent drop",
-        "static_signature": "EOL 5.5.x ubuntu greeting · stock handshake caps",
+        "state_nonpersist": (
+            "drop after 1045 · emulator Expected-seq FSM · SSL-request silent drop · "
+            "identical 1045 across usernames"
+        ),
+        "static_signature": "EOL 5.5.x ubuntu greeting · stock handshake caps · frozen scramble",
     },
     "git": {
         "arbitrary_auth": "two entropy-varied HTTP Basic / pkt-line auth both accepted",
@@ -281,13 +284,18 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "mssql": {
         "arbitrary_auth": "",
-        "state_nonpersist": "canned LOGIN7 18456 failure · TLS close after ENCRYPT_NOT_SUP",
-        "static_signature": "canned TDS prelogin · PRELOGIN encrypt NOT SUP",
+        "state_nonpersist": (
+            "canned LOGIN7 18456 failure · LOGIN7 error clone across usernames · "
+            "TLS close after ENCRYPT_NOT_SUP"
+        ),
+        "static_signature": "canned TDS prelogin · PRELOGIN encrypt NOT SUP · PRELOGIN option blindness",
     },
     "mongodb": {
         "arbitrary_auth": "",
-        "state_nonpersist": "ping unauthorized after hello",
-        "static_signature": "hello connectionId frozen at 1 · OP_MSG synthetic reply",
+        "state_nonpersist": "ping unauthorized after hello · identical hello across reconnects",
+        "static_signature": (
+            "hello connectionId frozen at 1 · OP_MSG synthetic reply · responseTo mismatch"
+        ),
     },
     "postgres": {
         "arbitrary_auth": "",

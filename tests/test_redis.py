@@ -21,6 +21,7 @@ _REDIS_IDS = {
     "redis.arbitrary_auth",
     "redis.persist",
     "redis.dbsize",
+    "redis.ttl_enforcement",
     "redis.ping_stub",
     "redis.command_stub",
     "redis.info_frozen",
@@ -33,6 +34,7 @@ _REDIS_IDS = {
     "redis.incr_stub",
     "redis.type_stub",
     "redis.arity_facade",
+    "redis.multi_exec_stub",
     "redis.quit_zombie",
 }
 
@@ -67,6 +69,23 @@ def _wrong_arity() -> bytes:
     return b"-ERR wrong number of arguments for 'get' command\r\n"
 
 
+def _multi_ok_exec_array() -> tuple[list[bytes], str]:
+    return ([_ok(), b"$-1\r\n", b"*1\r\n$-1\r\n", b":0\r\n"], "")
+
+
+def _quit_clean() -> tuple[list[bytes], str]:
+    return ([_ok(), b""], "")
+
+
+def _quit_zombie() -> tuple[list[bytes], str]:
+    return ([_ok(), _pong()], "")
+
+
+def _multi_exec_stub() -> tuple[list[bytes], str]:
+    return ([_ok(), b"$-1\r\n", _ok(), b":0\r\n"], "")
+
+
+
 def _no_password() -> bytes:
     return b"-ERR AUTH called without any password configured\r\n"
 
@@ -89,20 +108,22 @@ def _compliant_catalog_flow(echo_token: str = "abcd") -> list[bytes]:
     ]
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-def test_redis_closed_port_skips_all_strategies(mock_round, mock_tcp):
+def test_redis_closed_port_skips_all_strategies(mock_round, mock_tcp, mock_sleep):
     mock_tcp.return_value = (b"", "Connection refused")
     inds = redis_probe.probe_redis("127.0.0.1", 6379)
     assert {i.id for i in inds} == _REDIS_IDS
-    assert len(inds) == 16
+    assert len(inds) == 18
     assert all(i.skipped for i in inds)
     mock_round.assert_not_called()
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-def test_redis_non_resp_speaker_skips_all(mock_round, mock_tcp):
+def test_redis_non_resp_speaker_skips_all(mock_round, mock_tcp, mock_sleep):
     mock_tcp.return_value = (b"HTTP/1.1 200 OK\r\n", "")
     inds = redis_probe.probe_redis("127.0.0.1", 6379)
     assert {i.id for i in inds} == _REDIS_IDS
@@ -111,10 +132,11 @@ def test_redis_non_resp_speaker_skips_all(mock_round, mock_tcp):
     mock_round.assert_not_called()
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-def test_redis_stub_auth_and_signatures(mock_round, mock_tcp):
-    mock_round.return_value = ([_ok(), _pong()], "")
+def test_redis_stub_auth_and_signatures(mock_round, mock_tcp, mock_sleep):
+    mock_round.side_effect = [_multi_exec_stub(), _quit_zombie()]
     mock_tcp.side_effect = _calls(
         _pong(),
         _ok(),
@@ -136,6 +158,9 @@ def test_redis_stub_auth_and_signatures(mock_round, mock_tcp):
         _bulk(REDIS_PROBE_VALUE),
         b":1\r\n",
         b":1\r\n",
+        _ok(),  # SET EX
+        _bulk(REDIS_PROBE_VALUE),  # TTL still alive → ttl_enforcement
+        b":1\r\n",  # DEL ttl
     )
     inds = redis_probe.probe_redis("127.0.0.1", 6379)
     by_id = {i.id: i for i in inds}
@@ -157,11 +182,12 @@ def test_redis_stub_auth_and_signatures(mock_round, mock_tcp):
     assert not by_id["redis.auth_wall"].triggered
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-@patch.object(redis_probe.secrets, "token_hex", side_effect=["abcd", "key1", "ikey1"])
-def test_redis_key_vanishes_after_reconnect(mock_hex, mock_round, mock_tcp):
-    mock_round.return_value = ([_ok(), b""], "")
+@patch.object(redis_probe.secrets, "token_hex", side_effect=["abcd", "mkey", "key1", "ikey1", "tkey1", "x"])
+def test_redis_key_vanishes_after_reconnect(mock_hex, mock_round, mock_tcp, mock_sleep):
+    mock_round.side_effect = [_multi_ok_exec_array(), _quit_clean()]
     mock_tcp.side_effect = _calls(
         *_compliant_catalog_flow("abcd"),
         b":5\r\n",
@@ -172,6 +198,9 @@ def test_redis_key_vanishes_after_reconnect(mock_hex, mock_round, mock_tcp):
         b"$-1\r\n",
         b":1\r\n",
         b":1\r\n",
+        _ok(),  # SET EX
+        b"$-1\r\n",  # expired
+        b":1\r\n",  # DEL ttl
     )
     inds = redis_probe.probe_redis("127.0.0.1", 6379)
     by_id = {i.id: i for i in inds}
@@ -185,11 +214,12 @@ def test_redis_key_vanishes_after_reconnect(mock_hex, mock_round, mock_tcp):
     assert not by_id["redis.dbsize"].triggered
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-@patch.object(redis_probe.secrets, "token_hex", side_effect=["abcd", "key1", "ikey1"])
-def test_redis_compliant_server_triggers_nothing(mock_hex, mock_round, mock_tcp):
-    mock_round.return_value = ([_ok(), b""], "")
+@patch.object(redis_probe.secrets, "token_hex", side_effect=["abcd", "mkey", "key1", "ikey1", "tkey1", "x"])
+def test_redis_compliant_server_triggers_nothing(mock_hex, mock_round, mock_tcp, mock_sleep):
+    mock_round.side_effect = [_multi_ok_exec_array(), _quit_clean()]
     mock_tcp.side_effect = _calls(
         *_compliant_catalog_flow("abcd"),
         b":5\r\n",
@@ -200,6 +230,9 @@ def test_redis_compliant_server_triggers_nothing(mock_hex, mock_round, mock_tcp)
         _bulk(REDIS_PROBE_VALUE),
         b":1\r\n",
         b":1\r\n",
+        _ok(),  # SET EX
+        b"$-1\r\n",  # expired
+        b":1\r\n",  # DEL ttl
     )
     inds = redis_probe.probe_redis("127.0.0.1", 6379)
     assert {i.id for i in inds} == _REDIS_IDS
@@ -208,11 +241,12 @@ def test_redis_compliant_server_triggers_nothing(mock_hex, mock_round, mock_tcp)
     assert not any(i.skipped for i in inds)
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-def test_redis_single_auth_ok_does_not_trigger_arbitrary_auth(mock_round, mock_tcp):
+def test_redis_single_auth_ok_does_not_trigger_arbitrary_auth(mock_round, mock_tcp, mock_sleep):
     """Both passwords must succeed; one +OK is inconclusive."""
-    mock_round.return_value = ([_ok(), b""], "")
+    mock_round.side_effect = [_multi_ok_exec_array(), _quit_clean()]
     mock_tcp.side_effect = _calls(
         _pong(),
         _ok(),  # AUTH1 accepted
@@ -235,10 +269,11 @@ def test_redis_single_auth_ok_does_not_trigger_arbitrary_auth(mock_round, mock_t
     assert by_id["redis.persist"].skipped
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-def test_redis_set_rejected_skips_persist_and_dbsize(mock_round, mock_tcp):
-    mock_round.return_value = ([_ok(), b""], "")
+def test_redis_set_rejected_skips_persist_and_dbsize(mock_round, mock_tcp, mock_sleep):
+    mock_round.side_effect = [_multi_ok_exec_array(), _quit_clean()]
     mock_tcp.side_effect = _calls(
         _pong(),
         b"-WRONGPASS invalid password\r\n",
@@ -263,9 +298,10 @@ def test_redis_set_rejected_skips_persist_and_dbsize(mock_round, mock_tcp):
     assert by_id["redis.type_stub"].skipped
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-def test_redis_auth_wall_is_signature(mock_round, mock_tcp):
+def test_redis_auth_wall_is_signature(mock_round, mock_tcp, mock_sleep):
     mock_round.return_value = ([b"-NOAUTH Authentication required.\r\n"], "closed")
     noauth = b"-NOAUTH Authentication required.\r\n"
     mock_tcp.side_effect = _calls(
@@ -295,11 +331,12 @@ def test_redis_auth_wall_is_signature(mock_round, mock_tcp):
     assert by_id["redis.dbsize"].skipped
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-@patch.object(redis_probe.secrets, "token_hex", side_effect=["eeee", "k2", "ik2"])
-def test_redis_ping_ok_and_echo_mismatch(mock_hex, mock_round, mock_tcp):
-    mock_round.return_value = ([_ok(), b""], "")
+@patch.object(redis_probe.secrets, "token_hex", side_effect=["eeee", "m2", "k2", "ik2", "t2", "x"])
+def test_redis_ping_ok_and_echo_mismatch(mock_hex, mock_round, mock_tcp, mock_sleep):
+    mock_round.side_effect = [_multi_ok_exec_array(), _quit_clean()]
     mock_tcp.side_effect = _calls(
         _ok(),  # PING +OK stub
         _no_password(),
@@ -321,6 +358,9 @@ def test_redis_ping_ok_and_echo_mismatch(mock_hex, mock_round, mock_tcp):
         _bulk(REDIS_PROBE_VALUE),
         b":1\r\n",
         b":1\r\n",
+        _ok(),  # SET EX
+        b"$-1\r\n",
+        b":1\r\n",
     )
     inds = redis_probe.probe_redis("127.0.0.1", 6379)
     by_id = {i.id: i for i in inds}
@@ -329,11 +369,12 @@ def test_redis_ping_ok_and_echo_mismatch(mock_hex, mock_round, mock_tcp):
     assert not by_id["redis.core_missing"].triggered
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-@patch.object(redis_probe.secrets, "token_hex", side_effect=["tok1", "k3", "ik3"])
-def test_redis_echo_ok_facade_and_type_hash(mock_hex, mock_round, mock_tcp):
-    mock_round.return_value = ([_ok(), b""], "")
+@patch.object(redis_probe.secrets, "token_hex", side_effect=["tok1", "m3", "k3", "ik3", "t3", "x"])
+def test_redis_echo_ok_facade_and_type_hash(mock_hex, mock_round, mock_tcp, mock_sleep):
+    mock_round.side_effect = [_multi_ok_exec_array(), _quit_clean()]
     mock_tcp.side_effect = _calls(
         _pong(),
         _no_password(),
@@ -355,6 +396,9 @@ def test_redis_echo_ok_facade_and_type_hash(mock_hex, mock_round, mock_tcp):
         _bulk(REDIS_PROBE_VALUE),
         b":1\r\n",
         b":1\r\n",
+        _ok(),  # SET EX
+        b"$-1\r\n",
+        b":1\r\n",
     )
     inds = redis_probe.probe_redis("127.0.0.1", 6379)
     by_id = {i.id: i for i in inds}
@@ -364,11 +408,12 @@ def test_redis_echo_ok_facade_and_type_hash(mock_hex, mock_round, mock_tcp):
     assert "+hash" in by_id["redis.type_stub"].detail
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-@patch.object(redis_probe.secrets, "token_hex", side_effect=["tok2", "k4", "ik4"])
-def test_redis_dbsize_ok_stub_and_incr_unknown(mock_hex, mock_round, mock_tcp):
-    mock_round.return_value = ([_ok(), b""], "")
+@patch.object(redis_probe.secrets, "token_hex", side_effect=["tok2", "m4", "k4", "ik4", "t4", "x"])
+def test_redis_dbsize_ok_stub_and_incr_unknown(mock_hex, mock_round, mock_tcp, mock_sleep):
+    mock_round.side_effect = [_multi_ok_exec_array(), _quit_clean()]
     mock_tcp.side_effect = _calls(
         _pong(),
         _no_password(),
@@ -390,6 +435,9 @@ def test_redis_dbsize_ok_stub_and_incr_unknown(mock_hex, mock_round, mock_tcp):
         _bulk(REDIS_PROBE_VALUE),
         b":1\r\n",
         b":1\r\n",
+        _ok(),  # SET EX
+        b"$-1\r\n",
+        b":1\r\n",
     )
     inds = redis_probe.probe_redis("127.0.0.1", 6379)
     by_id = {i.id: i for i in inds}
@@ -399,11 +447,12 @@ def test_redis_dbsize_ok_stub_and_incr_unknown(mock_hex, mock_round, mock_tcp):
     assert "unimplemented" in by_id["redis.incr_stub"].detail.lower()
 
 
+@patch.object(redis_probe.time, "sleep")
 @patch.object(redis_probe, "tcp_transact")
 @patch.object(redis_probe, "tcp_roundtrips")
-@patch.object(redis_probe.secrets, "token_hex", side_effect=["tok3", "k5", "ik5"])
-def test_redis_arity_returns_bulk_value(mock_hex, mock_round, mock_tcp):
-    mock_round.return_value = ([_ok(), b""], "")
+@patch.object(redis_probe.secrets, "token_hex", side_effect=["tok3", "m5", "k5", "ik5", "t5", "x"])
+def test_redis_arity_returns_bulk_value(mock_hex, mock_round, mock_tcp, mock_sleep):
+    mock_round.side_effect = [_multi_ok_exec_array(), _quit_clean()]
     mock_tcp.side_effect = _calls(
         *_compliant_catalog_flow("tok3")[:-1],
         _bulk("surprise"),  # GET no-args returns a value
@@ -414,6 +463,9 @@ def test_redis_arity_returns_bulk_value(mock_hex, mock_round, mock_tcp):
         b":1\r\n",
         _bulk(REDIS_PROBE_VALUE),
         b":1\r\n",
+        b":1\r\n",
+        _ok(),  # SET EX
+        b"$-1\r\n",
         b":1\r\n",
     )
     inds = redis_probe.probe_redis("127.0.0.1", 6379)
@@ -461,3 +513,15 @@ def test_redis_protocol_strategies_blurbs():
     assert "two random AUTH" in catalog["arbitrary_auth"]
     assert "DBSIZE" in catalog["state_nonpersist"]
     assert "QUIT zombie" in catalog["static_signature"]
+
+
+def test_redis_multi_exec_and_ttl_matchers():
+    from honeypot_auditor.config.signatures.redis import (
+        match_redis_multi_exec_stub,
+        match_redis_ttl_alive,
+    )
+
+    assert match_redis_multi_exec_stub("+OK\r\n", "+OK\r\n")
+    assert match_redis_multi_exec_stub("+OK\r\n", "*1\r\n+OK\r\n") is None
+    assert match_redis_ttl_alive(f"$3\r\n{REDIS_PROBE_VALUE}\r\n", REDIS_PROBE_VALUE)
+    assert match_redis_ttl_alive("$-1\r\n", REDIS_PROBE_VALUE) is None

@@ -56,11 +56,13 @@ def _timeout() -> Reply:
 
 
 def _conformant_replies() -> list[Reply]:
-    """Real UPnP shape: honest ST, no clone, silence on garbage method."""
+    """Real UPnP shape: honest ST, no clone, silence on garbage/MAN/HOST probes."""
     return [
         _reply(_ok_response()),  # M-SEARCH upnp:rootdevice
         _timeout(),  # distinct ST (unknown URN) — no match
         _timeout(),  # non-M-SEARCH method — drop
+        _timeout(),  # M-SEARCH without MAN — drop
+        _timeout(),  # nonsense HOST — drop
     ]
 
 
@@ -93,7 +95,7 @@ def test_ssdp_conformant_device_is_clean():
     assert len(inds) == len(ssdp._SSDP_SKIP)
     assert {i.id for i in inds} == {row[0] for row in ssdp._SSDP_SKIP}
     assert not any(i.triggered for i in inds)
-    assert len(mock.calls) <= 4
+    assert len(mock.calls) <= 6
     assert any(b"M-SEARCH" in c["payload"] for c in mock.calls)
     assert any(b"upnp:rootdevice" in c["payload"] for c in mock.calls)
 
@@ -145,7 +147,7 @@ def test_ssdp_header_facade_missing_required():
         status="HTTP/1.1 200 OK",
         headers={"CACHE-CONTROL": "max-age=60"},
     )
-    inds, _ = _run([_reply(thin), _timeout(), _timeout()])
+    inds, _ = _run([_reply(thin), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.header_facade"].triggered
     assert not by_id["ssdp.framing"].triggered
@@ -153,7 +155,7 @@ def test_ssdp_header_facade_missing_required():
 
 def test_ssdp_st_echo_mismatch():
     bad = _ok_response(st="ssdp:all")  # asked for upnp:rootdevice
-    inds, _ = _run([_reply(bad), _timeout(), _timeout()])
+    inds, _ = _run([_reply(bad), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.st_echo"].triggered
     assert by_id["ssdp.st_echo"].fidelity in {"high", "decisive"}
@@ -161,7 +163,7 @@ def test_ssdp_st_echo_mismatch():
 
 def test_ssdp_response_clone_on_distinct_msearch():
     canned = _ok_response()
-    inds, mock = _run([_reply(canned), _reply(canned), _timeout()])
+    inds, mock = _run([_reply(canned), _reply(canned), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.response_clone"].triggered
     sts = []
@@ -177,7 +179,7 @@ def test_ssdp_response_clone_on_distinct_msearch():
 
 def test_ssdp_stock_server_requires_corroboration():
     lure = _ok_response(server="Linux/5.10 UPnP/1.1 honeypot-ssdp/1.0")
-    inds, _ = _run([_reply(lure), _timeout(), _timeout()])
+    inds, _ = _run([_reply(lure), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.stock_server"].triggered
     assert by_id["ssdp.stock_server"].requires_corroboration is True
@@ -187,7 +189,7 @@ def test_ssdp_stock_server_requires_corroboration():
 
 def test_ssdp_location_loopback():
     loop = _ok_response(location="http://127.0.0.1:8080/rootDesc.xml")
-    inds, _ = _run([_reply(loop), _timeout(), _timeout()])
+    inds, _ = _run([_reply(loop), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.location_loopback"].triggered
     assert by_id["ssdp.location_loopback"].fidelity in {"high", "decisive"}
@@ -195,7 +197,7 @@ def test_ssdp_location_loopback():
 
 def test_ssdp_location_localhost_hostname():
     loop = _ok_response(location="http://localhost:49152/desc.xml")
-    inds, _ = _run([_reply(loop), _timeout(), _timeout()])
+    inds, _ = _run([_reply(loop), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.location_loopback"].triggered
 
@@ -207,6 +209,8 @@ def test_ssdp_method_stub_on_garbage_request():
             _reply(_ok_response()),
             _timeout(),
             _reply(_ok_response()),  # garbage method still 200 OK
+            _timeout(),
+            _timeout(),
         ]
     )
     by_id = {i.id: i for i in inds}
@@ -227,7 +231,7 @@ def test_ssdp_ext_header_missing():
             "USN": "uuid:11111111-2222-3333-4444-555555555555::upnp:rootdevice",
         },
     )
-    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    inds, _ = _run([_reply(raw), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.ext_header"].triggered
     assert not by_id["ssdp.framing"].triggered
@@ -245,7 +249,7 @@ def test_ssdp_cache_control_missing_max_age():
             "USN": "uuid:11111111-2222-3333-4444-555555555555::upnp:rootdevice",
         },
     )
-    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    inds, _ = _run([_reply(raw), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.cache_control"].triggered
 
@@ -255,7 +259,7 @@ def test_ssdp_usn_st_coherence_mismatch():
         st="upnp:rootdevice",
         usn="uuid:11111111-2222-3333-4444-555555555555::urn:schemas-upnp-org:device:Basic:1",
     )
-    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    inds, _ = _run([_reply(raw), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.usn_st_coherence"].triggered
     assert by_id["ssdp.usn_st_coherence"].fidelity in {"high", "decisive"}
@@ -263,7 +267,7 @@ def test_ssdp_usn_st_coherence_mismatch():
 
 def test_ssdp_location_uri_relative():
     raw = _ok_response(location="/rootDesc.xml")
-    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    inds, _ = _run([_reply(raw), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.location_uri"].triggered
     assert not by_id["ssdp.location_loopback"].triggered
@@ -271,7 +275,7 @@ def test_ssdp_location_uri_relative():
 
 def test_ssdp_location_uri_file_scheme():
     raw = _ok_response(location="file:///tmp/rootDesc.xml")
-    inds, _ = _run([_reply(raw), _timeout(), _timeout()])
+    inds, _ = _run([_reply(raw), _timeout(), _timeout(), _timeout(), _timeout()])
     by_id = {i.id: i for i in inds}
     assert by_id["ssdp.location_uri"].triggered
 
@@ -290,6 +294,39 @@ def test_ssdp_helpers_cache_control_and_location_uri():
         "upnp:rootdevice",
     )
     assert not ssdp._usn_embeds_st("uuid:aaaa::ssdp:all", "upnp:rootdevice")
+
+
+
+
+def test_ssdp_man_facade_without_man_header():
+    inds, mock = _run(
+        [
+            _reply(_ok_response()),
+            _timeout(),
+            _timeout(),
+            _reply(_ok_response()),  # answers M-SEARCH without MAN
+            _timeout(),
+        ]
+    )
+    by_id = {i.id: i for i in inds}
+    assert by_id["ssdp.man_facade"].triggered
+    assert by_id["ssdp.man_facade"].requires_corroboration is True
+    assert any(b"MAN:" not in c["payload"] and b"M-SEARCH" in c["payload"] for c in mock.calls)
+
+
+def test_ssdp_host_blind_nonsense_host():
+    inds, mock = _run(
+        [
+            _reply(_ok_response()),
+            _timeout(),
+            _timeout(),
+            _timeout(),
+            _reply(_ok_response()),  # answers nonsense HOST
+        ]
+    )
+    by_id = {i.id: i for i in inds}
+    assert by_id["ssdp.host_blind"].triggered
+    assert by_id["ssdp.host_blind"].requires_corroboration is True
 
 
 def test_ssdp_registry_and_strategies():
@@ -318,7 +355,7 @@ def test_ssdp_ports_in_presets():
     assert 11900 in both["ssdp"]
 
 
-def test_ssdp_packet_budget_at_most_four():
+def test_ssdp_packet_budget_at_most_six():
     inds, mock = _run(_conformant_replies())
     assert not any(i.triggered for i in inds)
-    assert len(mock.calls) <= 4
+    assert len(mock.calls) <= 6

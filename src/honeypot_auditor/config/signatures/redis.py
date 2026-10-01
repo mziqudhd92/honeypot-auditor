@@ -250,3 +250,35 @@ def match_redis_flush_stub(get_after_flush: str, expected: str) -> str | None:
     if expected in text:
         return "FLUSHALL returned OK but key still present"
     return None
+
+
+def match_redis_multi_exec_stub(multi_reply: str, exec_reply: str) -> str | None:
+    """MULTI accepted but EXEC did not return an array of queued replies."""
+    multi = (multi_reply or "").lstrip()
+    exec_text = (exec_reply or "").lstrip()
+    if not multi.startswith("+OK"):
+        return None
+    if not exec_text:
+        return None
+    if exec_text.startswith("*"):
+        return None
+    if "unknown command" in exec_text.lower():
+        return "EXEC unimplemented after MULTI"
+    if exec_text.startswith("+OK"):
+        return "EXEC returned +OK instead of a reply array"
+    if exec_text.startswith("-"):
+        # Real Redis may EXECABORT / NOSCRIPT — not a stub tell by itself.
+        return None
+    return f"EXEC facade after MULTI ({exec_text.splitlines()[0][:60]})"
+
+
+def match_redis_ttl_alive(get_reply: str, expected: str) -> str | None:
+    """Probe key still present after its EX TTL should have elapsed."""
+    text = get_reply or ""
+    if not expected:
+        return None
+    if text.lstrip().startswith("$-1"):
+        return None
+    if expected in text:
+        return "GET still returns probe value after EX TTL elapsed"
+    return None

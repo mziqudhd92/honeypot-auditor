@@ -18,7 +18,7 @@ SSDP activates one of the three basic scoring strategies
 | Strategy | Why it applies to SSDP |
 |----------|------------------------|
 | **arbitrary_auth** | **Empty.** SSDP discovery has no credential exchange. |
-| **static_signature** | Framing, header facade, ST echo, response clone, stock `SERVER`, loopback `LOCATION`, method stub, empty `EXT` (corroboration-gated), `CACHE-CONTROL max-age`, USN↔ST coherence, absolute `LOCATION` URI. |
+| **static_signature** | Framing, header facade, ST echo, response clone, stock `SERVER`, loopback `LOCATION`, method stub, empty `EXT` (corroboration-gated), `CACHE-CONTROL max-age`, USN↔ST coherence, absolute `LOCATION` URI, MAN facade, HOST blindness (corroboration-gated). |
 | **state_nonpersist** | **Not used.** Discovery is request/response with no session mailbox. |
 
 Detection philosophy:
@@ -42,7 +42,8 @@ Detection philosophy:
 | Small `MX` (1) | `NOTIFY` spam |
 | Parse SSDP response headers only | Bulk HTTP GETs of `LOCATION` (optional same-host GET deferred; v1 stays UDP-only) |
 
-Packet budget: ≤ **4** UDP exchanges per host (the four new RFC checks reuse the baseline / secondary replies — no extra packets).
+Packet budget: ≤ **6** UDP exchanges per host (baseline + secondary ST + method
+stub + MAN facade + HOST blindness).
 
 ## Ports
 
@@ -66,6 +67,12 @@ M-SEARCH ST: upnp:rootdevice  ──►  framing + header_facade + st_echo
         │
         └─ garbage non-M-SEARCH datagram
                 200 OK SSDP-shaped → ssdp.method_stub
+
+        ├─ M-SEARCH without MAN
+                200 OK → ssdp.man_facade
+
+        └─ M-SEARCH with nonsense HOST
+                200 OK → ssdp.host_blind (corroboration-gated)
 ```
 
 All exchanges use unconnected `udp_exchange` (peer port is evidence only).
@@ -85,6 +92,8 @@ All exchanges use unconnected `udp_exchange` (peer port is evidence only).
 | `ssdp.cache_control` | static_signature | high | no | `CACHE-CONTROL` missing or lacks `max-age=<seconds>`. |
 | `ssdp.usn_st_coherence` | static_signature | **high** | no | `USN` does not embed the response `ST`. |
 | `ssdp.location_uri` | static_signature | high | no | `LOCATION` is not an absolute `http`/`https` URI with a host. |
+| `ssdp.man_facade` | static_signature | medium | **yes** | `M-SEARCH` without required `MAN: "ssdp:discover"` still answered `200 OK`. |
+| `ssdp.host_blind` | static_signature | medium | **yes** | `M-SEARCH` with a nonsense `HOST` still answered `200 OK`. |
 
 ## Safe mode
 
