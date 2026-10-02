@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 import threading
 from contextlib import suppress
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _NTLM_HOOK_LOCK = threading.Lock()
 
@@ -60,10 +63,12 @@ def capture_ntlm_challenge(host: str, port: int, *, timeout: int) -> dict[str, A
                 meta["login_error"] = str(exc)
             try:
                 meta["native_os"] = str(conn.getServerOS() or "")
-            except Exception:
+            except Exception as exc:
+                logger.debug("SMB getServerOS failed for %s:%s: %s", host, port, exc)
                 meta["native_os"] = ""
             return meta if meta.get("challenge") else None
-        except Exception:
+        except Exception as exc:
+            logger.debug("SMB challenge capture failed for %s:%s: %s", host, port, exc)
             return None
         finally:
             ntlm.getNTLMSSPType3 = real_type3

@@ -11,6 +11,7 @@
 [![PyPI](https://img.shields.io/pypi/v/honeypot-auditor?style=flat-square)](https://pypi.org/project/honeypot-auditor/)
 [![Python](https://img.shields.io/pypi/pyversions/honeypot-auditor?style=flat-square)](https://pypi.org/project/honeypot-auditor/)
 [![tests](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml/badge.svg)](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mziqudhd92/honeypot-auditor/badge)](https://scorecard.dev/viewer/?uri=github.com/mziqudhd92/honeypot-auditor)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Pages](https://img.shields.io/badge/site-BBS%20Pages-33ff66?style=flat-square&labelColor=050805)](https://mziqudhd92.github.io/honeypot-auditor/)
 
@@ -120,7 +121,7 @@ honeypot-auditor --target 127.0.0.1
 **No pip install** (git checkout — install minimal deps once):
 
 ```bash
-pip install -r requirements.txt    # or: pip install rich paramiko requests
+pip install rich paramiko requests    # pyproject.toml is the single source of truth
 python3 honeypot-auditor.py --help
 python3 honeypot-auditor.py --target 127.0.0.1
 ```
@@ -227,7 +228,8 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
   --intel-provider NAME      opt in to a named passive-intel plugin (repeatable)
   --intel-key NAME=KEY       provider key; prefer HONEYPOT_AUDITOR_INTEL_<NAME>_KEY
   --output report.json       JSON path (subnet default: honeypot-audit-subnet-<cidr>.json)
-  --confirm-authorized       REQUIRED if any scanned IP is public
+  --confirm-authorized       REQUIRED if any scanned IP is public (hostnames that
+                             resolve to private/LAN space scan without it — see SECURITY.md)
   -v, --verbose              score formula, hits/intra, scoped math, matrix, indicators
   -n, --with-nmap            run Nmap -sV / NSE phase (slow; off by default)
   --deep                     advanced six-axis probes

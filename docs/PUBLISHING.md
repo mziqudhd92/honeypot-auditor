@@ -9,8 +9,8 @@ Repository: **https://github.com/mziqudhd92/honeypot-auditor**
 | Event | What runs |
 |-------|-----------|
 | Push / PR to `main` | Unit tests (3.10–3.14), ruff, coverage, build, security, golden |
-| Push tag `vX.Y.Z` | **`publish-pypi.yml`** → PyPI (Trusted Publishing) + GHCR |
-| GitHub Release `vX.Y.Z` | **`publish.yml`** → tests + version check only (does **not** upload to PyPI) |
+| Push tag `vX.Y.Z` | **`publish-pypi.yml`** → PyPI (Trusted Publishing, PEP 740 attestations) + GHCR (provenance + SBOM attestations) |
+| GitHub Release `vX.Y.Z` | **`publish.yml`** → tests + version check + CycloneDX SBOM attached to the release (does **not** upload to PyPI) |
 
 **Versions are not auto-bumped on push.** Bump `pyproject.toml` + `__init__.py`, update `CHANGELOG.md`, tag `vX.Y.Z`, push the tag, then optionally create a GitHub Release for notes.
 
@@ -22,11 +22,12 @@ Repository: **https://github.com/mziqudhd92/honeypot-auditor**
    - Workflow: **`publish-pypi.yml`** (not `publish.yml`)
    - Environment: `pypi`
 2. GitHub → repo → **Settings** → **Environments** → ensure **`pypi`** exists
-3. Tag and push (this is what publishes):
+3. Tag and push (this is what publishes). **Sign the tag** so release identity is
+   verifiable end-to-end (`git config --global user.signingkey …` / SSH signing first):
 
    ```bash
-   git tag -a v1.0.0 -m "v1.0.0"
-   git push origin v1.0.0
+   git tag -s vX.Y.Z -m "vX.Y.Z"
+   git push origin vX.Y.Z
    ```
 
    Optionally create a GitHub Release from that tag for release notes — it will **not** re-upload to PyPI.

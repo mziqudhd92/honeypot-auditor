@@ -6,6 +6,34 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Dependabot (pip + github-actions, weekly) and a weekly `schedule:` trigger on the
+  security workflow, so new CVEs surface between PRs
+- CycloneDX SBOM attached to GitHub Releases (`publish.yml`); GHCR images now ship
+  provenance + SBOM attestations (`publish-ghcr.yml`)
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) and OpenSSF Scorecard badge
+
+### Changed
+
+- Audit reports (JSON / SARIF / nmap-exclude) are written `0600` — they carry target
+  evidence and probe transcripts
+- Container: digest-pinned base image, OCI labels, non-root `auditor` user
+- Coverage gate raised 60% → 75% (suite currently at ~77%)
+- Security support table trimmed to 1.0.x (0.9.x security-fixes only); authorization
+  gate docs now state that hostnames resolving into LAN/RFC1918 scan without
+  confirmation (README + SECURITY.md)
+- `docs/PUBLISHING.md` documents signed release tags (`git tag -s`)
+- Typed the remaining unannotated defs (`probes/ftp.py` helpers; `cli.py`
+  `_run_named` / `_write_report` / `_audit_subnet`); SMB helpers debug-log their
+  swallowed exceptions instead of staying silent
+- CI: `timeout-minutes` and `concurrency` groups across workflows
+
+### Removed
+
+- Dead `netutil_async.py` module and stale `requirements.txt` (`pyproject.toml` is
+  the single dependency source; README + entry-script hints updated)
+
 ### Fixed
 
 - CI: ruff import order in `tests/test_mongodb.py`; security workflow audits

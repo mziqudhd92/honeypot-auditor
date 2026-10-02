@@ -29,11 +29,20 @@ Configuration lives in `pyproject.toml` under `[tool.coverage.*]` (single source
 | `make test` | Unit tests only (`pytest --no-cov`) |
 | `make test-cov` | Full suite with branch coverage; opens `htmlcov/index.html` |
 | `pytest --no-cov` | Same as `make test` |
-| `pytest` | Coverage + terminal/XML/HTML reports; fails under **60%** |
+| `pytest` | Coverage + terminal/XML/HTML reports; fails under **75%** |
 
 CI runs a dedicated **coverage** job on Python 3.12 and uploads `coverage.xml` + `htmlcov/` as a workflow artifact (`coverage-report`). The version matrix runs `pytest --no-cov` for speed.
 
 When changing probe or scoring logic, add or update tests and keep `make test-cov` green before opening a PR.
+
+## Code conventions
+
+- Probes deliberately **contain their own exceptions**: a probe wraps its socket work in
+  `except Exception` that records the failure into indicator meta, so one broken protocol
+  never kills an audit. Keep new probes in that style, and never swallow an exception
+  without recording or debug-logging it.
+- By participating in this project you agree to the
+  [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Pull requests
 
