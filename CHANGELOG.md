@@ -8,6 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- SMTP / POP3 detection: two additional protocol tells each — SMTP
+  `rset_envelope` (envelope survives an explicit RSET: canned transaction state)
+  and `starttls_lie` (STARTTLS advertised + 220 but the TLS handshake fails,
+  probed in an isolated session); POP3 `preauth_uidl` (LIST/UIDL answered in
+  AUTHORIZATION state) and `command_case` (lowercase `capa` rejected while
+  uppercase `CAPA` works — RFC 1939 keywords are case-insensitive)
+- SMTP probes pass `local_hostname` to smtplib, skipping its eager
+  `socket.getfqdn()` — a multi-second DNS stall per connection on hosts whose
+  name does not resolve
 - Dependabot (pip + github-actions, weekly) and a weekly `schedule:` trigger on the
   security workflow, so new CVEs surface between PRs
 - CycloneDX SBOM attached to GitHub Releases (`publish.yml`); GHCR images now ship

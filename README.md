@@ -293,8 +293,9 @@ See [`docs/STRATEGIES.md`](docs/STRATEGIES.md) for strategy narratives and
 indicator expansions (still within the same strategy slots): MSSQL / MongoDB /
 MySQL / Redis / SSDP / SSH / Telnet / FTP — two additional protocol tells each
 (e.g. Redis `EX` TTL + `MULTI`/`EXEC`, SSDP `MAN`/`HOST` façades, SSH SFTP +
-hollow `direct-tcpip`, MySQL scramble freeze / 1045 clones). Per-protocol guides
-under [`docs/tcp/`](docs/tcp/) and [`docs/udp/`](docs/udp/).
+hollow `direct-tcpip`, MySQL scramble freeze / 1045 clones), plus SMTP
+(`rset_envelope`, `starttls_lie`) and POP3 (`preauth_uidl`, `command_case`).
+Per-protocol guides under [`docs/tcp/`](docs/tcp/) and [`docs/udp/`](docs/udp/).
 
 ---
 

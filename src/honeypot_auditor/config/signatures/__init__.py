@@ -77,6 +77,8 @@ from honeypot_auditor.config.signatures.smtp import (
     match_smtp_extension_monotone,
     match_smtp_lost_envelope,
     match_smtp_placeholder_identity,
+    match_smtp_rset_envelope,
+    match_smtp_starttls_lie,
 )
 from honeypot_auditor.config.signatures.ssh import (
     match_cowrie_identity,
@@ -155,6 +157,8 @@ __all__ = [
     "match_smtp_extension_monotone",
     "match_smtp_lost_envelope",
     "match_smtp_placeholder_identity",
+    "match_smtp_rset_envelope",
+    "match_smtp_starttls_lie",
     "match_ssh_banner",
     "match_telnet_ayt_stub",
     "match_telnet_banner",

@@ -41,6 +41,16 @@ _POP3_SKIP = (
         "POP3 greeting matches a stock honeypot lure banner",
         "static_signature",
     ),
+    (
+        "pop3.preauth_uidl",
+        "POP3 answers maildrop listing before authentication",
+        "state_nonpersist",
+    ),
+    (
+        "pop3.command_case",
+        "POP3 rejects lowercase verbs accepted in uppercase",
+        "static_signature",
+    ),
 )
 
 _MAX_RESPONSE_BYTES = 512
@@ -288,6 +298,8 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
             skipped_indicator(*_POP3_SKIP[3], reason, protocol="pop3"),
             skipped_indicator(*_POP3_SKIP[4], reason, protocol="pop3"),
             stock_ind,
+            skipped_indicator(*_POP3_SKIP[6], reason, protocol="pop3"),
+            skipped_indicator(*_POP3_SKIP[7], reason, protocol="pop3"),
         ]
     if is_safe_mode():
         reason = "safe-mode: handshake-only probe"
@@ -298,6 +310,8 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
             skipped_indicator(*_POP3_SKIP[3], reason, protocol="pop3"),
             skipped_indicator(*_POP3_SKIP[4], reason, protocol="pop3"),
             stock_ind,
+            skipped_indicator(*_POP3_SKIP[6], reason, protocol="pop3"),
+            skipped_indicator(*_POP3_SKIP[7], reason, protocol="pop3"),
         ]
 
     state_replies: dict[str, str] = {}
@@ -318,6 +332,24 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
     unknown_hit = _is_positive(unknown_reply)
     if unknown_reply:
         state_replies["HPAU"] = unknown_reply
+
+    # UIDL/LIST are TRANSACTION-only (RFC 1939): real servers reject pre-auth.
+    uidl_replies: dict[str, str] = {}
+    for command in ("LIST", "UIDL"):
+        _, reply, error = _single_command(host, port, command)
+        if reply:
+            uidl_replies[command] = reply
+        elif error:
+            state_errors.append(f"{command}: {error}")
+    uidl_hits = [name for name, reply in uidl_replies.items() if _is_positive(reply)]
+    uidl_triggered = bool(uidl_hits)
+    uidl_skipped = not uidl_replies
+
+    # RFC 1939 keywords are case-insensitive: lowercase 'capa' must work if CAPA does.
+    _, lower_reply, lower_error = _single_command(host, port, "capa")
+    upper_reply = state_replies.get("CAPA", "")
+    case_hit = bool(lower_reply) and _is_positive(upper_reply) and _is_negative(lower_reply)
+    case_skipped = not (_is_positive(upper_reply) and lower_reply)
 
     blanket_hit, blanket_detail, blanket_evidence = _blanket_auth_failed(state_replies)
     blanket_skipped = not any(k in state_replies for k in ("STAT", "CAPA", "HPAU"))
@@ -382,6 +414,23 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
             ),
             remediation="Enforce AUTHORIZATION and TRANSACTION state boundaries",
         ),
+        Indicator(
+            id="pop3.preauth_uidl",
+            title="POP3 answers maildrop listing before authentication",
+            category="state_nonpersist",
+            triggered=uidl_triggered,
+            skipped=uidl_skipped,
+            skip_reason="; ".join(state_errors) if uidl_skipped else "",
+            error="; ".join(state_errors),
+            protocol="pop3",
+            detail=(
+                f"UIDL/LIST returned +OK in AUTHORIZATION state ({', '.join(uidl_hits)})"
+                if uidl_triggered
+                else "LIST/UIDL rejected before authentication"
+            ),
+            evidence="; ".join(f"{name}={reply!r}" for name, reply in uidl_replies.items()),
+            remediation="Enforce AUTHORIZATION and TRANSACTION state boundaries",
+        ),
         greeting_ind,
         Indicator(
             id="pop3.unknown_command",
@@ -399,6 +448,24 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
             ),
             evidence=unknown_reply,
             remediation="Return uppercase -ERR for unrecognized commands",
+        ),
+        Indicator(
+            id="pop3.command_case",
+            title="POP3 rejects lowercase verbs accepted in uppercase",
+            category="static_signature",
+            triggered=case_hit,
+            skipped=case_skipped,
+            skip_reason="case probe unavailable" if case_skipped else "",
+            error=lower_error,
+            protocol="pop3",
+            detail=(
+                "lowercase 'capa' returned -ERR while uppercase 'CAPA' returned +OK "
+                "(RFC 1939 keywords are case-insensitive)"
+                if case_hit
+                else "lowercase verbs handled consistently"
+            ),
+            evidence=f"CAPA={upper_reply!r}; capa={lower_reply!r}",
+            remediation="Dispatch command keywords case-insensitively per RFC 1939",
         ),
         Indicator(
             id="pop3.auth_failed_blanket",
