@@ -294,24 +294,24 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
         return [
             skipped_indicator(*_POP3_SKIP[0], reason, protocol="pop3"),
             skipped_indicator(*_POP3_SKIP[1], reason, protocol="pop3"),
+            skipped_indicator(*_POP3_SKIP[6], reason, protocol="pop3"),
             greeting_ind,
             skipped_indicator(*_POP3_SKIP[3], reason, protocol="pop3"),
+            skipped_indicator(*_POP3_SKIP[7], reason, protocol="pop3"),
             skipped_indicator(*_POP3_SKIP[4], reason, protocol="pop3"),
             stock_ind,
-            skipped_indicator(*_POP3_SKIP[6], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[7], reason, protocol="pop3"),
         ]
     if is_safe_mode():
         reason = "safe-mode: handshake-only probe"
         return [
             skipped_indicator(*_POP3_SKIP[0], reason, protocol="pop3"),
             skipped_indicator(*_POP3_SKIP[1], reason, protocol="pop3"),
+            skipped_indicator(*_POP3_SKIP[6], reason, protocol="pop3"),
             greeting_ind,
             skipped_indicator(*_POP3_SKIP[3], reason, protocol="pop3"),
+            skipped_indicator(*_POP3_SKIP[7], reason, protocol="pop3"),
             skipped_indicator(*_POP3_SKIP[4], reason, protocol="pop3"),
             stock_ind,
-            skipped_indicator(*_POP3_SKIP[6], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[7], reason, protocol="pop3"),
         ]
 
     state_replies: dict[str, str] = {}

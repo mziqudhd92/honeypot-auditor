@@ -215,3 +215,34 @@ def test_smtp_starttls_handshake_completes_is_clean(mock_import, mock_wrap):
     inds = smtp.probe_smtp("127.0.0.1", 25)
     by_id = {i.id: i for i in inds}
     assert not by_id["smtp.starttls_lie"].triggered
+
+
+@patch.object(smtp, "_tls_wrap")
+@patch.object(smtp, "optional_import")
+def test_smtp_starttls_probe_sends_ehlo_before_starttls(mock_import, mock_wrap):
+    """Isolated STARTTLS session must EHLO first (RFC 3207) or compliant MTAs 503."""
+    mock_wrap.side_effect = ssl.SSLError("handshake failed")
+    calls: list[str] = []
+    lib = MagicMock()
+    session = MagicMock()
+    session.connect.return_value = (220, b"mail ESMTP")
+
+    def ehlo(*_a, **_k):
+        calls.append("ehlo")
+        return (250, b"mail.example.com\nSTARTTLS")
+
+    def docmd(cmd, arg=""):
+        calls.append(cmd)
+        if cmd == "STARTTLS":
+            return (220, b"2.0.0 Ready to start TLS")
+        return (250, b"ok")
+
+    session.ehlo.side_effect = ehlo
+    session.docmd.side_effect = docmd
+    lib.SMTP.return_value = session
+    mock_import.return_value = lib
+    code, err = smtp._smtp_starttls_probe("127.0.0.1", 25, 1.0)
+    assert code == 220
+    assert err
+    assert calls.index("ehlo") < calls.index("STARTTLS")
+    session.close.assert_called()

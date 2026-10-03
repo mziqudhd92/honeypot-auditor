@@ -43,7 +43,7 @@ jobs:
       - name: Install
         run: pip install -e ".[full,dev]"
       - name: Pytest with coverage gate
-        run: pytest --cov-fail-under=60 -m "not integration"
+        run: pytest --cov-fail-under=75 -m "not integration"
       - name: Type check
         run: mypy src/honeypot_auditor
       - name: Upload coverage reports

@@ -59,8 +59,13 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "smtp": {
         "arbitrary_auth": "AUTH any-password · open relay",
-        "state_nonpersist": "MAIL then RCPT 503 (lost envelope)",
-        "static_signature": "loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone",
+        "state_nonpersist": (
+            "MAIL then RCPT 503 (lost envelope) · envelope survives RSET"
+        ),
+        "static_signature": (
+            "loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone · "
+            "STARTTLS capability lie"
+        ),
     },
     "http": {
         "arbitrary_auth": (
@@ -75,10 +80,13 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "pop3": {
         "arbitrary_auth": "two random USER/PASS pairs",
-        "state_nonpersist": "STAT/NOOP before authentication",
+        "state_nonpersist": (
+            "STAT/NOOP before authentication · LIST/UIDL before authentication"
+        ),
         "static_signature": (
             "+OK greeting framing · unknown-command rejection · "
-            "auth-failed -ERR blanket (STAT/CAPA/HPAU) · stock lure banner"
+            "auth-failed -ERR blanket (STAT/CAPA/HPAU) · stock lure banner · "
+            "lowercase-verb rejection"
         ),
     },
     "imap": {

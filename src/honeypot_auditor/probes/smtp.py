@@ -246,37 +246,41 @@ def _tls_wrap(sock, timeout: float):
 
 
 def _smtp_starttls_probe(host: str, port: int, timeout: float) -> tuple[int, str]:
-    """Fresh connection: STARTTLS then a TLS handshake attempt.
+    """Fresh connection: EHLO/HELO, STARTTLS, then a TLS handshake attempt.
 
     Returns (reply_code, tls_error). Uses its own session so a botched
     handshake cannot poison the main envelope/relay probes. Verification is
-    disabled by design (fingerprinting, not trust).
+    disabled by design (fingerprinting, not trust). RFC 3207 requires a hello
+    before STARTTLS; skipping it yields 503 on compliant MTAs and false
+    negatives for the capability-lie tell.
     """
     smtplib = optional_import("smtplib")
     if smtplib is None:
         return 0, ""
+    st = None
     try:
-        st = smtplib.SMTP(timeout=timeout, local_hostname="hpaudit-auditor.invalid")
+        st = smtplib.SMTP(timeout=timeout, local_hostname=SMTP_HELO)
         st.connect(host, port)
-    except Exception:
-        return 0, ""
-    try:
+        try:
+            st.ehlo(SMTP_HELO)
+        except Exception:
+            with suppress(Exception):
+                st.helo(SMTP_HELO)
         code, _msg = _smtp_reply(st.docmd("STARTTLS"))
         starttls_code = int(code)
+        if starttls_code != 220:
+            return starttls_code, ""
+        try:
+            _tls_wrap(st.sock, timeout)
+            return starttls_code, ""
+        except Exception as exc:
+            return starttls_code, closed_reason(str(exc))
     except Exception:
         return 0, ""
-    if starttls_code != 220:
-        with suppress(Exception):
-            st.quit()
-        return starttls_code, ""
-    try:
-        _tls_wrap(st.sock, timeout)
-        return starttls_code, ""
-    except Exception as exc:
-        return starttls_code, closed_reason(str(exc))
     finally:
-        with suppress(Exception):
-            st.close()
+        if st is not None:
+            with suppress(Exception):
+                st.close()
 
 
 def _smtp_try_any_auth(smtp, user: str, password: str) -> tuple[bool, str]:

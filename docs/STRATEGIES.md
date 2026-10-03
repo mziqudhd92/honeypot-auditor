@@ -40,9 +40,10 @@ Closed faces are skipped, not scored. Port matrix:
 ## Per-protocol notes
 
 The POP3 engine checks response framing, pre-authentication state boundaries
-(STAT), optional CAPA sampling, identical auth-failed `-ERR` blankets, stock
-lure banners, unknown-command handling, and repeated synthetic logins. It never
-lists, reads, retrieves, or deletes mail; see
+(STAT/NOOP and LIST/UIDL), optional CAPA sampling, RFC 1939 case conformance
+(lowercase verbs), identical auth-failed `-ERR` blankets, stock lure banners,
+unknown-command handling, and repeated synthetic logins. It never lists, reads,
+retrieves, or deletes mail; see
 [RFC 1939](https://www.rfc-editor.org/rfc/rfc1939.html) and
 [RFC 2449](https://www.rfc-editor.org/rfc/rfc2449.html) (CAPA).
 

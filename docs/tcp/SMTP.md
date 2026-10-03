@@ -27,8 +27,9 @@ and STARTTLS capability lies.
 ## Non-destructive policy
 
 Never delivers real mail. Synthetic AUTH / MAIL / RCPT only; RSET / QUIT cleanup.
-The STARTTLS probe runs in an isolated session (verification disabled —
-fingerprinting only) so a botched handshake cannot poison the envelope probes.
+The STARTTLS probe runs in an isolated session (EHLO then STARTTLS;
+verification disabled — fingerprinting only) so a botched handshake cannot
+poison the envelope probes.
 
 ## Ports
 
