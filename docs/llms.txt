@@ -90,5 +90,6 @@ Always require authorization for non-private targets (`--confirm-authorized`). N
 - Memcached probe guide (ASCII non-compliance): https://mziqudhd92.github.io/honeypot-auditor/tcp/MEMCACHED.md
 - HTTP probe guide (decoy-web tells incl. chunked premature reply): https://mziqudhd92.github.io/honeypot-auditor/tcp/HTTP.md
 - SIP probe guide (transaction coherence: Via/CSeq echo, fake Digest): https://mziqudhd92.github.io/honeypot-auditor/tcp/SIP.md
-- Strategies narrative: https://mziqudhd92.github.io/honeypot-auditor/STRATEGIES.md
+- Strategies (per protocol): https://mziqudhd92.github.io/honeypot-auditor/strategies/
+- Strategies overview: https://mziqudhd92.github.io/honeypot-auditor/STRATEGIES.md
 - Scoring reference: https://mziqudhd92.github.io/honeypot-auditor/SCORING.md

@@ -57,9 +57,7 @@ _MAX_RESPONSE_BYTES = 512
 _RECV_CHUNK = 256
 
 # Exact / near-exact lure strings (fingerprint, not RFC violations).
-_POP3_STOCK_GREETINGS = (
-    "Microsoft Exchange POP3 service is ready",
-)
+_POP3_STOCK_GREETINGS = ("Microsoft Exchange POP3 service is ready",)
 
 # Auth-themed -ERR bodies that should not be identical across STAT/CAPA/unknown.
 _AUTH_FAILED_BODY_RE = re.compile(
@@ -183,10 +181,7 @@ def _blanket_auth_failed(replies: dict[str, str]) -> tuple[bool, str, str]:
                 "",
             )
 
-    detail = (
-        f"identical auth-themed -ERR on {', '.join(sorted(best_cmds))} "
-        f"(body={best_body!r})"
-    )
+    detail = f"identical auth-themed -ERR on {', '.join(sorted(best_cmds))} (body={best_body!r})"
     evidence = "; ".join(f"{name}={replies[name]!r}" for name in sorted(best_cmds))
     return True, detail, evidence
 
@@ -281,6 +276,29 @@ def _preauth_state_triggered(state_replies: dict[str, str]) -> bool:
     return _is_positive(state_replies.get("STAT", ""))
 
 
+def _pop3_skip(ind_id: str, reason: str) -> Indicator:
+    for entry in _POP3_SKIP:
+        if entry[0] == ind_id:
+            return skipped_indicator(*entry, reason, protocol="pop3")
+    raise KeyError(f"unknown POP3 skip id: {ind_id}")
+
+
+def _pop3_handshake_only(
+    reason: str, greeting_ind: Indicator, stock_ind: Indicator
+) -> list[Indicator]:
+    """Greeting/stock only — other tells skipped (malformed greeting or safe-mode)."""
+    return [
+        _pop3_skip("pop3.arbitrary_auth", reason),
+        _pop3_skip("pop3.preauth_state", reason),
+        _pop3_skip("pop3.preauth_uidl", reason),
+        greeting_ind,
+        _pop3_skip("pop3.unknown_command", reason),
+        _pop3_skip("pop3.command_case", reason),
+        _pop3_skip("pop3.auth_failed_blanket", reason),
+        stock_ind,
+    ]
+
+
 def probe_pop3(host: str, port: int) -> list[Indicator]:
     greeting, greeting_error = _read_greeting(host, port)
     if not greeting:
@@ -290,29 +308,17 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
     greeting_ind = _greeting_indicator(greeting)
     stock_ind = _stock_banner_indicator(greeting)
     if greeting_ind.triggered:
-        reason = "POP3 response checks skipped after malformed greeting"
-        return [
-            skipped_indicator(*_POP3_SKIP[0], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[1], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[6], reason, protocol="pop3"),
+        return _pop3_handshake_only(
+            "POP3 response checks skipped after malformed greeting",
             greeting_ind,
-            skipped_indicator(*_POP3_SKIP[3], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[7], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[4], reason, protocol="pop3"),
             stock_ind,
-        ]
+        )
     if is_safe_mode():
-        reason = "safe-mode: handshake-only probe"
-        return [
-            skipped_indicator(*_POP3_SKIP[0], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[1], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[6], reason, protocol="pop3"),
+        return _pop3_handshake_only(
+            "safe-mode: handshake-only probe",
             greeting_ind,
-            skipped_indicator(*_POP3_SKIP[3], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[7], reason, protocol="pop3"),
-            skipped_indicator(*_POP3_SKIP[4], reason, protocol="pop3"),
             stock_ind,
-        ]
+        )
 
     state_replies: dict[str, str] = {}
     state_errors: list[str] = []

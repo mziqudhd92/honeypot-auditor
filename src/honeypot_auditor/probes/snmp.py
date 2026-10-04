@@ -8,7 +8,7 @@ RFC non-compliance strategies (non-destructive Get/GetNext only — never Set):
 
 UDP/161 (lab 1161). SNMPv1 and SNMPv2c message wrappers only.
 
-See docs/SNMP.md, RFC 1157 §4.1, RFC 3416 §4.2.1 / §4.2.2 / §4.2.3.
+See docs/strategies/snmp/, RFC 1157 §4.1, RFC 3416 §4.2.1 / §4.2.2 / §4.2.3.
 """
 
 from __future__ import annotations

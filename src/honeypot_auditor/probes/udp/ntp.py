@@ -10,7 +10,7 @@ RFC non-compliance strategies (non-destructive mode-3 only — never monlist / m
 
 UDP/123 (lab 1123). NTPv4 client mode 3 → server mode 4.
 
-See docs/udp/NTP.md, RFC 5905 §7.3 / §7.5 / §7.4.
+See docs/strategies/ntp/, RFC 5905 §7.3 / §7.5 / §7.4.
 """
 
 from __future__ import annotations

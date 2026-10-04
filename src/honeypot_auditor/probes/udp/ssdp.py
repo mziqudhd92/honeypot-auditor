@@ -7,7 +7,7 @@ only — never NOTIFY spam, multicast floods, or LOCATION HTTP fetch in v1):
     EXT / CACHE-CONTROL RFC headers, USN↔ST coherence, absolute LOCATION URI,
     MAN facade, HOST blindness
 
-UDP/1900 (lab 11900). See docs/udp/SSDP.md.
+UDP/1900 (lab 11900). See docs/strategies/ssdp/.
 """
 
 from __future__ import annotations

@@ -55,23 +55,7 @@ def probe_smtp(host: str, port: int) -> list[Indicator]:
     auth_detail = ""
     auth_err = ""
     try:
-        smtp = smtplib.SMTP(
-            timeout=settings.timeout_seconds,
-            # local_hostname skips smtplib's eager socket.getfqdn() — a multi-second
-            # DNS stall on hosts whose name does not resolve; EHLO uses SMTP_HELO anyway.
-            local_hostname=SMTP_HELO,
-        )
-        _code, greet_msg = smtp.connect(host, port)
-        greeting = _smtp_text(greet_msg)
-        try:
-            _ehlo_code, ehlo_msg = smtp.ehlo(SMTP_HELO)
-            ehlo_text = _smtp_text(ehlo_msg)
-        except Exception:
-            try:
-                _helo_code, helo_msg = smtp.helo(SMTP_HELO)
-                ehlo_text = _smtp_text(helo_msg)
-            except Exception:
-                smtp.helo(SMTP_HELO)
+        smtp, greeting, ehlo_text = _smtp_open(smtplib, host, port)
 
         user, password = random_creds()
         try:
@@ -82,6 +66,12 @@ def probe_smtp(host: str, port: int) -> list[Indicator]:
 
         ext_replies = _smtp_extension_replies(smtp)
         ext_hit = match_smtp_extension_monotone(ext_replies)
+        # Extension STARTTLS → 220 leaves the server expecting TLS. Reopen before
+        # envelope/RSET probes so cleartext MAIL/RCPT are not run on a TLS-armed session.
+        if _smtp_starttls_pending(ext_replies):
+            with suppress(Exception):
+                smtp.close()
+            smtp, _, _ = _smtp_open(smtplib, host, port)
 
         with suppress(Exception):
             smtp.rset()
@@ -195,6 +185,33 @@ def _smtp_reply(ret: object, default_code: int = 0) -> tuple[int, object]:
     return default_code, ret
 
 
+def _smtp_open(smtplib, host: str, port: int):
+    """Connect and greet. local_hostname skips smtplib's eager socket.getfqdn()."""
+    smtp = smtplib.SMTP(
+        timeout=settings.timeout_seconds,
+        local_hostname=SMTP_HELO,
+    )
+    _code, greet_msg = smtp.connect(host, port)
+    greeting = _smtp_text(greet_msg)
+    ehlo_text = ""
+    try:
+        _ehlo_code, ehlo_msg = smtp.ehlo(SMTP_HELO)
+        ehlo_text = _smtp_text(ehlo_msg)
+    except Exception:
+        try:
+            _helo_code, helo_msg = smtp.helo(SMTP_HELO)
+            ehlo_text = _smtp_text(helo_msg)
+        except Exception:
+            with suppress(Exception):
+                smtp.helo(SMTP_HELO)
+    return smtp, greeting, ehlo_text
+
+
+def _smtp_starttls_pending(ext_replies: list[tuple[str, int, str]]) -> bool:
+    """True when extension STARTTLS answered 220 (server now expects a TLS handshake)."""
+    return any(cmd == "STARTTLS" and code == 220 for cmd, code, _ in ext_replies)
+
+
 def _smtp_mail(smtp) -> tuple[int, object]:
     try:
         return _smtp_reply(smtp.mail(SMTP_MAIL_FROM))
@@ -258,6 +275,7 @@ def _smtp_starttls_probe(host: str, port: int, timeout: float) -> tuple[int, str
     if smtplib is None:
         return 0, ""
     st = None
+    wrapped = None
     try:
         st = smtplib.SMTP(timeout=timeout, local_hostname=SMTP_HELO)
         st.connect(host, port)
@@ -271,14 +289,17 @@ def _smtp_starttls_probe(host: str, port: int, timeout: float) -> tuple[int, str
         if starttls_code != 220:
             return starttls_code, ""
         try:
-            _tls_wrap(st.sock, timeout)
+            wrapped = _tls_wrap(st.sock, timeout)
             return starttls_code, ""
         except Exception as exc:
             return starttls_code, closed_reason(str(exc))
     except Exception:
         return 0, ""
     finally:
-        if st is not None:
+        if wrapped is not None:
+            with suppress(Exception):
+                wrapped.close()
+        elif st is not None:
             with suppress(Exception):
                 st.close()
 

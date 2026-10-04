@@ -246,3 +246,50 @@ def test_smtp_starttls_probe_sends_ehlo_before_starttls(mock_import, mock_wrap):
     assert err
     assert calls.index("ehlo") < calls.index("STARTTLS")
     session.close.assert_called()
+
+
+@patch.object(smtp, "_tls_wrap")
+@patch.object(smtp, "optional_import")
+def test_smtp_extension_starttls_220_reopens_before_envelope(mock_import, mock_wrap):
+    """STARTTLS 220 on the shared session must not leave MAIL/RCPT on a TLS-armed socket."""
+    mock_wrap.side_effect = ssl.SSLError("handshake failed")
+    lib = MagicMock()
+    sessions: list[MagicMock] = []
+
+    def make_session():
+        session = MagicMock()
+        sessions.append(session)
+        session.connect.return_value = (220, b"mail ESMTP")
+        session.ehlo.return_value = (250, b"mail.example.com\nSTARTTLS")
+
+        def docmd(cmd, arg=""):
+            if cmd == "AUTH":
+                return (535, b"authentication failed")
+            if cmd == "STARTTLS":
+                return (220, b"2.0.0 Ready to start TLS")
+            if cmd == "RSET":
+                return (250, b"reset")
+            return (250, b"ok")
+
+        session.docmd.side_effect = docmd
+        session.login.side_effect = OSError("535 auth failed")
+        session.mail.return_value = (250, b"ok")
+        session.rcpt.return_value = (550, b"relay denied")
+        return session
+
+    lib.SMTP.side_effect = lambda *a, **k: make_session()
+    mock_import.return_value = lib
+    inds = smtp.probe_smtp("127.0.0.1", 25)
+    by_id = {i.id: i for i in inds}
+    # First session: auth+extensions (STARTTLS 220). Second: envelope. Third: lie probe.
+    assert len(sessions) >= 2
+    sessions[0].mail.assert_not_called()
+    sessions[1].mail.assert_called()
+    assert by_id["smtp.starttls_lie"].triggered
+    assert not by_id["smtp.open_relay"].triggered
+
+
+def test_smtp_starttls_pending_helper():
+    assert smtp._smtp_starttls_pending([("STARTTLS", 220, "ready")])
+    assert not smtp._smtp_starttls_pending([("STARTTLS", 502, "no")])
+    assert not smtp._smtp_starttls_pending([("VRFY", 252, "ok")])

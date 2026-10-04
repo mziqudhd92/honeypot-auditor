@@ -159,7 +159,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   object-list dump (`docs/KUBERNETES.md`)
 - SSDP / UPnP discovery UDP engine on ports 1900/11900: unicast `M-SEARCH`
   framing, header facade, ST echo, response clone, corroboration-gated stock
-  `SERVER`, `LOCATION` loopback, method stub (`docs/udp/SSDP.md`)
+  `SERVER`, `LOCATION` loopback, method stub (`docs/strategies/ssdp/`)
 - Docker Engine HTTP API engine on ports 2375/12375 with protocol non-compliance
   detection: ping/version framing, stock ApiVersion/Version/GitCommit, unknown-path
   version/info facade, DELETE/PUT `/_ping` method stubs, `/info` missing fields or
@@ -184,7 +184,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - TFTP UDP engine on ports 69/1069: TID `fixed_source_port`, opcode/error/mode/WRQ
   facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`, plus
   `tid_reuse` (`state_nonpersist`), `response_clone`, and `no_retransmit`
-  (`docs/udp/TFTP.md`)
+  (`docs/strategies/tftp/`)
 - Three-strategy expansion for nine protocols that previously used
   **static_signature** only: DNS, NTP, Elasticsearch, IPP/CUPS, Memcached, HTTP,
   SIP, Git, and HTTP proxy now activate **arbitrary_auth** + **state_nonpersist**
@@ -194,10 +194,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   probe-key set/delete, never `flush_all`)
 - Docs sync: surface NTP in README/BASIC banner, ports table, site index,
   agents/llms briefs, SCORING, and `docs/udp/README.md` (guide already at
-  `docs/udp/NTP.md`)
+  `docs/strategies/ntp/`)
 - NTP UDP engine on ports 123/1123: framing, mode/VN facade, originate echo,
   stratum facade, response clone, and corroboration-gated zeroed clock metrics /
-  epoch-zero / stock refid (`docs/udp/NTP.md`; never monlist/mode-7)
+  epoch-zero / stock refid (`docs/strategies/ntp/`; never monlist/mode-7)
 - Memcached ASCII engine on ports 11211/21211 with protocol non-compliance
   detection: VERSION/stats framing, unknown-command ERROR fidelity, get-miss END,
   bitwise-identical canned stats, stock VERSION lures (corroboration-gated for
@@ -212,7 +212,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - DNS (UDP/53, lab 15353) RFC non-compliance engine under `probes/udp/`: header
   framing, txid echo, illegal OPCODE facade, question echo, RCODE stub on
   `.invalid`, response clone, corroboration-gated 0x20 case mismatch, EDNS OPT
-  facade, stock TXT/SOA lure (`docs/udp/DNS.md`)
+  facade, stock TXT/SOA lure (`docs/strategies/dns/`)
 - UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
   `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
   `probes/udp/` package with `UDPEngine` discovery merged into
@@ -246,7 +246,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   acceptance, request-id echo, invalid version facade, noSuch success on missing OID,
   BER/PDU framing, stock sysDescr lures, GetNext stub, wrong MIB ASN.1 types
   (`sysObjectID` / `sysUpTime`), OID-name echo failures, bitwise-identical canned
-  replies (`docs/SNMP.md`)
+  replies (`docs/strategies/snmp/`)
 - Docs/site sync for SNMP + MQTT: protocol table / FAQ / JSON-LD on `docs/index.html`,
   `llms.txt` / `llms-full.txt` / `sitemap.xml`, scoring strategy blurbs
 
