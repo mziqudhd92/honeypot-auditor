@@ -11,6 +11,7 @@ import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from honeypot_auditor import __version__
 from honeypot_auditor.analyzer import build_report
@@ -38,6 +39,10 @@ from honeypot_auditor.reporters.json_export import export, export_nmap_exclude, 
 from honeypot_auditor.reporters.sarif import export_sarif, export_sarif_many
 from honeypot_auditor.settings import ProbeProfile, settings
 from honeypot_auditor.signatures.evaluate import evaluate_signatures
+
+if TYPE_CHECKING:
+    from rich.console import Console
+    from rich.progress import Progress, TaskID
 from honeypot_auditor.transport import _apply_jitter, get_transport_manager
 
 try:
@@ -361,7 +366,10 @@ def _format_job_error(exc: BaseException, *, timeout: float) -> str:
 
 
 async def _run_named(
-    name: str, fn: Callable[[], list[Indicator]], progress, task_id
+    name: str,
+    fn: Callable[[], list[Indicator]],
+    progress: Progress | None,
+    task_id: TaskID | None,
 ) -> list[Indicator]:
     _apply_jitter()
     mgr = get_transport_manager()
@@ -384,7 +392,7 @@ async def _run_named(
             )
         ]
     finally:
-        if progress is not None:
+        if progress is not None and task_id is not None:
             progress.update(task_id, advance=1, description=f"Finished {name}")
 
 
@@ -413,9 +421,7 @@ def _build_notes(
     if safe:
         notes.append("Safe mode: handshake-only probes (no deep shell/path/auth attempts).")
     if getattr(args, "passive_first_confirm", False) and safe:
-        notes.append(
-            "--passive-first-confirm: active verify after passive skip (safe-mode only)."
-        )
+        notes.append("--passive-first-confirm: active verify after passive skip (safe-mode only).")
     if args.extra_ports:
         notes.append("-p/--port selects only the listed ports (preset not applied)")
     elif getattr(args, "ports", ""):
@@ -556,8 +562,8 @@ def _probe_jobs(
     skip_active = False
     if settings.osint_only:
         skip_active = True
-    elif settings.passive_first and (passive_inds or providers) and _passive_score_high(
-        passive_inds
+    elif (
+        settings.passive_first and (passive_inds or providers) and _passive_score_high(passive_inds)
     ):
         skip_active = True
     if skip_active and not confirm:
@@ -628,7 +634,7 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.capabilities = caps
 
 
-def _write_report(report: AuditReport, args: argparse.Namespace, ip: str, console) -> Path:
+def _write_report(report: AuditReport, args: argparse.Namespace, ip: str, console: Console) -> Path:
     out = args.output or f"honeypot-audit-{ip.replace(':', '_')}.json"
     if args.format == "sarif":
         sarif_path = str(Path(out).with_suffix(".sarif"))
@@ -778,7 +784,7 @@ async def _audit_subnet(
     hosts: list[str],
     args: argparse.Namespace,
     ports: dict[str, list[int]],
-    console,
+    console: Console,
 ) -> list[AuditReport]:
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 

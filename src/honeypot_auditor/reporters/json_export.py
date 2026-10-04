@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import json
+import os
+from contextlib import suppress
 from pathlib import Path
 
 from honeypot_auditor.models import AuditReport
 
 REPORT_SCHEMA_VERSION = "1.0"
+
+
+def write_owner_only(dest: Path, text: str) -> None:
+    """Write report text readable only by the owner (reports hold target evidence)."""
+    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    with suppress(OSError):
+        dest.chmod(0o600)  # enforce on files created earlier with default perms
 
 
 def _report_payload(report: AuditReport) -> dict:
@@ -55,9 +66,9 @@ def _json_default(obj: object) -> str:
 def export(report: AuditReport, path: str | Path) -> Path:
     dest = Path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(
+    write_owner_only(
+        dest,
         json.dumps(_report_payload(report), indent=2, default=_json_default) + "\n",
-        encoding="utf-8",
     )
     return dest
 
@@ -71,9 +82,9 @@ def export_nmap_exclude(ip: str, path: str | Path) -> Path:
         existing = dest.read_text(encoding="utf-8")
         if ip in existing.splitlines():
             return dest
-        dest.write_text(existing + line, encoding="utf-8")
+        write_owner_only(dest, existing + line)
     else:
-        dest.write_text(line, encoding="utf-8")
+        write_owner_only(dest, line)
     return dest
 
 
@@ -108,5 +119,5 @@ def export_subnet(
         "summary": summary,
         "hosts": [_report_payload(r) for r in reports],
     }
-    dest.write_text(json.dumps(payload, indent=2, default=_json_default) + "\n", encoding="utf-8")
+    write_owner_only(dest, json.dumps(payload, indent=2, default=_json_default) + "\n")
     return dest

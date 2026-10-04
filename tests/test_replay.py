@@ -41,7 +41,10 @@ def test_replay_pop3_conformant_state_machine(replay_socket):
     with patch.object(pop3, "random_creds", return_value=("replay_user", "replay_credential")):
         indicators = pop3.probe_pop3("127.0.0.1", 110)
     assert not any(ind.triggered for ind in indicators)
-    assert not any(ind.skipped for ind in indicators)
+    # The replay server answers CAPA with -ERR, so the case-conformance tell has
+    # no uppercase reference and is inconclusive (skipped) by design.
+    skipped = {ind.id for ind in indicators if ind.skipped}
+    assert skipped == {"pop3.command_case"}
 
 
 @pytest.mark.replay

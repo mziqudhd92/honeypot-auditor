@@ -43,6 +43,9 @@ def test_pop3_conformant_rejections_are_clean():
         ScriptedSocket("+OK mail ready", "-ERR authenticate first"),  # NOOP
         ScriptedSocket("+OK mail ready", "-ERR unknown capability command"),  # CAPA
         ScriptedSocket("+OK mail ready", "-ERR unknown command"),  # HPAU
+        ScriptedSocket("+OK mail ready", "-ERR authenticate first"),  # LIST
+        ScriptedSocket("+OK mail ready", "-ERR authenticate first"),  # UIDL
+        ScriptedSocket("+OK mail ready", "-ERR unknown capability command"),  # lowercase capa
         ScriptedSocket("+OK mail ready", "+OK user", "-ERR invalid login"),
         ScriptedSocket("+OK mail ready", "-ERR no such user"),
     ]
@@ -53,6 +56,8 @@ def test_pop3_conformant_rejections_are_clean():
     assert not by_id["pop3.preauth_state"].skipped
     assert not by_id["pop3.auth_failed_blanket"].triggered
     assert not by_id["pop3.stock_banner"].triggered
+    assert not by_id["pop3.preauth_uidl"].triggered
+    assert by_id["pop3.command_case"].skipped  # uppercase CAPA never went +OK
 
 
 def test_pop3_repeated_any_password_and_state_bypass_trigger():
@@ -62,6 +67,9 @@ def test_pop3_repeated_any_password_and_state_bypass_trigger():
         ScriptedSocket("+OK ready", "+OK"),  # NOOP
         ScriptedSocket("+OK ready", "+OK Capability list follows"),  # CAPA
         ScriptedSocket("+OK ready", "+OK sure"),  # HPAU
+        ScriptedSocket("+OK ready", "+OK 0 messages"),  # LIST
+        ScriptedSocket("+OK ready", "+OK no messages"),  # UIDL
+        ScriptedSocket("+OK ready", "+OK sure"),  # lowercase capa (consistent)
         ScriptedSocket("+OK ready", "+OK user", "+OK maildrop", "+OK bye"),
         ScriptedSocket("+OK ready", "+OK user", "+OK maildrop", "+OK bye"),
     ]
@@ -74,7 +82,9 @@ def test_pop3_repeated_any_password_and_state_bypass_trigger():
     assert by_id["pop3.arbitrary_auth"].evidence == "user_a,user_b"
     assert "pass_a" not in str([ind.as_dict() for ind in inds])
     assert by_id["pop3.preauth_state"].triggered
+    assert by_id["pop3.preauth_uidl"].triggered
     assert by_id["pop3.unknown_command"].triggered
+    assert not by_id["pop3.command_case"].triggered
 
 
 def test_pop3_qeeqbox_blanket_and_stock_banner():
@@ -87,6 +97,9 @@ def test_pop3_qeeqbox_blanket_and_stock_banner():
         ScriptedSocket(greeting, err),  # NOOP
         ScriptedSocket(greeting, err),  # CAPA
         ScriptedSocket(greeting, err),  # HPAU
+        ScriptedSocket(greeting, err),  # LIST
+        ScriptedSocket(greeting, err),  # UIDL
+        ScriptedSocket(greeting, err),  # lowercase capa
         ScriptedSocket(greeting, "+OK USER Ok", err),
         ScriptedSocket(greeting, "+OK USER Ok", err),
     ]
@@ -108,6 +121,9 @@ def test_pop3_capa_auth_failed_with_stat_is_enough_for_blanket():
         ScriptedSocket("+OK ready", "-ERR authenticate first"),  # NOOP different
         ScriptedSocket("+OK ready", err),  # CAPA same as STAT
         ScriptedSocket("+OK ready", "-ERR unknown command"),  # HPAU different
+        ScriptedSocket("+OK ready", err),  # LIST
+        ScriptedSocket("+OK ready", err),  # UIDL
+        ScriptedSocket("+OK ready", "-ERR unknown command"),  # lowercase capa
         ScriptedSocket("+OK ready", "-ERR no"),
         ScriptedSocket("+OK ready", "-ERR no"),
     ]
@@ -120,7 +136,7 @@ def test_pop3_capa_auth_failed_with_stat_is_enough_for_blanket():
 
 def test_pop3_malformed_greeting_is_static_tell():
     inds = _run_with_sessions(ScriptedSocket("pop server ready"))
-    assert len(inds) == 6
+    assert len(inds) == 8
     greeting = next(ind for ind in inds if ind.id == "pop3.greeting")
     assert greeting.triggered
 
@@ -141,6 +157,8 @@ def test_pop3_safe_mode_is_greeting_only():
     assert by_id["pop3.preauth_state"].skipped
     assert by_id["pop3.unknown_command"].skipped
     assert by_id["pop3.auth_failed_blanket"].skipped
+    assert by_id["pop3.preauth_uidl"].skipped
+    assert by_id["pop3.command_case"].skipped
 
 
 def test_pop3_noop_alone_does_not_trigger_preauth_state():
@@ -151,6 +169,9 @@ def test_pop3_noop_alone_does_not_trigger_preauth_state():
         ScriptedSocket("+OK ready", "+OK"),  # NOOP only
         ScriptedSocket("+OK ready", "-ERR CAPA not supported"),  # CAPA
         ScriptedSocket("+OK ready", "-ERR unknown command"),
+        ScriptedSocket("+OK ready", "-ERR auth required"),  # LIST
+        ScriptedSocket("+OK ready", "-ERR auth required"),  # UIDL
+        ScriptedSocket("+OK ready", "-ERR CAPA not supported"),  # lowercase capa
         ScriptedSocket("+OK ready", "-ERR no"),
         ScriptedSocket("+OK ready", "-ERR no"),
     ]
@@ -173,5 +194,29 @@ def test_pop3_buffered_reader_handles_chunked_crlf():
 def test_pop3_connection_error_skips_suite():
     with patch.object(pop3, "create_connection", side_effect=OSError("refused")):
         inds = pop3.probe_pop3("127.0.0.1", 110)
-    assert len(inds) == 6
+    assert len(inds) == 8
     assert all(ind.skipped for ind in inds)
+
+
+def test_pop3_preauth_uidl_and_lowercase_case_tells():
+    """UIDL/LIST answered pre-auth + lowercase 'capa' rejected: loose-stub tells."""
+    sessions = [
+        ScriptedSocket("+OK ready", "+OK bye"),
+        ScriptedSocket("+OK ready", "-ERR auth required"),  # STAT rejected
+        ScriptedSocket("+OK ready", "-ERR auth required"),  # NOOP rejected
+        ScriptedSocket("+OK ready", "+OK Capability list follows"),  # CAPA uppercase +OK
+        ScriptedSocket("+OK ready", "-ERR unknown command"),  # HPAU
+        ScriptedSocket("+OK ready", "+OK 0 messages"),  # LIST pre-auth +OK
+        ScriptedSocket("+OK ready", "+OK"),  # UIDL pre-auth +OK
+        ScriptedSocket("+OK ready", "-ERR unknown command"),  # lowercase capa rejected
+        ScriptedSocket("+OK ready", "-ERR no such user"),
+        ScriptedSocket("+OK ready", "-ERR no such user"),
+    ]
+    inds = _run_with_sessions(*sessions)
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["pop3.preauth_uidl"].triggered
+    assert "UIDL" in by_id["pop3.preauth_uidl"].detail
+    assert by_id["pop3.command_case"].triggered
+    assert "case-insensitive" in by_id["pop3.command_case"].detail
+    assert not by_id["pop3.preauth_state"].triggered  # STAT stayed rejected
+    assert not by_id["pop3.arbitrary_auth"].triggered

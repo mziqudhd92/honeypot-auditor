@@ -44,7 +44,7 @@ IMAP details:
 | `imap.auth_failed_blanket` | static_signature | High fidelity; requires CAPABILITY lure text |
 | `imap.stock_banner` | static_signature | Corroboration-gated Exchange greeting |
 
-Full indicator list, PREAUTH/BYE/IMAPS behavior, and non-destructive policy: [`IMAP.md`](IMAP.md).
+Full indicator list, PREAUTH/BYE/IMAPS behavior, and non-destructive policy: [`strategies/imap/`](strategies/imap/).
 
 ### MQTT behavioral tells (basic probe)
 
@@ -58,13 +58,13 @@ MQTT uses the same three basic strategies. Prefer these over banner IOCs:
 | `mqtt.keepalive_zombie` | state_nonpersist | PINGRESP after 1.5× Keep Alive (lab-oriented) |
 | `mqtt.empty_clientid` / `mqtt.protocol_facade` | static_signature | RFC conformance, high fidelity |
 
-Full indicator list and non-destructive policy: [`MQTT.md`](MQTT.md).
+Full indicator list and non-destructive policy: [`strategies/mqtt/`](strategies/mqtt/).
 
 
 ### SNMP RFC non-compliance (basic probe)
 
 SNMP uses **arbitrary_auth** + **static_signature** only (no session/state axis).
-Prefer RFC facade / MIB-stub tells over banner IOCs alone — see [`SNMP.md`](SNMP.md).
+Prefer RFC facade / MIB-stub tells over banner IOCs alone — see [`strategies/snmp/`](strategies/snmp/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -74,13 +74,13 @@ Prefer RFC facade / MIB-stub tells over banner IOCs alone — see [`SNMP.md`](SN
 | `snmp.getnext_stub` / `snmp.type_facade` / `snmp.oid_echo` | static_signature | GetNext / ASN.1 / OID-name facade |
 | `snmp.ber_framing` / `snmp.stock_sysdescr` | static_signature | Framing + lure banner (weak sysDescr tokens corroboration-gated) |
 
-Full strategy narrative, probe flow, and non-destructive policy: [`SNMP.md`](SNMP.md).
+Full strategy narrative, probe flow, and non-destructive policy: [`strategies/snmp/`](strategies/snmp/).
 
 ### TFTP RFC non-compliance (basic probe)
 
 TFTP uses **static_signature** + **state_nonpersist** (RFC 1350 / light RFC 2347
 over UDP; no auth axis). Prefer TID / opcode / option / retransmit facade tells
-over lure strings alone — see [`udp/TFTP.md`](udp/TFTP.md).
+over lure strings alone — see [`strategies/tftp/`](strategies/tftp/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -94,7 +94,7 @@ over lure strings alone — see [`udp/TFTP.md`](udp/TFTP.md).
 | `tftp.stock_payload` | static_signature | Stock ERROR/DATA lure tokens (corroboration-gated) |
 | `tftp.framing` | static_signature | Non-speaker / unparseable TFTP reply |
 
-Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/TFTP.md`](udp/TFTP.md).
+Full indicator list, ports, safe-mode, and non-destructive policy: [`strategies/tftp/`](strategies/tftp/).
 
 ### SSDP / UPnP discovery non-compliance (basic probe)
 
@@ -111,13 +111,13 @@ SSDP uses **static_signature** only (UDP discovery has no auth or session axis).
 | `ssdp.usn_st_coherence` / `ssdp.location_uri` | static_signature | `USN` does not embed `ST` · non-absolute / non-http(s) `LOCATION` |
 | `ssdp.man_facade` / `ssdp.host_blind` | static_signature | Answers without `MAN: "ssdp:discover"` · nonsense `HOST` still 200 (both corroboration-gated) |
 
-Full indicator list, ports, safe-mode, and non-destructive policy: [`udp/SSDP.md`](udp/SSDP.md).
+Full indicator list, ports, safe-mode, and non-destructive policy: [`strategies/ssdp/`](strategies/ssdp/).
 
 ### PPTP control-channel non-compliance (basic probe)
 
 PPTP uses **all three** basic strategies on TCP/1723 (lab 11723). Prefer
 control-message semantics over stock hostname/vendor IOCs alone — see
-[`tcp/PPTP.md`](tcp/PPTP.md). Never opens GRE or runs PPP.
+[`strategies/pptp/`](strategies/pptp/). Never opens GRE or runs PPP.
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -125,12 +125,12 @@ control-message semantics over stock hostname/vendor IOCs alone — see
 | `pptp.echo_id` | state_nonpersist | Echo-Reply Identifier ≠ Echo-Request |
 | `pptp.framing` / `pptp.version_facade` / `pptp.control_stub` | static_signature | SCCRP framing · version ≠ `0x0100` / stock hostname-vendor · unknown control type answered like successful SCCRP |
 
-Full indicator list, ports, safe-mode, and non-destructive policy: [`tcp/PPTP.md`](tcp/PPTP.md).
+Full indicator list, ports, safe-mode, and non-destructive policy: [`strategies/pptp/`](strategies/pptp/).
 
 ### DNS RFC non-compliance (basic probe)
 
 DNS uses **all three** basic strategies (UDP/53). Prefer RFC facade / auth / state
-tells over banner IOCs alone — see [`udp/DNS.md`](udp/DNS.md).
+tells over banner IOCs alone — see [`strategies/dns/`](strategies/dns/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -141,12 +141,12 @@ tells over banner IOCs alone — see [`udp/DNS.md`](udp/DNS.md).
 | `dns.rcode_stub` / `dns.edns_facade` / `dns.length_incoherence` | static_signature | NXDOMAIN / EDNS OPT facade / trailing bytes after declared sections |
 | `dns.case_encoding_mismatch` / `dns.stock_payload` | static_signature | Corroboration-gated (0x20 case + stock TXT/SOA lure) |
 
-Full strategy narrative, probe flow, and non-destructive policy: [`udp/DNS.md`](udp/DNS.md).
+Full strategy narrative, probe flow, and non-destructive policy: [`strategies/dns/`](strategies/dns/).
 
 ### NTP RFC 5905 non-compliance (basic probe)
 
 NTP uses **all three** basic strategies (UDP/123). Prefer RFC facade / KoD / state
-tells over banner IOCs alone — see [`udp/NTP.md`](udp/NTP.md).
+tells over banner IOCs alone — see [`strategies/ntp/`](strategies/ntp/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -156,12 +156,12 @@ tells over banner IOCs alone — see [`udp/NTP.md`](udp/NTP.md).
 | `ntp.framing` / `ntp.mode_facade` / `ntp.org_echo` / `ntp.stratum_facade` | static_signature | High fidelity RFC tells |
 | `ntp.zeroed_clock_metrics` / `ntp.epoch_zero` / `ntp.stock_refid` / `ntp.clock_metadata` | static_signature | Corroboration-gated (sparse metrics · epoch stamps · lure refid · implausible precision/poll) |
 
-Full strategy narrative, probe flow, and non-destructive policy: [`udp/NTP.md`](udp/NTP.md).
+Full strategy narrative, probe flow, and non-destructive policy: [`strategies/ntp/`](strategies/ntp/).
 
 ### Memcached ASCII non-compliance (basic probe)
 
 Memcached uses **all three** basic strategies (TCP ASCII). Prefer framing / ERROR /
-auth / state tells over banner IOCs alone — see [`MEMCACHED.md`](MEMCACHED.md).
+auth / state tells over banner IOCs alone — see [`strategies/memcached/`](strategies/memcached/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -175,12 +175,12 @@ auth / state tells over banner IOCs alone — see [`MEMCACHED.md`](MEMCACHED.md)
 | `memcached.stock_version` | static_signature | Stock VERSION lure (generic tokens corroboration-gated) |
 
 Probe-key `set`/`delete` allowed; **never** `flush_all`. Full strategy narrative,
-probe flow, and non-destructive policy: [`MEMCACHED.md`](MEMCACHED.md).
+probe flow, and non-destructive policy: [`strategies/memcached/`](strategies/memcached/).
 
 ### Redis RESP non-compliance (basic probe)
 
 Redis uses all three basic strategies. Prefer RESP facade / state tells over banner
-IOCs alone — see [`tcp/REDIS.md`](tcp/REDIS.md).
+IOCs alone — see [`strategies/redis/`](strategies/redis/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -193,14 +193,14 @@ IOCs alone — see [`tcp/REDIS.md`](tcp/REDIS.md).
 | `redis.eval_stub` / `redis.config_stub` / `redis.type_stub` / `redis.incr_stub` | static_signature | Command-shape stubs |
 | `redis.multi_exec_stub` | static_signature | `MULTI` accepted but `EXEC` is not a reply array (read-only `GET` queued) |
 
-Full indicator list, probe flow, safe-mode, and non-destructive policy: [`tcp/REDIS.md`](tcp/REDIS.md).
+Full indicator list, probe flow, safe-mode, and non-destructive policy: [`strategies/redis/`](strategies/redis/).
 
 ### Elasticsearch API non-compliance (basic probe)
 
 Elasticsearch uses **all three** basic strategies (read-only HTTP JSON API plus dual
 synthetic Basic and cluster-identity state checks). Prefer path/method/endpoint
 facade and auth/state tells over banner IOCs alone — full strategy narrative and
-probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+probe flow: [`strategies/elasticsearch/`](strategies/elasticsearch/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -213,12 +213,12 @@ probe flow: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
 | `elasticsearch.stock_cluster` | static_signature | Stock cluster_name / version / tagline / uuid (may be corroboration-gated) |
 | `elasticsearch.root_framing` | static_signature | Non-speaker / malformed root document |
 
-Full indicator list, ports, safe-mode, and non-destructive policy: [`ELASTICSEARCH.md`](ELASTICSEARCH.md).
+Full indicator list, ports, safe-mode, and non-destructive policy: [`strategies/elasticsearch/`](strategies/elasticsearch/).
 
 ### IPP / CUPS non-compliance (basic probe)
 
 IPP uses **all three** basic strategies (HTTP+IPP with TLS fallback). Prefer
-CUPS/IPP facade and auth/state tells over banner IOCs alone — see [`IPP.md`](IPP.md).
+CUPS/IPP facade and auth/state tells over banner IOCs alone — see [`strategies/ipp/`](strategies/ipp/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -229,12 +229,12 @@ CUPS/IPP facade and auth/state tells over banner IOCs alone — see [`IPP.md`](I
 | `ipp.path_facade` / `method_stub` / `printers_stub` / `admin_open` | static_signature | Path/method/admin façades |
 | `ipp.server_header` / `frozen_date` / `stock_body` | static_signature | Lure / clock (often corroboration-gated) |
 
-Full indicator list, ports, safe-mode, and non-destructive policy: [`IPP.md`](IPP.md).
+Full indicator list, ports, safe-mode, and non-destructive policy: [`strategies/ipp/`](strategies/ipp/).
 
 ### HTTP decoy-web non-compliance (basic probe)
 
 HTTP uses **all three** basic strategies plus a `proto_conformance` slot. Prefer
-body-reading, method, and skin tells over banner IOCs alone — see [`HTTP.md`](HTTP.md).
+body-reading, method, and skin tells over banner IOCs alone — see [`strategies/http/`](strategies/http/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -247,12 +247,12 @@ body-reading, method, and skin tells over banner IOCs alone — see [`HTTP.md`](
 | `http.wildcard_host` | proto_conformance | Invalid `Host` served 200 |
 | `http.silent_accept` | static_signature | TCP accept with no HTTP bytes (tarpit face) |
 
-Full indicator list, ports, safe-mode, and non-destructive policy: [`HTTP.md`](HTTP.md).
+Full indicator list, ports, safe-mode, and non-destructive policy: [`strategies/http/`](strategies/http/).
 
 ### SIP transaction-coherence non-compliance (basic probe)
 
 SIP uses **all three** basic strategies. Prefer transaction-echo and Digest
-tells over banner IOCs alone — see [`SIP.md`](SIP.md).
+tells over banner IOCs alone — see [`strategies/sip/`](strategies/sip/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -262,13 +262,13 @@ tells over banner IOCs alone — see [`SIP.md`](SIP.md).
 | `sip.cseq_echo` | static_signature | Response CSeq does not echo its own transaction (requests use 7 then 9; gated) |
 | `sip.user_agent` | static_signature | Default-template User-Agent/Server |
 
-Full indicator list, ports, safe-mode, and non-destructive policy: [`SIP.md`](SIP.md).
+Full indicator list, ports, safe-mode, and non-destructive policy: [`strategies/sip/`](strategies/sip/).
 
 ### Kubernetes API non-compliance (basic probe)
 
 Kubernetes uses **static_signature** only (read-only TLS discovery on **6443** /
 lab **16443**; no token spraying, no object access). Prefer path/shape facade
-tells over banner IOCs alone — see [`KUBERNETES.md`](KUBERNETES.md).
+tells over banner IOCs alone — see [`strategies/kubernetes/`](strategies/kubernetes/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -277,13 +277,13 @@ tells over banner IOCs alone — see [`KUBERNETES.md`](KUBERNETES.md).
 | `kubernetes.stock_version` | static_signature | Stock `gitVersion` / `platform` lure (often corroboration-gated) |
 | `kubernetes.unauthenticated_ok` | static_signature | `/api/v1` without a token dumps object lists instead of discovery (gated) |
 
-Full indicator list, ports, safe-mode, and non-destructive policy: [`KUBERNETES.md`](KUBERNETES.md).
+Full indicator list, ports, safe-mode, and non-destructive policy: [`strategies/kubernetes/`](strategies/kubernetes/).
 
 ### Docker Engine API non-compliance (basic probe)
 
 Docker uses **static_signature** only (read-only Engine HTTP API on **2375** /
 lab **12375**; no auth/state axis). Prefer path/method/info facade tells over
-banner IOCs alone — full strategy narrative and probe flow: [`DOCKER.md`](DOCKER.md).
+banner IOCs alone — full strategy narrative and probe flow: [`strategies/docker/`](strategies/docker/).
 
 | ID | Category | Notes |
 |----|----------|-------|
@@ -293,7 +293,7 @@ banner IOCs alone — full strategy narrative and probe flow: [`DOCKER.md`](DOCK
 | `docker.stock_version` | static_signature | Stock `ApiVersion` / `Version` / `GitCommit` lure (`ApiVersion` `1.0` and other common values are corroboration-gated, not decisive alone) |
 | `docker.tls_hint_mismatch` | static_signature | Deferred — TLS Engine API **2376** out of scope (always skipped) |
 
-Full indicator list, ports, safe-mode, and non-destructive policy: [`DOCKER.md`](DOCKER.md).
+Full indicator list, ports, safe-mode, and non-destructive policy: [`strategies/docker/`](strategies/docker/).
 
 **Corroboration bonus**: +5% per protocol beyond the first (max +35%).
 

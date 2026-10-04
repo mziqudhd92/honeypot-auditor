@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import secrets
 from contextlib import suppress
+from typing import Any
 
 from honeypot_auditor.config import (
     FTP_LURE_ACCOUNTS,
@@ -391,7 +392,7 @@ def probe_ftp(host: str, port: int) -> list[Indicator]:
     )
 
 
-def _ftp_open(ftplib, host: str, port: int):
+def _ftp_open(ftplib: Any, host: str, port: int) -> tuple[Any, str]:
     # FTP is intentionally the protocol under audit; only synthetic credentials are used.
     ftp = ftplib.FTP()  # nosec B321
     ftp.connect(host, port, timeout=settings.timeout_seconds)
@@ -399,7 +400,7 @@ def _ftp_open(ftplib, host: str, port: int):
     return ftp, ftp.getwelcome() or ""
 
 
-def _ftp_close(ftp) -> None:
+def _ftp_close(ftp: Any) -> None:
     try:
         ftp.quit()
     except Exception:
@@ -407,7 +408,9 @@ def _ftp_close(ftp) -> None:
             ftp.close()
 
 
-def _ftp_walk_auth(ftplib, host: str, port: int, ftp, welcome: str):
+def _ftp_walk_auth(
+    ftplib: Any, host: str, port: int, ftp: Any, welcome: str
+) -> tuple[Any, str, bool, str, str, str, str, str]:
     """Anonymous, then random, then a short stock decoy list (test with empty password, …)."""
     rand_user, rand_pass = random_creds()
     attempts: list[tuple[str, str, str]] = [
@@ -440,7 +443,7 @@ def _ftp_session_dead(user_resp: str, pass_resp: str) -> bool:
     )
 
 
-def _ftp_try_login(ftp, user: str, password: str) -> tuple[str, str, bool]:
+def _ftp_try_login(ftp: Any, user: str, password: str) -> tuple[str, str, bool]:
     user_resp = ""
     # This is a protocol response buffer, not a credential.
     pass_resp = ""  # nosec B105
@@ -457,7 +460,7 @@ def _ftp_try_login(ftp, user: str, password: str) -> tuple[str, str, bool]:
 
 
 def _ftp_login(
-    ftp,
+    ftp: Any,
     username: str = "",
     # The default is an optional synthetic probe input, never a shipped credential.
     password: str = "",  # nosec B107
@@ -471,7 +474,7 @@ def _ftp_login(
         ftp.login("anonymous", "guest@")
 
 
-def _ftp_cwd_probe_dir(ftp) -> None:
+def _ftp_cwd_probe_dir(ftp: Any) -> None:
     for path in ("incoming", "/incoming", "/"):
         with suppress(Exception):
             ftp.cwd(path)
@@ -501,7 +504,7 @@ def _ftp_banner_hit(
     return None
 
 
-def _ftp_desert_probe(ftp) -> tuple[str | None, str]:
+def _ftp_desert_probe(ftp: Any) -> tuple[str | None, str]:
     """Pre-auth FEAT/PWD/PASV/NOOP — shallow emulators answer 500 Unknown Command for all."""
     responses: dict[str, str] = {}
     for cmd in ("FEAT", "PWD", "PASV", "NOOP"):

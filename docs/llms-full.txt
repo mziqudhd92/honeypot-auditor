@@ -180,6 +180,7 @@ UHBS (https://github.com/uhbs/uhbs-standard) grades decoy quality for builders. 
 
 - https://mziqudhd92.github.io/honeypot-auditor/llms.txt
 - https://mziqudhd92.github.io/honeypot-auditor/agents.md
+- https://mziqudhd92.github.io/honeypot-auditor/strategies/
 - https://mziqudhd92.github.io/honeypot-auditor/STRATEGIES.md
 - https://mziqudhd92.github.io/honeypot-auditor/tcp/REDIS.md
 - https://mziqudhd92.github.io/honeypot-auditor/tcp/SSH.md

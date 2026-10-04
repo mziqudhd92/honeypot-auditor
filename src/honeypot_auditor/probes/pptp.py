@@ -10,7 +10,7 @@ control plane on TCP/1723 only; never GRE / PPP / CHAP):
     Pre-auth call establishment alone is RFC 2637-honest — real concentrators
     accept OCRQ before PPP authentication runs inside the GRE tunnel.
 
-TCP/1723 (lab 11723). See docs/tcp/PPTP.md.
+TCP/1723 (lab 11723). See docs/strategies/pptp/.
 """
 
 from __future__ import annotations

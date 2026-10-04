@@ -5,9 +5,8 @@
 | Version | Supported |
 |---------|-----------|
 | 1.0.x   | Yes       |
-| 0.9.x   | Yes       |
-| 0.8.x   | Yes       |
-| ≤ 0.7.x | No        |
+| 0.9.x   | Security fixes only |
+| ≤ 0.8.x | No        |
 
 ## Reporting a vulnerability
 
@@ -31,6 +30,11 @@ It is for authorized defensive research, lab validation, and purple-team work on
 - **Private / loopback / RFC1918** targets run without extra flags.
 - **Public IPs** require `--confirm-authorized`. This is **self-attestation** — the
   tool cannot verify permission. The JSON report records when the flag was used.
+- **Hostnames resolve before the gate**: a name that resolves into loopback /
+  RFC1918 address space is treated as a private target and scans without
+  confirmation (resolved via IPv4 `gethostbyname`; `--dual-stack` has its own
+  resolver). Scanning your own LAN is *your* authorization — the flag gate only
+  guards public address space.
 - Misuse against systems you do not own may violate law and provider terms.
 
 ### Data handling

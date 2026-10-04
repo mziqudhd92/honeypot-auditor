@@ -6,6 +6,43 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- SMTP / POP3 detection: two additional protocol tells each — SMTP
+  `rset_envelope` (envelope survives an explicit RSET: canned transaction state)
+  and `starttls_lie` (STARTTLS advertised + 220 but the TLS handshake fails,
+  probed in an isolated session); POP3 `preauth_uidl` (LIST/UIDL answered in
+  AUTHORIZATION state) and `command_case` (lowercase `capa` rejected while
+  uppercase `CAPA` works — RFC 1939 keywords are case-insensitive)
+- SMTP probes pass `local_hostname` to smtplib, skipping its eager
+  `socket.getfqdn()` — a multi-second DNS stall per connection on hosts whose
+  name does not resolve
+- Dependabot (pip + github-actions, weekly) and a weekly `schedule:` trigger on the
+  security workflow, so new CVEs surface between PRs
+- CycloneDX SBOM attached to GitHub Releases (`publish.yml`); GHCR images now ship
+  provenance + SBOM attestations (`publish-ghcr.yml`)
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) and OpenSSF Scorecard badge
+
+### Changed
+
+- Audit reports (JSON / SARIF / nmap-exclude) are written `0600` — they carry target
+  evidence and probe transcripts
+- Container: digest-pinned base image, OCI labels, non-root `auditor` user
+- Coverage gate raised 60% → 75% (suite currently at ~77%)
+- Security support table trimmed to 1.0.x (0.9.x security-fixes only); authorization
+  gate docs now state that hostnames resolving into LAN/RFC1918 scan without
+  confirmation (README + SECURITY.md)
+- `docs/PUBLISHING.md` documents signed release tags (`git tag -s`)
+- Typed the remaining unannotated defs (`probes/ftp.py` helpers; `cli.py`
+  `_run_named` / `_write_report` / `_audit_subnet`); SMB helpers debug-log their
+  swallowed exceptions instead of staying silent
+- CI: `timeout-minutes` and `concurrency` groups across workflows
+
+### Removed
+
+- Dead `netutil_async.py` module and stale `requirements.txt` (`pyproject.toml` is
+  the single dependency source; README + entry-script hints updated)
+
 ### Fixed
 
 - CI: ruff import order in `tests/test_mongodb.py`; security workflow audits
@@ -122,7 +159,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   object-list dump (`docs/KUBERNETES.md`)
 - SSDP / UPnP discovery UDP engine on ports 1900/11900: unicast `M-SEARCH`
   framing, header facade, ST echo, response clone, corroboration-gated stock
-  `SERVER`, `LOCATION` loopback, method stub (`docs/udp/SSDP.md`)
+  `SERVER`, `LOCATION` loopback, method stub (`docs/strategies/ssdp/`)
 - Docker Engine HTTP API engine on ports 2375/12375 with protocol non-compliance
   detection: ping/version framing, stock ApiVersion/Version/GitCommit, unknown-path
   version/info facade, DELETE/PUT `/_ping` method stubs, `/info` missing fields or
@@ -147,7 +184,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - TFTP UDP engine on ports 69/1069: TID `fixed_source_port`, opcode/error/mode/WRQ
   facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`, plus
   `tid_reuse` (`state_nonpersist`), `response_clone`, and `no_retransmit`
-  (`docs/udp/TFTP.md`)
+  (`docs/strategies/tftp/`)
 - Three-strategy expansion for nine protocols that previously used
   **static_signature** only: DNS, NTP, Elasticsearch, IPP/CUPS, Memcached, HTTP,
   SIP, Git, and HTTP proxy now activate **arbitrary_auth** + **state_nonpersist**
@@ -157,10 +194,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   probe-key set/delete, never `flush_all`)
 - Docs sync: surface NTP in README/BASIC banner, ports table, site index,
   agents/llms briefs, SCORING, and `docs/udp/README.md` (guide already at
-  `docs/udp/NTP.md`)
+  `docs/strategies/ntp/`)
 - NTP UDP engine on ports 123/1123: framing, mode/VN facade, originate echo,
   stratum facade, response clone, and corroboration-gated zeroed clock metrics /
-  epoch-zero / stock refid (`docs/udp/NTP.md`; never monlist/mode-7)
+  epoch-zero / stock refid (`docs/strategies/ntp/`; never monlist/mode-7)
 - Memcached ASCII engine on ports 11211/21211 with protocol non-compliance
   detection: VERSION/stats framing, unknown-command ERROR fidelity, get-miss END,
   bitwise-identical canned stats, stock VERSION lures (corroboration-gated for
@@ -175,7 +212,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - DNS (UDP/53, lab 15353) RFC non-compliance engine under `probes/udp/`: header
   framing, txid echo, illegal OPCODE facade, question echo, RCODE stub on
   `.invalid`, response clone, corroboration-gated 0x20 case mismatch, EDNS OPT
-  facade, stock TXT/SOA lure (`docs/udp/DNS.md`)
+  facade, stock TXT/SOA lure (`docs/strategies/dns/`)
 - UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
   `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
   `probes/udp/` package with `UDPEngine` discovery merged into
@@ -209,7 +246,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   acceptance, request-id echo, invalid version facade, noSuch success on missing OID,
   BER/PDU framing, stock sysDescr lures, GetNext stub, wrong MIB ASN.1 types
   (`sysObjectID` / `sysUpTime`), OID-name echo failures, bitwise-identical canned
-  replies (`docs/SNMP.md`)
+  replies (`docs/strategies/snmp/`)
 - Docs/site sync for SNMP + MQTT: protocol table / FAQ / JSON-LD on `docs/index.html`,
   `llms.txt` / `llms-full.txt` / `sitemap.xml`, scoring strategy blurbs
 

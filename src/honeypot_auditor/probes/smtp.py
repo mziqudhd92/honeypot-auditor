@@ -1,11 +1,14 @@
 """SMTP fingerprint engine.
 
-Strategies: arbitrary auth (AUTH any-password, open relay) · state non-persistence (lost envelope) · static signature (loopback identity).
+Strategies: arbitrary auth (AUTH any-password, open relay) · state non-persistence
+(lost envelope, RSET-ignored envelope) · static signature (loopback identity,
+STARTTLS capability lie).
 """
 
 from __future__ import annotations
 
 import base64
+import ssl
 from contextlib import suppress
 
 from honeypot_auditor.config import (
@@ -15,6 +18,8 @@ from honeypot_auditor.config import (
     match_smtp_extension_monotone,
     match_smtp_lost_envelope,
     match_smtp_placeholder_identity,
+    match_smtp_rset_envelope,
+    match_smtp_starttls_lie,
 )
 from honeypot_auditor.models import Indicator, optional_import
 from honeypot_auditor.netutil import closed_reason
@@ -26,7 +31,17 @@ _SMTP_SKIP = (
     ("smtp.arbitrary_auth", "SMTP AUTH accepts random credentials", "arbitrary_auth"),
     ("smtp.identity", "SMTP greeting/EHLO identity is a placeholder", "static_signature"),
     ("smtp.extensions", "SMTP VRFY/EXPN/STARTTLS/ETRN replies are monotone", "static_signature"),
+    (
+        "smtp.starttls_lie",
+        "SMTP advertises STARTTLS but the TLS handshake fails",
+        "static_signature",
+    ),
     ("smtp.envelope", "SMTP envelope is not stored after MAIL FROM", "state_nonpersist"),
+    (
+        "smtp.rset_envelope",
+        "SMTP envelope survives RSET (transaction state is canned)",
+        "state_nonpersist",
+    ),
 )
 
 
@@ -40,18 +55,7 @@ def probe_smtp(host: str, port: int) -> list[Indicator]:
     auth_detail = ""
     auth_err = ""
     try:
-        smtp = smtplib.SMTP(timeout=settings.timeout_seconds)
-        _code, greet_msg = smtp.connect(host, port)
-        greeting = _smtp_text(greet_msg)
-        try:
-            _ehlo_code, ehlo_msg = smtp.ehlo(SMTP_HELO)
-            ehlo_text = _smtp_text(ehlo_msg)
-        except Exception:
-            try:
-                _helo_code, helo_msg = smtp.helo(SMTP_HELO)
-                ehlo_text = _smtp_text(helo_msg)
-            except Exception:
-                smtp.helo(SMTP_HELO)
+        smtp, greeting, ehlo_text = _smtp_open(smtplib, host, port)
 
         user, password = random_creds()
         try:
@@ -62,13 +66,26 @@ def probe_smtp(host: str, port: int) -> list[Indicator]:
 
         ext_replies = _smtp_extension_replies(smtp)
         ext_hit = match_smtp_extension_monotone(ext_replies)
+        # Extension STARTTLS → 220 leaves the server expecting TLS. Reopen before
+        # envelope/RSET probes so cleartext MAIL/RCPT are not run on a TLS-armed session.
+        if _smtp_starttls_pending(ext_replies):
+            with suppress(Exception):
+                smtp.close()
+            smtp, _, _ = _smtp_open(smtplib, host, port)
 
         with suppress(Exception):
             smtp.rset()
         mail_code, mail_msg = _smtp_mail(smtp)
         code, msg = _smtp_rcpt(smtp)
+        rset_code, _rset_msg = _smtp_rset(smtp)
+        rcpt2_code, _rcpt2_msg = _smtp_rcpt(smtp)
+        rset_hit = match_smtp_rset_envelope(mail_code, rset_code, rcpt2_code)
         with suppress(Exception):
             smtp.quit()
+        tls_code, tls_error = 0, ""
+        if "starttls" in ehlo_text.lower():
+            tls_code, tls_error = _smtp_starttls_probe(host, port, settings.timeout_seconds)
+        tls_hit = match_smtp_starttls_lie(ehlo_text, tls_code, tls_error)
         accepted = 200 <= int(code) < 300
         identity_blob = f"{greeting}\n{ehlo_text}"
         identity_hit = match_smtp_placeholder_identity(identity_blob)
@@ -113,6 +130,16 @@ def probe_smtp(host: str, port: int) -> list[Indicator]:
                 evidence="; ".join(f"{cmd} {code}" for cmd, code, _ in ext_replies),
             ),
             Indicator(
+                id="smtp.starttls_lie",
+                title="SMTP advertises STARTTLS but the TLS handshake fails",
+                category="static_signature",
+                triggered=bool(tls_hit),
+                protocol="smtp",
+                detail=tls_hit
+                or "STARTTLS handshake completed, was refused, or was not advertised",
+                evidence=f"STARTTLS → {tls_code}; tls_error={tls_error!r}",
+            ),
+            Indicator(
                 id="smtp.envelope",
                 title="SMTP envelope is not stored after MAIL FROM",
                 category="state_nonpersist",
@@ -123,6 +150,18 @@ def probe_smtp(host: str, port: int) -> list[Indicator]:
                     or f"MAIL FROM → {mail_code} {_smtp_text(mail_msg)[:80]}; RCPT → {code}"
                 ),
                 evidence=f"{mail_code} {_smtp_text(mail_msg)[:200]} | {code} {_smtp_text(msg)[:200]}",
+            ),
+            Indicator(
+                id="smtp.rset_envelope",
+                title="SMTP envelope survives RSET (transaction state is canned)",
+                category="state_nonpersist",
+                triggered=bool(rset_hit),
+                protocol="smtp",
+                detail=(
+                    rset_hit
+                    or f"RSET → {rset_code}; post-RSET RCPT → {rcpt2_code} (real MTAs: 503 need MAIL)"
+                ),
+                evidence=f"MAIL {mail_code} | RSET {rset_code} | RCPT {rcpt2_code}",
             ),
         ]
     except Exception as exc:
@@ -144,6 +183,33 @@ def _smtp_reply(ret: object, default_code: int = 0) -> tuple[int, object]:
         except (TypeError, ValueError):
             return default_code, ret[1]
     return default_code, ret
+
+
+def _smtp_open(smtplib, host: str, port: int):
+    """Connect and greet. local_hostname skips smtplib's eager socket.getfqdn()."""
+    smtp = smtplib.SMTP(
+        timeout=settings.timeout_seconds,
+        local_hostname=SMTP_HELO,
+    )
+    _code, greet_msg = smtp.connect(host, port)
+    greeting = _smtp_text(greet_msg)
+    ehlo_text = ""
+    try:
+        _ehlo_code, ehlo_msg = smtp.ehlo(SMTP_HELO)
+        ehlo_text = _smtp_text(ehlo_msg)
+    except Exception:
+        try:
+            _helo_code, helo_msg = smtp.helo(SMTP_HELO)
+            ehlo_text = _smtp_text(helo_msg)
+        except Exception:
+            with suppress(Exception):
+                smtp.helo(SMTP_HELO)
+    return smtp, greeting, ehlo_text
+
+
+def _smtp_starttls_pending(ext_replies: list[tuple[str, int, str]]) -> bool:
+    """True when extension STARTTLS answered 220 (server now expects a TLS handshake)."""
+    return any(cmd == "STARTTLS" and code == 220 for cmd, code, _ in ext_replies)
 
 
 def _smtp_mail(smtp) -> tuple[int, object]:
@@ -176,6 +242,66 @@ def _smtp_extension_replies(smtp) -> list[tuple[str, int, str]]:
         except Exception as exc:
             replies.append((cmd, 0, str(exc)))
     return replies
+
+
+def _smtp_rset(smtp) -> tuple[int, object]:
+    try:
+        return _smtp_reply(smtp.docmd("RSET"))
+    except Exception as exc:
+        return 0, str(exc)
+
+
+def _tls_wrap(sock, timeout: float):
+    """Wrap a cleartext socket with TLS (verification off — fingerprinting only)."""
+    sock.settimeout(timeout)  # bound the handshake itself, not just post-TLS reads
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    wrapped = context.wrap_socket(sock)
+    wrapped.settimeout(timeout)
+    return wrapped
+
+
+def _smtp_starttls_probe(host: str, port: int, timeout: float) -> tuple[int, str]:
+    """Fresh connection: EHLO/HELO, STARTTLS, then a TLS handshake attempt.
+
+    Returns (reply_code, tls_error). Uses its own session so a botched
+    handshake cannot poison the main envelope/relay probes. Verification is
+    disabled by design (fingerprinting, not trust). RFC 3207 requires a hello
+    before STARTTLS; skipping it yields 503 on compliant MTAs and false
+    negatives for the capability-lie tell.
+    """
+    smtplib = optional_import("smtplib")
+    if smtplib is None:
+        return 0, ""
+    st = None
+    wrapped = None
+    try:
+        st = smtplib.SMTP(timeout=timeout, local_hostname=SMTP_HELO)
+        st.connect(host, port)
+        try:
+            st.ehlo(SMTP_HELO)
+        except Exception:
+            with suppress(Exception):
+                st.helo(SMTP_HELO)
+        code, _msg = _smtp_reply(st.docmd("STARTTLS"))
+        starttls_code = int(code)
+        if starttls_code != 220:
+            return starttls_code, ""
+        try:
+            wrapped = _tls_wrap(st.sock, timeout)
+            return starttls_code, ""
+        except Exception as exc:
+            return starttls_code, closed_reason(str(exc))
+    except Exception:
+        return 0, ""
+    finally:
+        if wrapped is not None:
+            with suppress(Exception):
+                wrapped.close()
+        elif st is not None:
+            with suppress(Exception):
+                st.close()
 
 
 def _smtp_try_any_auth(smtp, user: str, password: str) -> tuple[bool, str]:
