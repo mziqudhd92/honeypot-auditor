@@ -44,7 +44,7 @@ def test_replay_pop3_conformant_state_machine(replay_socket):
     # The replay server answers CAPA with -ERR, so the case-conformance tell has
     # no uppercase reference and is inconclusive (skipped) by design.
     skipped = {ind.id for ind in indicators if ind.skipped}
-    assert skipped == {"pop3.command_case"}
+    assert skipped == {"pop3.command_case", "pop3.pre_tls_banner"}
 
 
 @pytest.mark.replay

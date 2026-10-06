@@ -8,6 +8,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Three new protocol engines and POP3S support, all RFC-behavioral (no product
+  signatures): **DHCP** (`dhcp.xid_echo`/`framing`/`canned_offer` — capability-gated
+  on privileged client port 68), **NetBIOS** (NBNS 137 + session service 139:
+  `trnid_echo`, `framing`, `canned_nbstat`, `session_grant`, `session_framing`),
+  **Syslog** (UDP 514 / TCP RFC 6587: `unexpected_reply`, `tcp_reply` — any answer
+  on the ack-less channel violates the RFC), and **POP3S** (995/1995 reuse the pop3
+  engine over implicit TLS with a new `pop3.pre_tls_banner` plaintext-leak tell).
+  SNMP, DNS, and TFTP were already shipped engines
 - SMTP / POP3 detection: two additional protocol tells each — SMTP
   `rset_envelope` (envelope survives an explicit RSET: canned transaction state)
   and `starttls_lie` (STARTTLS advertised + 220 but the TLS handshake fails,

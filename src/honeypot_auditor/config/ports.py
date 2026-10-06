@@ -37,6 +37,9 @@ PORT_PRESET_IANA: dict[str, int] = {
     "tftp": 69,
     "kubernetes": 6443,
     "pptp": 1723,
+    "dhcp": 67,
+    "netbios": 137,
+    "syslog": 514,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -70,6 +73,9 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "tftp": 1069,
     "kubernetes": 16443,
     "pptp": 11723,
+    "dhcp": 1067,  # lab DHCP (UDP), pairs with IANA 67
+    "netbios": 1139,  # lab NetBIOS session service (TCP), pairs with NBNS IANA 137
+    "syslog": 10514,  # lab Syslog (UDP), pairs with IANA 514
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {
@@ -81,10 +87,13 @@ DEFAULT_PORT_PRESET = "both"
 PORT_PRESET_CHOICES = ("both", "iana", "docker-research")
 
 _EXTRA_PORT_PROTOCOLS: dict[int, str] = {
-    139: "smb",
+    139: "netbios",  # NetBIOS session service (TCP SSN), pairs with NBNS 137
+    1137: "netbios",  # lab NBNS (UDP), pairs with IANA 137
     443: "http",
     993: "imap",
     1993: "imap",  # lab IMAPS (implicit TLS), pairs with cleartext lab 1143
+    995: "pop3",  # POP3S (implicit TLS), same pop3 engine that imap maps 993→imap
+    1995: "pop3",  # lab POP3S (implicit TLS), pairs with cleartext lab 1110
     8080: "httpproxy",
     8443: "http",
     5061: "sip",

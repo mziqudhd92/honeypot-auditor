@@ -86,7 +86,7 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
         "static_signature": (
             "+OK greeting framing · unknown-command rejection · "
             "auth-failed -ERR blanket (STAT/CAPA/HPAU) · stock lure banner · "
-            "lowercase-verb rejection"
+            "lowercase-verb rejection · plaintext before TLS ClientHello (POP3S)"
         ),
     },
     "imap": {
@@ -317,6 +317,30 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "TID fixed_source_port · opcode/error/mode/WRQ facades · "
             "RFC 2347 option blindness · response clone · no OACK/DATA retransmit · "
             "DATA block >512 without negotiated blksize · stock ERROR/DATA lure"
+        ),
+    },
+    "dhcp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "xid not echoed across two DISCOVERs (RFC 2131 §4.1)",
+        "static_signature": (
+            "BOOTP framing (cookie/op/option 53 · ACK/NAK to DISCOVER) · "
+            "canned OFFER clone for distinct xid/chaddr"
+        ),
+    },
+    "netbios": {
+        "arbitrary_auth": "session granted for a called name that cannot exist (0x82)",
+        "state_nonpersist": "NBNS transaction ID not echoed across two queries",
+        "static_signature": (
+            "RFC 1002 header/RR framing · canned node-status clone for distinct names · "
+            "session response type outside 0x82/0x83/0x8F"
+        ),
+    },
+    "syslog": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "reply on the ack-less UDP channel (RFC 5426) · reply/echo on the "
+            "RFC 6587 TCP framing channel"
         ),
     },
 }
