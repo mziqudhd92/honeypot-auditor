@@ -8,6 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Two new UX front ends, both persisting to a shared local SQLite database
+  (`~/.honeypot-auditor/audits.db`, override via `HONEYPOT_AUDITOR_DB`):
+  **`honeypot-auditor wizard`** — interactive step-by-step terminal audit
+  (target → preset → ports → depth → timeout → authorization) with Rich result
+  tables and history; **`honeypot-auditor serve [--port N]`** — a graphical web
+  UI styled with vendored [XP.css](https://github.com/botoxparty/XP.css) (MIT).
+  The server binds **127.0.0.1 only**, rejects non-local `Host` headers (DNS
+  rebinding), serializes audits (engine settings are process globals), and the
+  browser renders all report data via `textContent` (no HTML injection)
 - Three new protocol engines and POP3S support, all RFC-behavioral (no product
   signatures): **DHCP** (`dhcp.xid_echo`/`framing`/`canned_offer` — capability-gated
   on privileged client port 68), **NetBIOS** (NBNS 137 + session service 139:

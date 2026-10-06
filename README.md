@@ -151,6 +151,21 @@ honeypot-auditor --target 203.0.113.10 -p 22 --confirm-authorized
 honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16 \
   --confirm-authorized
 # subnet JSON → honeypot-audit-subnet-192.168.1.0_24.json (summary + per-host reports)
+
+# interactive wizard · step-by-step target/preset/depth, Rich tables, saves to SQLite
+honeypot-auditor wizard
+
+# local web UI (XP.css) · binds 127.0.0.1 ONLY · every audit saved to SQLite
+honeypot-auditor serve            # → http://127.0.0.1:8337
+honeypot-auditor serve --port 9000
+```
+
+Both wizard and web UI persist every finished audit to a local SQLite database
+(`~/.honeypot-auditor/audits.db`, override with `HONEYPOT_AUDITOR_DB`). The web
+UI never listens on a public interface: the server binds `127.0.0.1`, rejects
+non-local `Host` headers (DNS-rebinding guard), and renders all report data
+without HTML injection. The stylesheet is the vendored
+[XP.css](https://github.com/botoxparty/XP.css) (MIT).
 ```
 
 ---
