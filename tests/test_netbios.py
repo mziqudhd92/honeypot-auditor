@@ -135,3 +135,21 @@ def test_netbios_port_dispatch():
     with patch.object(netbios, "probe_ssn") as ssn:
         netbios.probe_netbios("127.0.0.1", 139)
     assert ssn.called
+
+
+def test_netbios_first_level_encoding_is_rfc1001():
+    """Each nibble → one 'A'+nibble character; length byte is 32 (not hex digits)."""
+    wire = netbios._encode_nbname("TEST")
+    assert wire[0] == 32
+    assert len(wire) == 34  # length + 32 encoded + NUL
+    # 'T' 0x54 → 'F''E'; 'E' 0x45 → 'E''E'; 'S' 0x53 → 'F''D'; 'T' → 'F''E'
+    assert wire[1:9] == b"FEEFFDFE"
+
+
+def test_netbios_session_request_has_rfc1002_header():
+    req = netbios._build_session_request("AAAA", "BBBB")
+    assert req[0] == 0x81
+    assert req[1] == 0x00  # FLAGS
+    length = int.from_bytes(req[2:4], "big")
+    assert length == len(req) - 4
+    assert length == 68  # two encoded names (34 each)

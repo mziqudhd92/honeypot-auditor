@@ -123,3 +123,44 @@ def test_localhost_host_with_port_is_accepted(server):
     # urllib already sets Host: 127.0.0.1:<port>; assert the happy path still works.
     with urllib.request.urlopen(request, timeout=10) as resp:
         assert resp.status == 200
+
+
+def test_foreign_origin_post_is_rejected(server):
+    """Cross-site text/plain POSTs must not trigger audits (CSRF)."""
+    request = urllib.request.Request(
+        server + "/api/audit",
+        data=json.dumps({"target": "127.0.0.1", "ports": "9", "timeout": 1}).encode(),
+        headers={
+            "Content-Type": "text/plain",
+            "Origin": "https://evil.example",
+        },
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(request, timeout=10)
+        raise AssertionError("expected 403")
+    except urllib.error.HTTPError as excinfo:
+        assert excinfo.code == 403
+        assert "origin" in json.loads(excinfo.read())["error"]
+
+
+def test_local_origin_post_is_accepted(server):
+    request = urllib.request.Request(
+        server + "/api/audit",
+        data=json.dumps({"target": "127.0.0.1", "ports": "9", "timeout": 1}).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Origin": "http://127.0.0.1:8337",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=120) as resp:
+        assert resp.status == 200
+
+
+def test_host_header_ipv6_bracket_parsing():
+    from honeypot_auditor.webserver import _Handler
+
+    assert _Handler._hostname_from_host_header("[::1]:8337") == "::1"
+    assert _Handler._hostname_from_host_header("127.0.0.1:8337") == "127.0.0.1"
+    assert _Handler._hostname_from_host_header("localhost") == "localhost"

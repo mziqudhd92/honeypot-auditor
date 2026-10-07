@@ -8,14 +8,12 @@ freely; public targets require an explicit authorization confirmation.
 
 from __future__ import annotations
 
-import socket
-
 from rich.console import Console
 from rich.prompt import Confirm, IntPrompt, Prompt
 
 from honeypot_auditor import storage
 from honeypot_auditor.banner import print_cli_header
-from honeypot_auditor.config import is_private_or_loopback
+from honeypot_auditor.config import expand_scan_targets, is_private_or_loopback
 from honeypot_auditor.engine import Auditor
 from honeypot_auditor.models import AuditReport
 from honeypot_auditor.reporters.console import render
@@ -24,11 +22,22 @@ _PRESETS = ("both", "iana", "docker-research")
 
 
 def _resolve_target(target: str) -> str:
-    """Resolve a target to an IP (raises ValueError on garbage)."""
+    """Resolve a target to a representative IP (raises ValueError on garbage).
+
+    Accepts a single host/IP or an IPv4 CIDR (max /24). For subnets, returns the
+    first scannable host — matching ``Auditor`` / ``expand_scan_targets``.
+    """
     target = (target or "").strip()
     if not target:
         raise ValueError("target is empty")
-    return socket.gethostbyname(target)
+    _kind, hosts = expand_scan_targets(target)
+    return hosts[0]
+
+
+def _target_needs_authorization(target: str) -> bool:
+    """True when any expanded host is public (not private/loopback/reserved)."""
+    _kind, hosts = expand_scan_targets(target)
+    return any(not is_private_or_loopback(ip) for ip in hosts)
 
 
 def parse_ports(raw: str) -> list[str]:
@@ -70,22 +79,34 @@ def _ask_target(console: Console) -> str:
     while True:
         target = Prompt.ask("[bold]Step 1/5 — target[/bold] (IP, hostname, or /24 CIDR)").strip()
         try:
-            resolved = _resolve_target(target)
+            kind, hosts = expand_scan_targets(target)
+            resolved = hosts[0]
         except OSError as exc:
             console.print(f"  [red]cannot resolve {target!r}: {exc}[/red]")
             continue
         except ValueError as exc:
             console.print(f"  [red]{exc}[/red]")
             continue
-        private = is_private_or_loopback(resolved)
-        console.print(
-            f"  resolved to [bold]{resolved}[/bold] — "
-            + (
-                "[green]private/loopback target[/green]"
-                if private
-                else "[yellow]PUBLIC target[/yellow]"
+        private = all(is_private_or_loopback(ip) for ip in hosts)
+        if kind == "subnet":
+            console.print(
+                f"  subnet [bold]{target}[/bold] → {len(hosts)} hosts "
+                f"(engine audits first host [bold]{resolved}[/bold]) — "
+                + (
+                    "[green]private/loopback[/green]"
+                    if private
+                    else "[yellow]PUBLIC[/yellow]"
+                )
             )
-        )
+        else:
+            console.print(
+                f"  resolved to [bold]{resolved}[/bold] — "
+                + (
+                    "[green]private/loopback target[/green]"
+                    if private
+                    else "[yellow]PUBLIC target[/yellow]"
+                )
+            )
         return target
 
 
@@ -119,9 +140,8 @@ def _run_one(console: Console) -> None:
         console.print("  [red]timeout out of range — using 3[/red]")
         timeout = 3
 
-    resolved = _resolve_target(target)
     confirm_authorized = False
-    if not is_private_or_loopback(resolved):
+    if _target_needs_authorization(target):
         console.print(
             "  [yellow]This target is PUBLIC. Only continue if you own it or have "
             "written permission. Misuse may violate law and provider terms.[/yellow]"
@@ -129,6 +149,7 @@ def _run_one(console: Console) -> None:
         if not Confirm.ask("  I am authorized to probe this target", default=False):
             console.print("  [red]Aborted — no probes sent.[/red]")
             return
+        confirm_authorized = True
 
     auditor = _build_auditor(
         target=target,

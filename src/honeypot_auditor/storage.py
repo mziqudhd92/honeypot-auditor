@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -44,7 +45,12 @@ def default_db_path() -> Path:
 def _connect(db_path: str | Path | None) -> sqlite3.Connection:
     path = Path(db_path) if db_path else default_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Restrict the DB directory/file — reports can include target metadata.
+    with suppress(OSError):
+        os.chmod(path.parent, 0o700)
     conn = sqlite3.connect(path)
+    with suppress(OSError):
+        os.chmod(path, 0o600)
     conn.row_factory = sqlite3.Row
     conn.executescript(_SCHEMA)
     return conn

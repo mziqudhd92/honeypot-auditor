@@ -61,3 +61,10 @@ def test_explicit_db_path_argument(db):
     storage.save_report(report, db_path=other)
     assert storage.list_audits(db_path=other)
     assert storage.list_audits(db_path=db.parent / "unused.db") == []
+
+
+def test_db_file_is_owner_readable_only(db):
+    report = _run_report()
+    storage.save_report(report, db_path=db)
+    mode = db.stat().st_mode & 0o777
+    assert mode == 0o600

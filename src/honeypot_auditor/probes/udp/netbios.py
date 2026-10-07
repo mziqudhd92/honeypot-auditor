@@ -32,9 +32,14 @@ _QCLASS_IN = 0x0001
 
 
 def _encode_nbname(name: str) -> bytes:
-    """RFC 1001 first-level encoding: 16-byte half-ASCII (15 chars + 0x00 suffix)."""
+    """RFC 1001 first-level encoding: 16-byte half-ASCII (15 chars + 0x00 suffix).
+
+    Each nibble becomes one character at ``'A' + nibble`` (32 encoded bytes total).
+    """
     padded = name.upper().ljust(15)[:15] + "\x00"
-    encoded = "".join(f"{(b >> 4) + 0x41:X}{(b & 0x0F) + 0x41:X}" for b in padded.encode())
+    encoded = "".join(
+        chr((b >> 4) + 0x41) + chr((b & 0x0F) + 0x41) for b in padded.encode("ascii")
+    )
     return bytes([len(encoded)]) + encoded.encode("ascii") + b"\x00"
 
 
@@ -159,9 +164,9 @@ def probe_nbns(host: str, port: int) -> list[Indicator]:
 
 
 def _build_session_request(called: str, calling: str) -> bytes:
-    """RFC 1002 §4.3.2 SESSION REQUEST: type 0x81 + length + called + calling names."""
+    """RFC 1002 §4.3.2 SESSION REQUEST: type 0x81 + flags + length + names."""
     body = _encode_nbname(called) + _encode_nbname(calling)
-    return b"\x81" + len(body).to_bytes(2, "big") + body
+    return b"\x81\x00" + len(body).to_bytes(2, "big") + body
 
 
 def probe_ssn(host: str, port: int) -> list[Indicator]:
@@ -182,8 +187,9 @@ def probe_ssn(host: str, port: int) -> list[Indicator]:
             if len(header) < 4:
                 error = "no session response (closed or silent)"
             else:
+                # RFC 1002 §4.3.1: TYPE (1) + FLAGS (1) + LENGTH (2)
                 rtype = header[0]
-                length = int.from_bytes(header[1:4], "big")
+                length = int.from_bytes(header[2:4], "big")
                 body = b""
                 while len(body) < min(length, 256):
                     chunk = sock.recv(min(length, 256) - len(body))

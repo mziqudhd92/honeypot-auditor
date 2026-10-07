@@ -76,7 +76,9 @@ def _dhcp_message_type(reply: bytes) -> int:
         if i + 1 >= len(options):
             break
         length = options[i + 1]
-        if tag == 53 and i + 2 < len(options):
+        if i + 2 + length > len(options):
+            break
+        if tag == 53 and length >= 1:
             return options[i + 2]
         i += 2 + length
     return 0

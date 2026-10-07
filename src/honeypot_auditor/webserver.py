@@ -17,7 +17,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlparse, urlsplit
 
 from honeypot_auditor import storage
 from honeypot_auditor.engine import Auditor
@@ -26,6 +26,7 @@ from honeypot_auditor.reporters.json_export import _report_payload as report_pay
 _BIND_HOST = "127.0.0.1"
 DEFAULT_PORT = 8337
 _ALLOWED_PRESETS = ("both", "iana", "docker-research")
+_LOCAL_HOSTNAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
 # Vendored XP.css (MIT, https://botoxparty.github.io/XP.css/) + pixel fonts.
 _STATIC_TYPES = {
@@ -116,14 +117,44 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _guard(self) -> bool:
-        """Reject non-local Host headers (DNS rebinding) and foreign origins."""
+    @staticmethod
+    def _hostname_from_host_header(host: str) -> str:
+        """Extract hostname from a Host header (IPv4, IPv6-bracketed, optional port)."""
+        host = (host or "").lower().strip()
+        if host.startswith("["):
+            end = host.find("]")
+            return host[1:end] if end != -1 else host
+        if host.count(":") == 1:
+            return host.rsplit(":", 1)[0]
+        return host
+
+    @staticmethod
+    def _hostname_from_url(url: str) -> str:
+        hostname = (urlparse(url).hostname or "").lower()
+        return hostname
+
+    def _guard(self, *, require_local_origin: bool = False) -> bool:
+        """Reject non-local Host headers (DNS rebinding) and foreign Origins (CSRF)."""
         host = (self.headers.get("Host") or "").lower()
-        hostname = host.rsplit(":", 1)[0] if host.count(":") == 1 else host.split("]")[0]
-        if hostname not in ("127.0.0.1", "localhost", "::1"):
+        hostname = self._hostname_from_host_header(host)
+        if hostname not in _LOCAL_HOSTNAMES:
             # Exact match only: "127.0.0.1.evil.com" must NOT pass a prefix check.
             self._send_json({"error": "local interface only"}, status=403)
             return False
+        if require_local_origin:
+            origin = (self.headers.get("Origin") or "").strip()
+            if origin:
+                if self._hostname_from_url(origin) not in _LOCAL_HOSTNAMES:
+                    self._send_json({"error": "local origin only"}, status=403)
+                    return False
+            else:
+                # Browsers omit Origin on same-origin GET; for state-changing POSTs
+                # they usually send it. When Origin is absent, require Referer (if
+                # present) to also be local — curl/tests with neither still work.
+                referer = (self.headers.get("Referer") or "").strip()
+                if referer and self._hostname_from_url(referer) not in _LOCAL_HOSTNAMES:
+                    self._send_json({"error": "local origin only"}, status=403)
+                    return False
         return True
 
     # -- routes -----------------------------------------------------------
@@ -173,14 +204,20 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "not found"}, status=404)
 
     def do_POST(self) -> None:  # noqa: N802 (http.server API)
-        if not self._guard():
+        # Origin/Referer check blocks cross-site POSTs (e.g. text/plain CSRF) that
+        # would otherwise bypass CORS preflight and trigger local audits.
+        if not self._guard(require_local_origin=True):
             return
         if urlsplit(self.path).path != "/api/audit":
             self._send_json({"error": "not found"}, status=404)
             return
         try:
             length = int(self.headers.get("Content-Length") or 0)
+            if length < 0:
+                raise ValueError("negative Content-Length")
             params = json.loads(self.rfile.read(min(length, 64 * 1024)) or b"{}")
+            if not isinstance(params, dict):
+                raise ValueError("JSON body must be an object")
         except (ValueError, json.JSONDecodeError):
             self._send_json({"error": "invalid JSON body"}, status=400)
             return
