@@ -163,10 +163,9 @@ honeypot-auditor serve --port 9000
 Both wizard and web UI persist every finished audit to a local SQLite database
 (`~/.honeypot-auditor/audits.db`, override with `HONEYPOT_AUDITOR_DB`). The web
 UI never listens on a public interface: the server binds `127.0.0.1`, rejects
-non-local `Host` headers (DNS-rebinding guard), and renders all report data
-without HTML injection. The stylesheet is the vendored
-[XP.css](https://github.com/botoxparty/XP.css) (MIT).
-```
+non-local `Host` headers (DNS-rebinding guard) and foreign `Origin`/`Referer`
+on POSTs (CSRF guard), and renders all report data without HTML injection. The
+stylesheet is the vendored [XP.css](https://github.com/botoxparty/XP.css) (MIT).
 
 ---
 
