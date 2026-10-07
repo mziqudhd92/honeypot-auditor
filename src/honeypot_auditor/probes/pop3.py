@@ -1,8 +1,9 @@
 """POP3 fingerprint engine.
 
 Strategies: repeated arbitrary authentication · authorization/transaction state
-separation · greeting and unknown-command conformance · stock lure banners ·
-identical auth-failed -ERR blankets (incl. CAPA).  The probe never reads,
+separation (STAT/NOOP, LIST/UIDL) · greeting and unknown-command conformance ·
+stock lure banners · identical auth-failed -ERR blankets (incl. CAPA) · RFC 1939
+case conformance · implicit-TLS pre-banner leak (POP3S).  The probe never reads,
 deletes, or otherwise modifies mail.
 """
 
@@ -15,8 +16,10 @@ from contextlib import closing
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.netutil import closed_reason
 from honeypot_auditor.probes.common import is_safe_mode, random_creds, skip_suite
-from honeypot_auditor.proxy_transport import create_connection
+from honeypot_auditor.proxy_transport import create_connection, create_tls_connection
 from honeypot_auditor.settings import settings
+
+_TLS_PORTS = frozenset({995, 1995})  # POP3S implicit-TLS ports (imap: 993/1993)
 
 _POP3_SKIP = (
     ("pop3.arbitrary_auth", "POP3 accepts two random credential pairs", "arbitrary_auth"),
@@ -51,7 +54,37 @@ _POP3_SKIP = (
         "POP3 rejects lowercase verbs accepted in uppercase",
         "static_signature",
     ),
+    (
+        "pop3.pre_tls_banner",
+        "POP3 speaks plaintext on an implicit-TLS port",
+        "static_signature",
+    ),
 )
+
+
+def _open_pop3(host: str, port: int, timeout: float):
+    """Connect on cleartext POP3 ports; negotiate implicit TLS on POP3S ports."""
+    if int(port) in _TLS_PORTS:
+        return create_tls_connection(host, port, timeout)
+    return create_connection(host, port, timeout)
+
+
+def _implicit_tls_prebanner(host: str, port: int, timeout: float) -> tuple[str, str]:
+    """Peek an implicit-TLS port: real servers wait for the ClientHello.
+
+    Returns (banner, error). A non-empty banner means the endpoint sent
+    plaintext before any TLS handshake — no real POP3S server does that.
+    """
+    try:
+        with closing(create_connection(host, port, timeout)) as sock:
+            sock.settimeout(min(0.5, timeout))
+            try:
+                peek = sock.recv(64)
+            except TimeoutError:
+                return "", ""
+            return peek.decode("utf-8", "replace"), ""
+    except OSError as exc:
+        return "", closed_reason(str(exc))
 
 _MAX_RESPONSE_BYTES = 512
 _RECV_CHUNK = 256
@@ -189,7 +222,7 @@ def _blanket_auth_failed(replies: dict[str, str]) -> tuple[bool, str, str]:
 def _single_command(host: str, port: int, command: str) -> tuple[str, str, str]:
     """Open a fresh authorization-state session and issue one command."""
     try:
-        with closing(create_connection(host, port, settings.timeout_seconds)) as sock:
+        with closing(_open_pop3(host, port, settings.timeout_seconds)) as sock:
             reader = _LineReader(sock)
             greeting = reader.readline()
             if not _is_positive(greeting):
@@ -201,7 +234,7 @@ def _single_command(host: str, port: int, command: str) -> tuple[str, str, str]:
 
 def _read_greeting(host: str, port: int) -> tuple[str, str]:
     try:
-        with closing(create_connection(host, port, settings.timeout_seconds)) as sock:
+        with closing(_open_pop3(host, port, settings.timeout_seconds)) as sock:
             return _LineReader(sock).readline(), ""
     except OSError as exc:
         return "", closed_reason(str(exc))
@@ -210,7 +243,7 @@ def _read_greeting(host: str, port: int) -> tuple[str, str]:
 def _try_login(host: str, port: int, username: str, password: str) -> tuple[bool, str, str]:
     """Try one synthetic account without accessing the resulting maildrop."""
     try:
-        with closing(create_connection(host, port, settings.timeout_seconds)) as sock:
+        with closing(_open_pop3(host, port, settings.timeout_seconds)) as sock:
             reader = _LineReader(sock)
             greeting = reader.readline()
             if not _is_positive(greeting):
@@ -284,9 +317,12 @@ def _pop3_skip(ind_id: str, reason: str) -> Indicator:
 
 
 def _pop3_handshake_only(
-    reason: str, greeting_ind: Indicator, stock_ind: Indicator
+    reason: str,
+    greeting_ind: Indicator,
+    stock_ind: Indicator,
+    pre_tls_ind: Indicator,
 ) -> list[Indicator]:
-    """Greeting/stock only — other tells skipped (malformed greeting or safe-mode)."""
+    """Greeting/stock/pre-TLS only — other tells skipped (malformed greeting or safe-mode)."""
     return [
         _pop3_skip("pop3.arbitrary_auth", reason),
         _pop3_skip("pop3.preauth_state", reason),
@@ -296,13 +332,57 @@ def _pop3_handshake_only(
         _pop3_skip("pop3.command_case", reason),
         _pop3_skip("pop3.auth_failed_blanket", reason),
         stock_ind,
+        pre_tls_ind,
     ]
 
 
+def _pre_tls_banner_indicator(prebanner: str, tls_port: bool, prebanner_error: str) -> Indicator:
+    skipped = (not tls_port) or bool(prebanner_error and not prebanner)
+    reason = (
+        "cleartext POP3 — implicit-TLS check not applicable"
+        if not tls_port
+        else prebanner_error
+        if prebanner_error and not prebanner
+        else ""
+    )
+    return Indicator(
+        id="pop3.pre_tls_banner",
+        title="POP3 speaks plaintext on an implicit-TLS port",
+        category="static_signature",
+        triggered=bool(prebanner),
+        skipped=skipped,
+        skip_reason=reason,
+        protocol="pop3",
+        detail=(
+            f"plaintext {prebanner!r} sent before the TLS ClientHello on an "
+            "implicit-TLS port (RFC-style POP3S waits for the handshake)"
+            if prebanner
+            else "no plaintext before TLS handshake"
+        ),
+        evidence=prebanner[:_MAX_RESPONSE_BYTES],
+        remediation="Never send data before the TLS handshake completes on POP3S ports",
+    )
+
+
 def probe_pop3(host: str, port: int) -> list[Indicator]:
+    tls_port = int(port) in _TLS_PORTS
+    prebanner = ""
+    prebanner_error = ""
+    if tls_port:
+        prebanner, prebanner_error = _implicit_tls_prebanner(host, port, settings.timeout_seconds)
+
     greeting, greeting_error = _read_greeting(host, port)
     if not greeting:
         reason = greeting_error or "no POP3 greeting"
+        if tls_port and prebanner:
+            # Plaintext leak confirmed, but TLS itself failed: report what we saw
+            # instead of collapsing the whole suite into skips.
+            return _pop3_handshake_only(
+                reason,
+                _greeting_indicator(""),
+                _stock_banner_indicator(""),
+                _pre_tls_banner_indicator(prebanner, tls_port, prebanner_error),
+            )
         return skip_suite(_POP3_SKIP, reason, protocol="pop3", error=greeting_error)
 
     greeting_ind = _greeting_indicator(greeting)
@@ -312,12 +392,14 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
             "POP3 response checks skipped after malformed greeting",
             greeting_ind,
             stock_ind,
+            _pre_tls_banner_indicator(prebanner, tls_port, prebanner_error),
         )
     if is_safe_mode():
         return _pop3_handshake_only(
             "safe-mode: handshake-only probe",
             greeting_ind,
             stock_ind,
+            _pre_tls_banner_indicator(prebanner, tls_port, prebanner_error),
         )
 
     state_replies: dict[str, str] = {}
@@ -494,6 +576,7 @@ def probe_pop3(host: str, port: int) -> list[Indicator]:
             fidelity="high",
         ),
         stock_ind,
+        _pre_tls_banner_indicator(prebanner, tls_port, prebanner_error),
     ]
 
 

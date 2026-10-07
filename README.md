@@ -68,7 +68,7 @@ Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ```
-  [ BASIC ]  passive intel · Nmap NSE · 30 protocol engines (TCP + UDP) · up to 3 strategies each
+  [ BASIC ]  passive intel · Nmap NSE · 33 protocol engines (TCP + UDP) · up to 3 strategies each
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
              · co-tenancy buffet detect · latency · latency-under-load · egress bait
              (flag: --deep · more intrusive · same authorization rules)
@@ -151,6 +151,21 @@ honeypot-auditor --target 203.0.113.10 -p 22 --confirm-authorized
 honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16 \
   --confirm-authorized
 # subnet JSON → honeypot-audit-subnet-192.168.1.0_24.json (summary + per-host reports)
+
+# interactive wizard · step-by-step target/preset/depth, Rich tables, saves to SQLite
+honeypot-auditor wizard
+
+# local web UI (XP.css) · binds 127.0.0.1 ONLY · every audit saved to SQLite
+honeypot-auditor serve            # → http://127.0.0.1:8337
+honeypot-auditor serve --port 9000
+```
+
+Both wizard and web UI persist every finished audit to a local SQLite database
+(`~/.honeypot-auditor/audits.db`, override with `HONEYPOT_AUDITOR_DB`). The web
+UI never listens on a public interface: the server binds `127.0.0.1`, rejects
+non-local `Host` headers (DNS-rebinding guard), and renders all report data
+without HTML injection. The stylesheet is the vendored
+[XP.css](https://github.com/botoxparty/XP.css) (MIT).
 ```
 
 ---
@@ -263,7 +278,7 @@ fire alone on multi-lure research stacks.
 | Telnet | TCP | 23 · 2323 | 3 | 9 | [TELNET](docs/strategies/telnet/) |
 | FTP | TCP | 21 · 2121 | 3 | 8 | [FTP](docs/strategies/ftp/) |
 | SMTP | TCP | 25 · 2525 | 3 | 7 | [SMTP](docs/strategies/smtp/) |
-| POP3 | TCP | 110 · 1110 | 3 | 8 | [POP3](docs/strategies/pop3/) |
+| POP3 | TCP | 110 · 1110 | 3 | 9 | [POP3](docs/strategies/pop3/) |
 | IMAP | TCP | 143 · 1143 | 3 | 6 | [IMAP](docs/strategies/imap/) |
 | HTTP | TCP | 80 / 443 · 8081 | 3 | 12 | [HTTP](docs/strategies/http/) |
 | HTTP proxy | TCP | 3128 · 8080 | 3 | 4 | [HTTPPROXY](docs/strategies/httpproxy/) |
@@ -289,6 +304,14 @@ fire alone on multi-lure research stacks.
 | NTP | UDP | 123 · 1123 | 3 | 11 | [NTP](docs/strategies/ntp/) |
 | TFTP | UDP | 69 · 1069 | 2 | 12 | [TFTP](docs/strategies/tftp/) |
 | SSDP | UDP | 1900 · 11900 | 1 | 13 | [SSDP](docs/strategies/ssdp/) |
+| DHCP | UDP | 67 · 1067 | 3 | 3 | [DHCP](docs/strategies/dhcp/) |
+| NetBIOS | UDP+TCP | 137,139 · 1139 | 3 | 5 | [NetBIOS](docs/strategies/netbios/) |
+| Syslog | UDP+TCP | 514 · 10514 | 2 | 2 | [Syslog](docs/strategies/syslog/) |
+
+Implicit-TLS faces reuse their cleartext engines over TLS: **IMAPS** 993 · 1993
+(imap) and **POP3S** 995 · 1995 (pop3, incl. the pre-TLS plaintext-banner tell).
+SNMP, DNS, and TFTP were already shipped engines; DHCP, NetBIOS, and Syslog are
+new in this release.
 
 See [`docs/strategies/`](docs/strategies/) for per-protocol strategy guides and
 [`docs/SCORING.md`](docs/SCORING.md) for fidelity / corroboration. Recent

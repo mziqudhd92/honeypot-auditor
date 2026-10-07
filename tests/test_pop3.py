@@ -13,6 +13,9 @@ class ScriptedSocket:
         self._wire = bytearray("".join(f"{line}\r\n" for line in responses).encode())
         self.sent: list[bytes] = []
 
+    def settimeout(self, value) -> None:
+        return None
+
     def recv(self, size: int) -> bytes:
         if not self._wire:
             return b""
@@ -136,7 +139,7 @@ def test_pop3_capa_auth_failed_with_stat_is_enough_for_blanket():
 
 def test_pop3_malformed_greeting_is_static_tell():
     inds = _run_with_sessions(ScriptedSocket("pop server ready"))
-    assert len(inds) == 8
+    assert len(inds) == 9
     greeting = next(ind for ind in inds if ind.id == "pop3.greeting")
     assert greeting.triggered
 
@@ -194,7 +197,7 @@ def test_pop3_buffered_reader_handles_chunked_crlf():
 def test_pop3_connection_error_skips_suite():
     with patch.object(pop3, "create_connection", side_effect=OSError("refused")):
         inds = pop3.probe_pop3("127.0.0.1", 110)
-    assert len(inds) == 8
+    assert len(inds) == 9
     assert all(ind.skipped for ind in inds)
 
 
@@ -220,3 +223,76 @@ def test_pop3_preauth_uidl_and_lowercase_case_tells():
     assert "case-insensitive" in by_id["pop3.command_case"].detail
     assert not by_id["pop3.preauth_state"].triggered  # STAT stayed rejected
     assert not by_id["pop3.arbitrary_auth"].triggered
+
+
+def test_pop3s_plaintext_before_client_hello_is_a_tell():
+    """POP3S (995): a server that speaks before the TLS handshake is a decoy."""
+    sessions = [
+        ScriptedSocket("+OK fake plaintext banner"),  # pre-TLS peek
+        ScriptedSocket("+OK mail ready"),             # TLS session (greeting only)
+    ]
+    old_safe = settings.safe_mode
+    settings.safe_mode = True
+    try:
+        with patch.object(pop3, "create_connection", side_effect=sessions[:1]), patch.object(
+            pop3, "create_tls_connection", side_effect=sessions[1:]
+        ):
+            inds = pop3.probe_pop3("127.0.0.1", 995)
+    finally:
+        settings.safe_mode = old_safe
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["pop3.pre_tls_banner"].triggered
+    assert "plaintext" in by_id["pop3.pre_tls_banner"].detail
+    assert "ClientHello" in by_id["pop3.pre_tls_banner"].detail
+
+
+def test_pop3s_silent_wait_for_client_hello_is_clean():
+    sessions = [
+        ScriptedSocket(),                # silent pre-TLS peek (EOF, no banner)
+        ScriptedSocket("+OK mail ready"),  # TLS greeting
+    ]
+    old_safe = settings.safe_mode
+    settings.safe_mode = True
+    try:
+        with patch.object(pop3, "create_connection", side_effect=sessions[:1]), patch.object(
+            pop3, "create_tls_connection", side_effect=sessions[1:]
+        ):
+            inds = pop3.probe_pop3("127.0.0.1", 995)
+    finally:
+        settings.safe_mode = old_safe
+    by_id = {ind.id: ind for ind in inds}
+    assert not by_id["pop3.pre_tls_banner"].triggered
+    assert not by_id["pop3.pre_tls_banner"].skipped
+
+
+def test_pop3_cleartext_port_marks_pre_tls_check_n_a():
+    old_safe = settings.safe_mode
+    settings.safe_mode = True
+    try:
+        with patch.object(
+            pop3, "create_connection", side_effect=[ScriptedSocket("+OK mail ready")]
+        ):
+            inds = pop3.probe_pop3("127.0.0.1", 110)  # safe-mode: greeting-only path
+    finally:
+        settings.safe_mode = old_safe
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["pop3.pre_tls_banner"].skipped
+    assert "not applicable" in by_id["pop3.pre_tls_banner"].skip_reason
+
+
+def test_pop3s_plaintext_leak_survives_failed_tls_handshake():
+    """Plaintext banner + dead TLS: the leak is reported, not swallowed by skips."""
+    sessions = [
+        ScriptedSocket("+OK fake plaintext banner"),   # pre-TLS peek
+        ScriptedSocket(),                              # TLS handshake fails (EOF)
+    ]
+    with patch.object(pop3, "create_connection", side_effect=sessions[:1]), patch.object(
+        pop3, "create_tls_connection", side_effect=sessions[1:]
+    ):
+        inds = pop3.probe_pop3("127.0.0.1", 995)
+    by_id = {ind.id: ind for ind in inds}
+    assert by_id["pop3.pre_tls_banner"].triggered
+    assert not by_id["pop3.pre_tls_banner"].skipped
+    assert by_id["pop3.greeting"].triggered  # no +OK greeting over the failed TLS
+    triggered = {ind.id for ind in inds if ind.triggered}
+    assert triggered == {"pop3.pre_tls_banner", "pop3.greeting"}

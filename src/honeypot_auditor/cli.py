@@ -61,6 +61,11 @@ examples:
   honeypot-auditor --target 35.171.9.193 -p 22 --confirm-authorized -n
   honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16
 
+subcommands:
+  wizard               interactive step-by-step audit (saves to local SQLite)
+  serve [--port N]     local web UI on 127.0.0.1 only (XP.css, saves to SQLite)
+  check-sig PATH       validate a declarative signature pack offline
+
 help:
   -h, --help, /help    show this message and exit (H-AUDITOR figlet header)
 """
@@ -939,6 +944,14 @@ def main(argv: list[str] | None = None) -> int:
     argv = _normalize_argv(argv)
     if argv and argv[0] == "check-sig":
         return run_check_sig(argv[1:])
+    if argv and argv[0] == "serve":
+        from honeypot_auditor.webserver import run_webserver
+
+        return run_webserver(argv[1:])
+    if argv and argv[0] == "wizard":
+        from honeypot_auditor.wizard import run_wizard
+
+        return run_wizard()
     parser = build_parser()
     if _wants_help(argv):
         print_cli_header()

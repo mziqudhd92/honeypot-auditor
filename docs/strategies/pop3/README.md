@@ -20,6 +20,7 @@ blankets, and RFC 1939 case conformance.
 | `pop3.preauth_state` | STAT/NOOP allowed before AUTH |
 | `pop3.preauth_uidl` | LIST/UIDL allowed before AUTH (maildrop listing pre-auth) |
 | `pop3.command_case` | Lowercase `capa` → -ERR while uppercase `CAPA` → +OK (RFC 1939 verbs are case-insensitive) |
+| `pop3.pre_tls_banner` | Plaintext sent before the TLS ClientHello on POP3S ports (995/1995) |
 | `pop3.greeting` | Abnormal +OK greeting framing |
 | `pop3.unknown_command` | Unknown command not rejected cleanly |
 | `pop3.auth_failed_blanket` | STAT/CAPA/HPAU all -ERR after failed auth |
@@ -35,6 +36,7 @@ Never reads or deletes mailbox messages.
 |------|------|
 | 110 | Production POP3 |
 | 1110 | Lab |
+| 995, 1995 | POP3S — implicit TLS via `create_tls_connection`; same engine + the pre-TLS plaintext tell |
 
 
 ## Code map (for auditors)
