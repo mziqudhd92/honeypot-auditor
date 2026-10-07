@@ -79,12 +79,13 @@ def _run_audit(params: dict[str, Any]) -> dict[str, Any]:
         deep=deep,
         confirm_authorized=confirm,
     )
-    try:
-        report = auditor.run()
-    except PermissionError as exc:
-        raise PermissionError(str(exc)) from None
-
+    # The engine mutates process-global probe settings (timeout, depth, profile,
+    # proxy) — audits must not overlap, so the lock spans the whole run + save.
     with _AUDIT_LOCK:
+        try:
+            report = auditor.run()
+        except PermissionError as exc:
+            raise PermissionError(str(exc)) from None
         audit_id = storage.save_report(report, deep=deep)
     payload = report_payload(report)
     payload["audit_id"] = audit_id
@@ -104,6 +105,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
@@ -117,9 +119,9 @@ class _Handler(BaseHTTPRequestHandler):
     def _guard(self) -> bool:
         """Reject non-local Host headers (DNS rebinding) and foreign origins."""
         host = (self.headers.get("Host") or "").lower()
-        if not (
-            host.startswith("127.0.0.1") or host.startswith("localhost") or host.startswith("[::1]")
-        ):
+        hostname = host.rsplit(":", 1)[0] if host.count(":") == 1 else host.split("]")[0]
+        if hostname not in ("127.0.0.1", "localhost", "::1"):
+            # Exact match only: "127.0.0.1.evil.com" must NOT pass a prefix check.
             self._send_json({"error": "local interface only"}, status=403)
             return False
         return True
@@ -130,7 +132,18 @@ class _Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == "/" or path == "/index.html":
-            self._send_bytes(_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            body = _PAGE.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'",
+            )
+            self.end_headers()
+            self.wfile.write(body)
         elif path.startswith("/static/"):
             name = path.rsplit("/", 1)[-1]
             content_type = _STATIC_TYPES.get(name)

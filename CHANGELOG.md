@@ -62,6 +62,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+### Fixed
+
+- Web UI hardening from code review: exact-match localhost `Host` guard
+  (`127.0.0.1.evil.com` no longer bypasses it), `nosniff` + CSP headers, and
+  audit serialization now actually spans the engine run (engine settings are
+  process globals — concurrent audits would race)
+- DHCP: client socket no longer leaks when the privileged bind races/fails;
+  NetBIOS: dropped an unused parameter; wizard: storage failures no longer
+  crash the loop
 - CI: ruff import order in `tests/test_mongodb.py`; security workflow audits
   product deps before installing Semgrep (avoids Semgrep’s pinned PyJWT CVE noise)
 - `mssql.prelogin_blind` canned gate uses nmap/canned shape only (not

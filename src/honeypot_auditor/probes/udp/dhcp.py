@@ -93,9 +93,9 @@ def _dhcp_exchange_pair(host: str, port: int) -> tuple[bytes, int, bytes, int, s
     xid_a, xid_b = secrets.randbelow(1 << 32), secrets.randbelow(1 << 32)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.bind(("0.0.0.0", _CLIENT_PORT))
-    sock.settimeout(settings.timeout_seconds)
     try:
+        sock.bind(("0.0.0.0", _CLIENT_PORT))
+        sock.settimeout(settings.timeout_seconds)
         sock.sendto(_build_discover(xid_a, chaddr_a), (host, port))
         reply_a = b""
         try:

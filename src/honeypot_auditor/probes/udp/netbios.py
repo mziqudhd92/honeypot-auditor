@@ -52,7 +52,7 @@ def _build_nbstat_query(trn_id: int, name: str) -> bytes:
     return header + question
 
 
-def _nbns_framing_fault(reply: bytes, trn_id: int) -> str:
+def _nbns_framing_fault(reply: bytes) -> str:
     """RFC 1002 §4.2.1.1 header sanity for a response we did ask for."""
     if len(reply) < 12:
         return f"response shorter than NBNS header ({len(reply)}B)"
@@ -104,7 +104,7 @@ def probe_nbns(host: str, port: int) -> list[Indicator]:
 
     framing_faults: list[str] = []
     for trn_id, reply in replies:
-        fault = _nbns_framing_fault(reply, trn_id)
+        fault = _nbns_framing_fault(reply)
         if fault:
             framing_faults.append(fault)
 

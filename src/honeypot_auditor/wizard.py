@@ -149,7 +149,11 @@ def _run_one(console: Console) -> None:
             return
 
     render(report, console, verbose=False)
-    audit_id = storage.save_report(report, deep=deep)
+    try:
+        audit_id = storage.save_report(report, deep=deep)
+    except OSError as exc:
+        console.print(f"[yellow]report not saved (storage error: {exc})[/yellow]")
+        return
     console.print(f"[green]✓ saved to local SQLite as audit #{audit_id}[/green]")
 
 

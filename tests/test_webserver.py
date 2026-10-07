@@ -105,3 +105,21 @@ def test_unknown_routes_404(server):
     with pytest.raises(urllib.error.HTTPError) as excinfo:
         _get(server + "/nope")
     assert excinfo.value.code == 404
+
+
+def test_spoofed_subdomain_host_is_rejected(server):
+    """127.0.0.1.evil.com must NOT pass the localhost guard (prefix bug)."""
+    request = urllib.request.Request(server + "/api/audits")
+    request.add_header("Host", "127.0.0.1.evil.com")
+    try:
+        urllib.request.urlopen(request, timeout=10)
+        raise AssertionError("expected 403")
+    except urllib.error.HTTPError as excinfo:
+        assert excinfo.code == 403
+
+
+def test_localhost_host_with_port_is_accepted(server):
+    request = urllib.request.Request(server + "/api/audits")
+    # urllib already sets Host: 127.0.0.1:<port>; assert the happy path still works.
+    with urllib.request.urlopen(request, timeout=10) as resp:
+        assert resp.status == 200
