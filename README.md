@@ -62,7 +62,7 @@ Passive intel ([Shodan Honeyscore](https://honeyscore.shodan.io/)) plus active,
 **non-destructive** probes across the usual decoy faces. Outputs a weighted
 **Honeyscore (0–100%)**, Rich console table, versioned JSON report.
 
-Quickstart Tutorial: [AWS Spot honeypot lab](docs/tutorials/aws-spot-honeypot-lab.md)
+Quickstart Tutorials: [AWS Spot honeypot lab](docs/tutorials/aws-spot-honeypot-lab.md) · [Local web UI](docs/tutorials/web-ui.md) (`serve`, XP.css)
 
 Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
