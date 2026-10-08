@@ -101,6 +101,8 @@ Every finished audit is stored locally, before you see the result:
   (override with the `HONEYPOT_AUDITOR_DB` environment variable — useful for
   tests or a shared lab folder)
 - Click any row in **Audit history** to reopen the full stored JSON report.
+- The detail panel has **Download report** links — export the stored audit as
+  `JSON`, `HTML`, `CSV`, or `Markdown` (`/api/audits/<id>/download/<fmt>`).
 - To query it directly:
 
 ```bash

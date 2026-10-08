@@ -40,6 +40,7 @@ PORT_PRESET_IANA: dict[str, int] = {
     "dhcp": 67,
     "netbios": 137,
     "syslog": 514,
+    "modbus": 502,
 }
 
 PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
@@ -76,6 +77,7 @@ PORT_PRESET_DOCKER_RESEARCH: dict[str, int] = {
     "dhcp": 1067,  # lab DHCP (UDP), pairs with IANA 67
     "netbios": 1139,  # lab NetBIOS session service (TCP), pairs with NBNS IANA 137
     "syslog": 10514,  # lab Syslog (UDP), pairs with IANA 514
+    "modbus": 1502,  # lab Modbus TCP, pairs with IANA 502
 }
 
 PORT_PRESETS: dict[str, dict[str, int]] = {

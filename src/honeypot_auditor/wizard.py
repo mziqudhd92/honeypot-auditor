@@ -77,7 +77,7 @@ def _build_auditor(
 
 def _ask_target(console: Console) -> str:
     while True:
-        target = Prompt.ask("[bold]Step 1/5 — target[/bold] (IP, hostname, or /24 CIDR)").strip()
+        target = Prompt.ask("[bold]Step 1/6 — target[/bold] (IP, hostname, or /24 CIDR)").strip()
         try:
             kind, hosts = expand_scan_targets(target)
             resolved = hosts[0]
@@ -92,11 +92,7 @@ def _ask_target(console: Console) -> str:
             console.print(
                 f"  subnet [bold]{target}[/bold] → {len(hosts)} hosts "
                 f"(engine audits first host [bold]{resolved}[/bold]) — "
-                + (
-                    "[green]private/loopback[/green]"
-                    if private
-                    else "[yellow]PUBLIC[/yellow]"
-                )
+                + ("[green]private/loopback[/green]" if private else "[yellow]PUBLIC[/yellow]")
             )
         else:
             console.print(
@@ -112,7 +108,7 @@ def _ask_target(console: Console) -> str:
 
 def _ask_ports(console: Console) -> str:
     raw = Prompt.ask(
-        "[bold]Step 3/5 — ports[/bold] (optional, comma-separated; empty = use preset)",
+        "[bold]Step 3/6 — ports[/bold] (optional, comma-separated; empty = use preset)",
         default="",
     ).strip()
     try:
@@ -126,16 +122,16 @@ def _run_one(console: Console) -> None:
     target = _ask_target(console)
 
     preset = Prompt.ask(
-        "[bold]Step 2/5 — port preset[/bold]", choices=list(_PRESETS), default="both"
+        "[bold]Step 2/6 — port preset[/bold]", choices=list(_PRESETS), default="both"
     )
 
     ports = _ask_ports(console)
 
     deep = Confirm.ask(
-        "[bold]Step 4/5 — deep probes?[/bold] (shell semantics, OS coherence, FSM fuzz — more intrusive)",
+        "[bold]Step 4/6 — deep probes?[/bold] (shell semantics, OS coherence, FSM fuzz — more intrusive)",
         default=False,
     )
-    timeout = IntPrompt.ask("[bold]Step 5/5 — socket timeout (seconds)[/bold]", default=3)
+    timeout = IntPrompt.ask("[bold]Step 5/6 — socket timeout (seconds)[/bold]", default=3)
     if not 1 <= timeout <= 30:
         console.print("  [red]timeout out of range — using 3[/red]")
         timeout = 3
@@ -176,6 +172,29 @@ def _run_one(console: Console) -> None:
         console.print(f"[yellow]report not saved (storage error: {exc})[/yellow]")
         return
     console.print(f"[green]✓ saved to local SQLite as audit #{audit_id}[/green]")
+    _offer_report_file(console, report)
+
+
+def _offer_report_file(console: Console, report: AuditReport) -> None:
+    """Optional file export: json / html / csv / markdown / sarif."""
+    from honeypot_auditor.cli import _export_report
+
+    fmt = Prompt.ask(
+        "Export a report file as",
+        choices=["skip", "json", "html", "csv", "markdown", "sarif"],
+        default="skip",
+    )
+    if fmt == "skip":
+        return
+    ext = "md" if fmt == "markdown" else fmt
+    default_path = f"honeypot-audit-{report.resolved_ip.replace(':', '_')}.{ext}"
+    path = Prompt.ask("  output path", default=default_path)
+    try:
+        dest = _export_report(report, path, fmt)
+    except OSError as exc:
+        console.print(f"  [red]export failed: {exc}[/red]")
+        return
+    console.print(f"  [green]✓ {fmt.upper()} report written to {dest}[/green]")
 
 
 def _show_history(console: Console) -> None:

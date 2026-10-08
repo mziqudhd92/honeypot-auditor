@@ -56,7 +56,8 @@ BANNER = (
 
 CLI_EPILOG = """
 examples:
-  honeypot-auditor --target 127.0.0.1
+  honeypot-auditor --target 127.0.0.1 --format html        # report.html / .csv / .md too
+  honeypot-auditor --target 127.0.0.1 --format json
   honeypot-auditor --target 203.0.113.10 --confirm-authorized --deep
   honeypot-auditor --target 35.171.9.193 -p 22 --confirm-authorized -n
   honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16
@@ -301,9 +302,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--format",
-        choices=("json", "sarif"),
+        choices=("json", "sarif", "html", "csv", "markdown"),
         default="json",
-        help="Primary report format (default json)",
+        help="Primary report format (default json; markdown writes .md)",
     )
     p.add_argument(
         "--signature-pack",
@@ -639,13 +640,34 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.capabilities = caps
 
 
+def _export_report(report: AuditReport, out: str, fmt: str) -> Path:
+    """Dispatch one finished report to the chosen file format."""
+    from honeypot_auditor.reporters.text_export import (
+        export_csv,
+        export_html,
+        export_markdown,
+    )
+
+    if fmt == "sarif":
+        return export_sarif(report, str(Path(out).with_suffix(".sarif")))
+    if fmt == "html":
+        return export_html(_report_payload_for(report), str(Path(out).with_suffix(".html")))
+    if fmt == "csv":
+        return export_csv(_report_payload_for(report), str(Path(out).with_suffix(".csv")))
+    if fmt == "markdown":
+        return export_markdown(_report_payload_for(report), str(Path(out).with_suffix(".md")))
+    return export(report, out)
+
+
+def _report_payload_for(report: AuditReport) -> dict:
+    from honeypot_auditor.reporters.json_export import _report_payload
+
+    return _report_payload(report)
+
+
 def _write_report(report: AuditReport, args: argparse.Namespace, ip: str, console: Console) -> Path:
     out = args.output or f"honeypot-audit-{ip.replace(':', '_')}.json"
-    if args.format == "sarif":
-        sarif_path = str(Path(out).with_suffix(".sarif"))
-        dest = export_sarif(report, sarif_path)
-    else:
-        dest = export(report, out)
+    dest = _export_report(report, out, args.format)
     nmap_exclude = getattr(args, "output_nmap_exclude", "")
     if nmap_exclude and report.score >= 60:
         export_nmap_exclude(report.resolved_ip, nmap_exclude)
@@ -921,6 +943,34 @@ async def run_audit(args: argparse.Namespace) -> int:
     out = _subnet_output_path(args.target, args.output)
     if args.format == "sarif":
         dest = export_sarif_many(reports, Path(out).with_suffix(".sarif"))
+    elif args.format in ("html", "csv", "markdown"):
+        from honeypot_auditor.reporters.json_export import write_owner_only
+        from honeypot_auditor.reporters.text_export import (
+            build_html_subnet,
+            build_markdown_subnet,
+            export_csv_subnet,
+        )
+
+        payload = {
+            "target": args.target,
+            "host_count": len(reports),
+            "started_at": started,
+            "finished_at": finished,
+            "notes": notes,
+            "hosts": [_report_payload_for(r) for r in reports],
+        }
+        suffix = {"html": ".html", "csv": ".csv", "markdown": ".md"}[args.format]
+        dest = Path(out).with_suffix(suffix)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if args.format == "csv":
+            dest = export_csv_subnet(payload, dest)
+        else:
+            text = (
+                build_html_subnet(payload)
+                if args.format == "html"
+                else build_markdown_subnet(payload)
+            )
+            write_owner_only(dest, text)
     else:
         dest = export_subnet(
             target=args.target,

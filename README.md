@@ -68,7 +68,7 @@ Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
 
 ```
-  [ BASIC ]  passive intel · Nmap NSE · 33 protocol engines (TCP + UDP) · up to 3 strategies each
+  [ BASIC ]  passive intel · Nmap NSE · 34 protocol engines (TCP + UDP) · up to 3 strategies each
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
              · co-tenancy buffet detect · latency · latency-under-load · egress bait
              (flag: --deep · more intrusive · same authorization rules)
@@ -261,7 +261,7 @@ fire alone on multi-lure research stacks.
   --max-concurrent 32        global socket concurrency budget
   --seed N                   RNG seed for blend profile
   --preset deception-audit   blue-team QA preset (both ports + --deep)
-  --format json|sarif        report format (default json)
+  --format json|sarif|html|csv|markdown  report format (default json; markdown → .md)
   --output-nmap-exclude path append IP when Honeyscore >= 60
   check-sig PATH             validate declarative signature pack offline
   --timeout SECS             socket timeout (default 3)
@@ -306,6 +306,7 @@ fire alone on multi-lure research stacks.
 | DHCP | UDP | 67 · 1067 | 3 | 3 | [DHCP](docs/strategies/dhcp/) |
 | NetBIOS | UDP+TCP | 137,139 · 1139 | 3 | 5 | [NetBIOS](docs/strategies/netbios/) |
 | Syslog | UDP+TCP | 514 · 10514 | 2 | 2 | [Syslog](docs/strategies/syslog/) |
+| Modbus TCP | TCP | 502 · 1502 | 2 | 5 | [MODBUS](docs/strategies/modbus/) |
 
 Implicit-TLS faces reuse their cleartext engines over TLS: **IMAPS** 993 · 1993
 (imap) and **POP3S** 995 · 1995 (pop3, incl. the pre-TLS plaintext-banner tell).

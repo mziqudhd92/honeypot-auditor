@@ -189,6 +189,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_bytes(body, content_type)
         elif path == "/api/audits":
             self._send_json({"audits": storage.list_audits(limit=100)})
+        elif "/download/" in path and path.startswith("/api/audits/"):
+            self._download_report(urlsplit(self.path).path)
         elif path.startswith("/api/audits/"):
             try:
                 audit_id = int(path.rsplit("/", 1)[-1])
@@ -202,6 +204,50 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_json(record)
         else:
             self._send_json({"error": "not found"}, status=404)
+
+    def _download_report(self, path: str) -> None:
+        """GET /api/audits/<id>/download/<json|html|csv|md> as an attachment."""
+        from honeypot_auditor.reporters.text_export import (
+            build_csv_text,
+            build_html,
+            build_markdown,
+        )
+
+        parts = [p for p in path.strip("/").split("/") if p]
+        if len(parts) != 5 or parts[3] != "download":
+            self._send_json({"error": "bad download path"}, status=400)
+            return
+        try:
+            audit_id = int(parts[2])
+        except ValueError:
+            self._send_json({"error": "bad audit id"}, status=400)
+            return
+        fmt = parts[4]
+        record = storage.get_audit(audit_id)
+        if record is None:
+            self._send_json({"error": "not found"}, status=404)
+            return
+        payload = record["report"]
+        if fmt == "json":
+            body, ctype = json.dumps(payload, indent=2).encode("utf-8"), "application/json"
+        elif fmt == "html":
+            body, ctype = build_html(payload).encode("utf-8"), "text/html; charset=utf-8"
+        elif fmt == "csv":
+            body, ctype = build_csv_text(payload).encode("utf-8"), "text/csv; charset=utf-8"
+        elif fmt == "md":
+            body, ctype = build_markdown(payload).encode("utf-8"), "text/markdown; charset=utf-8"
+        else:
+            self._send_json({"error": "format must be json|html|csv|md"}, status=400)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header(
+            "Content-Disposition", f'attachment; filename="honeypot-audit-{audit_id}.{fmt}"'
+        )
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_POST(self) -> None:  # noqa: N802 (http.server API)
         # Origin/Referer check blocks cross-site POSTs (e.g. text/plain CSRF) that
@@ -324,6 +370,10 @@ _PAGE = """<!DOCTYPE html>
         </div>
       </div>
       <fieldset id="detailbox" style="display:none"><legend>Stored report detail</legend>
+        <div class="field-row" style="justify-content: flex-start; margin-bottom: 6px;">
+          <label>Download report:</label>
+          <span id="downloads"></span>
+        </div>
         <pre class="json" id="detail"></pre>
       </fieldset>
     </div>
@@ -357,6 +407,15 @@ function loadHistory() {
 function openDetail(id) {
   fetch("/api/audits/" + id).then(r => r.json()).then(rec => {
     document.getElementById("detailbox").style.display = "";
+    const dl = document.getElementById("downloads");
+    dl.textContent = "";
+    for (const fmt of ["json", "html", "csv", "md"]) {
+      const a = document.createElement("a");
+      a.href = "/api/audits/" + id + "/download/" + fmt;
+      a.textContent = fmt.toUpperCase();
+      a.style.marginRight = "12px";
+      dl.appendChild(a);
+    }
     const pre = document.getElementById("detail");
     pre.textContent = JSON.stringify(rec.report, null, 2);
     const bar = document.getElementById("statusbar");

@@ -343,6 +343,15 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "RFC 6587 TCP framing channel"
         ),
     },
+    "modbus": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "MBAP transaction ID not echoed across two requests",
+        "static_signature": (
+            "MBAP framing (protocol ID / length coherence) · broadcast (unit 255) "
+            "answered · undefined function code answered normally · illegal read "
+            "quantity served"
+        ),
+    },
 }
 
 DEEP_WEIGHTS: dict[str, float] = {

@@ -164,3 +164,31 @@ def test_host_header_ipv6_bracket_parsing():
     assert _Handler._hostname_from_host_header("[::1]:8337") == "::1"
     assert _Handler._hostname_from_host_header("127.0.0.1:8337") == "127.0.0.1"
     assert _Handler._hostname_from_host_header("localhost") == "localhost"
+
+
+def test_stored_audit_downloads_in_all_formats(server):
+    # run one audit to populate storage
+    request = urllib.request.Request(
+        server + "/api/audit",
+        data=json.dumps({"target": "127.0.0.1", "ports": "9", "timeout": 1}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=120) as resp:
+        audit_id = json.loads(resp.read())["audit_id"]
+    for fmt, marker in (
+        ("json", b"threat_level"),
+        ("html", b"Triggered tells"),
+        ("csv", b"indicator_id"),
+        ("md", b"# Honeypot audit"),
+    ):
+        with urllib.request.urlopen(
+            f"{server}/api/audits/{audit_id}/download/{fmt}", timeout=10
+        ) as resp:
+            body = resp.read()
+            assert resp.status == 200
+            assert marker in body
+            assert "attachment" in resp.headers.get("Content-Disposition", "")
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(f"{server}/api/audits/{audit_id}/download/xml", timeout=10)
+    assert excinfo.value.code == 400

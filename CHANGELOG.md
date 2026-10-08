@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- **Modbus TCP engine** (502 / lab 1502) — first ICS/OT protocol: MBAP
+  transaction-ID echo, framing coherence (protocol ID / length), broadcast
+  (unit 255) answered, undefined function code 0x4f served, illegal read
+  quantity served (spec V1.1b3 behavioral; read-only probes)
+- Report formats `--format html|csv|markdown` alongside json/sarif —
+  self-contained styled HTML, per-indicator CSV (subnet sweeps → per-host
+  rows), Markdown for PRs/wikis; all written owner-only (0600)
+- Wizard: optional report-file export step (json/html/csv/markdown/sarif);
+  Web UI: per-audit download links (JSON/HTML/CSV/MD) served from stored
+  SQLite history
+
 ## [1.1.0] - 2026-10-06
 
 ### Added

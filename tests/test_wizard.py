@@ -70,6 +70,7 @@ def test_run_one_sets_confirm_authorized_after_public_yes(monkeypatch):
             False,  # deep
             3,  # timeout
             True,  # authorized
+            "skip",  # export report file as
             False,  # audit another?
             False,  # show history?
         ]

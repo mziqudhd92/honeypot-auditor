@@ -34,6 +34,7 @@ from honeypot_auditor.probes.imap import probe_imap
 from honeypot_auditor.probes.ipp import probe_ipp
 from honeypot_auditor.probes.kubernetes import probe_kubernetes
 from honeypot_auditor.probes.memcached import probe_memcached
+from honeypot_auditor.probes.modbus import probe_modbus
 from honeypot_auditor.probes.mongodb import probe_mongodb
 from honeypot_auditor.probes.mqtt import probe_mqtt
 from honeypot_auditor.probes.mssql import probe_mssql
@@ -73,6 +74,7 @@ PROBE_BY_PROTOCOL: dict[str, ProbeFn] = {
     "mssql": probe_mssql,
     "mongodb": probe_mongodb,
     "mqtt": probe_mqtt,
+    "modbus": probe_modbus,
     "snmp": probe_snmp,
     "elasticsearch": probe_elasticsearch,
     "docker": probe_docker,
