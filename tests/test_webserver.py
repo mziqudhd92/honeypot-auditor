@@ -31,6 +31,10 @@ def _get(url: str):
         return resp.status, resp.read()
 
 
+def _get_request(url: str) -> urllib.request.Request:
+    return urllib.request.Request(url)
+
+
 def test_index_serves_xp_css_page(server):
     status, body = _get(server + "/")
     assert status == 200
@@ -192,3 +196,173 @@ def test_stored_audit_downloads_in_all_formats(server):
     with pytest.raises(urllib.error.HTTPError) as excinfo:
         urllib.request.urlopen(f"{server}/api/audits/{audit_id}/download/xml", timeout=10)
     assert excinfo.value.code == 400
+
+
+def _post(url: str, body: bytes, headers: dict | None = None) -> urllib.request.Request:
+    return urllib.request.Request(
+        url, data=body, headers=headers or {"Content-Type": "application/json"}, method="POST"
+    )
+
+
+def _expect_error(request: urllib.request.Request, code: int, timeout: int = 10) -> dict:
+    try:
+        urllib.request.urlopen(request, timeout=timeout)
+        raise AssertionError(f"expected HTTP {code}")
+    except urllib.error.HTTPError as excinfo:
+        assert excinfo.code == code
+        return json.loads(excinfo.read())
+
+
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [
+        ({"target": "127.0.0.1", "preset": "nsa"}, "preset"),
+        ({"target": "127.0.0.1", "timeout": "fast"}, "timeout must be a number"),
+        ({"target": "127.0.0.1", "timeout": None}, "timeout must be a number"),
+        ({"target": "127.0.0.1", "timeout": 0.1}, "between 0.5 and 30"),
+        ({"target": "127.0.0.1", "timeout": 31}, "between 0.5 and 30"),
+    ],
+)
+def test_invalid_params_are_rejected_with_400(server, params, message):
+    err = _expect_error(_post(server + "/api/audit", json.dumps(params).encode()), 400)
+    assert message in err["error"]
+
+
+def test_post_to_unknown_path_is_404(server):
+    err = _expect_error(
+        _post(server + "/api/nope", json.dumps({"target": "127.0.0.1"}).encode()), 404
+    )
+    assert err["error"] == "not found"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"this is not json",
+        b"[1, 2, 3]",  # valid JSON, but not an object
+        b'"just a string"',
+    ],
+)
+def test_post_with_malformed_json_body_is_400(server, body):
+    err = _expect_error(_post(server + "/api/audit", body), 400)
+    assert err["error"] == "invalid JSON body"
+
+
+def test_post_with_foreign_referer_is_rejected(server):
+    err = _expect_error(
+        _post(
+            server + "/api/audit",
+            json.dumps({"target": "127.0.0.1", "timeout": 1}).encode(),
+            headers={"Content-Type": "application/json", "Referer": "https://evil.example/"},
+        ),
+        403,
+    )
+    assert "origin" in err["error"]
+
+
+def test_post_with_local_referer_is_accepted(server):
+    with urllib.request.urlopen(
+        _post(
+            server + "/api/audit",
+            json.dumps({"target": "127.0.0.1", "ports": "9", "timeout": 1}).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Referer": "http://localhost/anything",
+            },
+        ),
+        timeout=120,
+    ) as resp:
+        assert resp.status == 200
+
+
+def test_post_returning_500_on_internal_failure(server, monkeypatch):
+    from honeypot_auditor import webserver
+
+    def _save_boom(*_a, **_k):
+        raise OSError("sqlite is on fire")
+
+    monkeypatch.setattr(webserver.storage, "save_report", _save_boom)
+    err = _expect_error(
+        _post(
+            server + "/api/audit",
+            json.dumps({"target": "127.0.0.1", "ports": "9", "timeout": 1}).encode(),
+        ),
+        500,
+        timeout=120,
+    )
+    assert "audit failed" in err["error"] and "sqlite is on fire" in err["error"]
+
+
+def test_bad_audit_id_is_400(server):
+    err = _expect_error(_get_request(f"{server}/api/audits/not-a-number"), 400)
+    assert err["error"] == "bad audit id"
+
+
+def test_missing_audit_is_404(server):
+    err = _expect_error(_get_request(f"{server}/api/audits/999999"), 404)
+    assert err["error"] == "not found"
+
+
+@pytest.mark.parametrize(
+    ("path", "message"),
+    [
+        # missing format segment: handled by the audit-id branch
+        ("/api/audits/1/download", "bad audit id"),
+        # too many segments: handled by the download-path branch
+        ("/api/audits/1/download/json/extra", "bad download path"),
+    ],
+)
+def test_malformed_download_paths_are_400(server, path, message):
+    err = _expect_error(_get_request(server + path), 400)
+    assert err["error"] == message
+
+
+def test_download_with_bad_audit_id_is_400(server):
+    err = _expect_error(_get_request(f"{server}/api/audits/xyz/download/json"), 400)
+    assert err["error"] == "bad audit id"
+
+
+def test_download_of_missing_audit_is_404(server):
+    err = _expect_error(_get_request(f"{server}/api/audits/424242/download/json"), 404)
+    assert err["error"] == "not found"
+
+
+def test_static_asset_missing_on_disk_is_404(server, monkeypatch, tmp_path):
+    from honeypot_auditor import webserver
+
+    # XP.css is a known asset name, but point the static dir at an empty dir
+    monkeypatch.setattr(webserver, "_DATA_DIR", tmp_path)
+    err = _expect_error(_get_request(server + "/static/XP.css"), 404)
+    assert err["error"] == "not found"
+
+
+def test_run_webserver_rejects_bad_port(capsys):
+    from honeypot_auditor import webserver
+
+    assert webserver.run_webserver(["--port", "not-a-number"]) == 2
+    assert "--port requires a number" in capsys.readouterr().out
+
+
+def test_run_webserver_serves_until_interrupted(monkeypatch, capsys):
+    from honeypot_auditor import webserver
+
+    class _FakeServer:
+        server_address = ("127.0.0.1", 8337)
+
+        def serve_forever(self):
+            raise KeyboardInterrupt  # simulate Ctrl+C on first loop tick
+
+        def server_close(self):
+            self.closed = True
+
+    fake = _FakeServer()
+    monkeypatch.setattr(webserver, "create_server", lambda port: fake)
+    assert webserver.run_webserver(["--port", "8337"]) == 0
+    out = capsys.readouterr().out
+    assert "http://127.0.0.1:8337" in out
+    assert fake.closed
+
+    # default argv serves on DEFAULT_PORT
+    fake2 = _FakeServer()
+    monkeypatch.setattr(webserver, "create_server", lambda port: fake2)
+    assert webserver.run_webserver(None) == 0

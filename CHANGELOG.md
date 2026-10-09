@@ -19,6 +19,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   Web UI: per-audit download links (JSON/HTML/CSV/MD) served from stored
   SQLite history
 
+### Fixed
+
+- SMB NTLM challenge capture: impacket's `Structure` is not a dict in current
+  versions, so `.get()` on the parsed Type-2 message raised and silently
+  dropped target-info/AV-pair/version metadata (challenge bytes survived);
+  field access is now KeyError-safe on both impacket layouts
+
+### Changed
+
+- Test coverage gate raised from 75% to 80% (pyproject + Makefile); suite now
+  covers SMB/NTLM helpers, the wizard flows, web UI error/CSRF/download
+  routes, signature pack evaluation/matchers, and netutil TCP/UDP helpers
+  (total 80.4%, wizard 100%, web UI 99%)
+
 ## [1.1.0] - 2026-10-06
 
 ### Added
