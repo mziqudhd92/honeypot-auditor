@@ -43,7 +43,9 @@ jobs:
       - name: Install
         run: pip install -e ".[full,dev]"
       - name: Pytest with coverage gate
-        run: pytest --cov-fail-under=75 -m "not integration"
+        # Must match [tool.coverage.report] fail_under in pyproject.toml and the
+        # Makefile test-cov gate — keep all three in sync.
+        run: pytest --cov-fail-under=80 -m "not integration"
       - name: Type check
         run: mypy src/honeypot_auditor
       - name: Upload coverage reports

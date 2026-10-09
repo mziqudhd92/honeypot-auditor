@@ -21,6 +21,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- CSV exports (single-host and subnet, incl. web UI downloads) now neutralize
+  spreadsheet formula injection: evidence cells derived from remote banners
+  that start with `=`, `+`, `-`, `@`, or a tab/CR are prefixed with `'`
+  (OWASP CSV injection guidance) — a malicious audited host could previously
+  plant executable formulas in reports opened in Excel/LibreOffice
+- CI coverage gate realigned with the repo gate (75% → 80% in the test
+  workflow, matching pyproject.toml and the Makefile)
 - SMB NTLM challenge capture: impacket's `Structure` is not a dict in current
   versions, so `.get()` on the parsed Type-2 message raised and silently
   dropped target-info/AV-pair/version metadata (challenge bytes survived);

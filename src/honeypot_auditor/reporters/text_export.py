@@ -16,6 +16,17 @@ from honeypot_auditor.reporters.json_export import write_owner_only
 
 _SUFFIX = {"html": ".html", "csv": ".csv", "markdown": ".md"}
 
+# Cells starting with these execute as formulas in Excel/LibreOffice/Sheets
+# (OWASP CSV injection guidance). Evidence text comes from remote banners,
+# i.e. content controlled by the audited host — neutralize before export.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: str) -> str:
+    if value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
 
 def default_report_path(target_ip: str, fmt: str) -> str:
     slug = target_ip.replace(":", "_")
@@ -166,11 +177,11 @@ def _write_indicator_csv(payload: dict, buffer: io.StringIO) -> None:
         ]
     )
     common = [
-        payload.get("target", ""),
-        payload.get("resolved_ip", ""),
+        _csv_safe(str(payload.get("target", ""))),
+        _csv_safe(str(payload.get("resolved_ip", ""))),
         float(payload.get("score", 0)),
-        payload.get("threat_level", ""),
-        payload.get("confidence", ""),
+        _csv_safe(str(payload.get("threat_level", ""))),
+        _csv_safe(str(payload.get("confidence", ""))),
     ]
     indicators = payload.get("indicators") or []
     triggered_first = sorted(indicators, key=lambda i: (not i.get("triggered"), i.get("id", "")))
@@ -178,13 +189,13 @@ def _write_indicator_csv(payload: dict, buffer: io.StringIO) -> None:
         writer.writerow(
             common
             + [
-                ind.get("id", ""),
-                ind.get("category", ""),
-                ind.get("protocol", ""),
+                _csv_safe(str(ind.get("id", ""))),
+                _csv_safe(str(ind.get("category", ""))),
+                _csv_safe(str(ind.get("protocol", ""))),
                 "yes" if ind.get("triggered") else "no",
                 "yes" if ind.get("skipped") else "no",
-                ind.get("title", ""),
-                _fmt_cell(ind.get("detail"), 1000),
+                _csv_safe(str(ind.get("title", ""))),
+                _csv_safe(_fmt_cell(ind.get("detail"), 1000)),
             ]
         )
 
@@ -201,11 +212,11 @@ def export_csv_subnet(payload: dict, path: str | Path) -> Path:
     for host in payload.get("hosts") or []:
         writer.writerow(
             [
-                payload.get("target", ""),
+                _csv_safe(str(payload.get("target", ""))),
                 payload.get("host_count", ""),
-                host.get("resolved_ip", ""),
+                _csv_safe(str(host.get("resolved_ip", ""))),
                 float(host.get("score", 0)),
-                host.get("threat_level", ""),
+                _csv_safe(str(host.get("threat_level", ""))),
                 len(host.get("triggered") or []),
             ]
         )

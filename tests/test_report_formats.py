@@ -122,3 +122,60 @@ def test_subnet_builders():
 
     assert "192.168.1.5" in build_html_subnet(payload)
     assert "Confirmed Honeypot" in build_markdown_subnet(payload)
+
+
+def test_csv_neutralizes_formula_injection():
+    """Banner-derived cells must not execute as formulas in Excel/LibreOffice."""
+    payload = _payload()
+    hostile = [
+        '=HYPERLINK("http://evil.example","click")',
+        "+cmd|'/c calc'!A1",
+        "-2+3+cmd|'/c calc'!A0",
+        "@SUM(1+1)*cmd|'/c calc'!A0",
+        "\t=1+1",
+        "\r=1+1",
+    ]
+    payload["indicators"][0]["title"] = hostile[0]
+    payload["indicators"][0]["detail"] = hostile[1]
+    payload["indicators"][0]["id"] = hostile[2]
+    payload["threat_level"] = hostile[3]
+    payload["confidence"] = hostile[4]
+    payload["target"] = hostile[5]
+
+    rows = list(csv.reader(io.StringIO(build_csv_text(payload))))
+    header = rows[0]
+    body = rows[1:]
+    exported = {
+        row[header.index(col)] for row in body for col in ("indicator_id", "title", "detail")
+    }
+    exported |= {body[0][header.index(col)] for col in ("target", "threat_level", "confidence")}
+
+    for cell in exported:
+        assert not cell.startswith(("=", "+", "-", "@", "\t")), cell
+        if cell.startswith("'"):
+            assert cell[1:] in hostile  # apostrophe only added to hostile cells
+
+    benign = {row[header.index("title")] for row in body} - exported
+    assert all(not c.startswith("'") for c in benign)  # benign cells untouched
+
+
+def test_subnet_csv_neutralizes_formula_injection(tmp_path):
+    from honeypot_auditor.reporters.text_export import export_csv_subnet
+
+    payload = {
+        "target": '=HYPERLINK("http://evil.example","x")',
+        "host_count": 1,
+        "hosts": [
+            {
+                "resolved_ip": "192.168.1.5",
+                "score": 80.0,
+                "threat_level": "@SUM(1+1)*cmd|'/c calc'!A0",
+                "triggered": [{"id": "x"}],
+            }
+        ],
+    }
+    dest = export_csv_subnet(payload, tmp_path / "subnet.csv")
+    rows = list(csv.reader(io.StringIO(dest.read_text(encoding="utf-8"))))
+    header, host_row = rows[0], rows[1]
+    assert host_row[header.index("target")].startswith("'=")
+    assert host_row[header.index("threat_level")].startswith("'@")
