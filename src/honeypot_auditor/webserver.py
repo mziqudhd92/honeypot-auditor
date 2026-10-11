@@ -174,23 +174,20 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             self._send_html(_DETAIL_PAGE.replace("__AUDIT_ID__", str(audit_id)))
         elif path.startswith("/static/"):
-            name = path.rsplit("/", 1)[-1]
-            content_type = _STATIC_TYPES.get(name)
-            # Whitelist only — reject path separators / traversal even if somehow present.
-            if content_type is None or "/" in name or "\\" in name or name != Path(name).name:
-                self._send_json({"error": "not found"}, status=404)
+            # Compare against constant whitelist keys only — never join user input
+            # into a filesystem path (CodeQL py/path-injection).
+            requested = path.rsplit("/", 1)[-1]
+            for safe_name, content_type in _STATIC_TYPES.items():
+                if requested != safe_name:
+                    continue
+                try:
+                    body = (_static_dir() / safe_name).read_bytes()
+                except OSError:
+                    self._send_json({"error": "not found"}, status=404)
+                    return
+                self._send_bytes(body, content_type)
                 return
-            static_root = _static_dir().resolve()
-            candidate = (static_root / name).resolve()
-            if candidate.parent != static_root:
-                self._send_json({"error": "not found"}, status=404)
-                return
-            try:
-                body = candidate.read_bytes()
-            except OSError:
-                self._send_json({"error": "not found"}, status=404)
-                return
-            self._send_bytes(body, content_type)
+            self._send_json({"error": "not found"}, status=404)
         elif path == "/api/audits":
             self._send_json({"audits": storage.list_audits(limit=100)})
         elif "/download/" in path and path.startswith("/api/audits/"):

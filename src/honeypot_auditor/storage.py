@@ -89,7 +89,8 @@ def save_report(
         )
         conn.commit()
         row_id = cursor.lastrowid
-        assert row_id is not None
+        if row_id is None:
+            raise RuntimeError("sqlite INSERT into audits returned no row id")
         return int(row_id)
     finally:
         conn.close()

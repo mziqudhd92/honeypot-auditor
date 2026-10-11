@@ -91,7 +91,8 @@ def _bind_dhcp_client_port(sock: socket.socket) -> None:
     short-lived probe socket, not a listening service.
     """
     # nosemgrep: python.lang.security.audit.network.bind.avoid-bind-to-all-interfaces
-    sock.bind(("0.0.0.0", _CLIENT_PORT))  # codeql[py/bind-socket-all-network-interfaces]
+    # codeql[py/bind-socket-all-network-interfaces]
+    sock.bind(("0.0.0.0", _CLIENT_PORT))  # nosec B104  # lgtm[py/bind-socket-all-network-interfaces]
 
 
 def _client_port_available() -> str:
