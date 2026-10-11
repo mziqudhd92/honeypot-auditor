@@ -54,6 +54,13 @@ def test_json_export_roundtrip(tmp_path: Path):
     assert len(data["triggered"]) == 1
     assert data["protocol_strategies"][0]["protocol"] == "ssh"
     assert data["protocol_strategies"][0]["static_signature"]["status"] == "hit"
+    # Owner-only perms on Unix; Windows ACLs differ so only assert when meaningful.
+    import stat
+
+    mode = dest.stat().st_mode & 0o777
+    if mode != 0o666:  # skip platforms that ignore chmod bitmasks
+        assert mode & 0o077 == 0, f"report should be owner-only, got {oct(mode)}"
+        assert mode & stat.S_IRUSR
 
 
 def test_json_export_coerces_bytes_evidence(tmp_path: Path):

@@ -22,7 +22,7 @@ jobs:
       - name: Install and test
         run: |
           pip install -e ".[full,dev]"
-          pytest --cov-fail-under=60
+          pytest --cov-fail-under=75
           ruff check src tests
       - name: Verify release tag matches package version
         if: github.event_name == 'release'
@@ -30,3 +30,30 @@ jobs:
           TAG="${GITHUB_REF_NAME#v}"
           PKG=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           test "$TAG" = "$PKG" || { echo "Tag v$TAG != pyproject version $PKG"; exit 1; }
+
+  sbom:
+    # Attach a CycloneDX SBOM of the released package + dependency tree to the
+    # GitHub Release (PyPI side gets PEP 740 attestations via Trusted Publishing).
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install released package and CycloneDX generator
+        run: pip install -e ".[full]" "cyclonedx-bom>=7"
+      - name: Generate CycloneDX SBOM
+        run: |
+          cyclonedx-py environment \
+            --pyproject pyproject.toml \
+            --of JSON \
+            --sv 1.5 \
+            -o sbom.cdx.json
+      - name: Attach SBOM to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" sbom.cdx.json --clobber --repo "${{ github.repository }}"

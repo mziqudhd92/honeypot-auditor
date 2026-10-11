@@ -7,7 +7,7 @@ test:
 	pytest --no-cov
 
 test-cov:
-	pytest --cov-fail-under=60
+	pytest --cov-fail-under=80
 	@echo "HTML report: htmlcov/index.html"
 
 lint:

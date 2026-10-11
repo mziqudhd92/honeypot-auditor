@@ -1,0 +1,42 @@
+# Local verify: 2 honeypots + 2 real services (127.0.0.1 only)
+name: honeypot-auditor-local-verify
+
+services:
+  # Honeypot 1 — Cowrie SSH/Telnet
+  cowrie:
+    image: cowrie/cowrie:latest
+    container_name: hpa-verify-cowrie
+    ports:
+      - "127.0.0.1:18022:2222/tcp"
+      - "127.0.0.1:18023:2223/tcp"
+    restart: unless-stopped
+
+  # Honeypot 2 — Dionaea (FTP/HTTP/SMB/…)
+  dionaea:
+    image: dinotools/dionaea:latest
+    container_name: hpa-verify-dionaea
+    ports:
+      - "127.0.0.1:18021:21/tcp"
+      - "127.0.0.1:18080:80/tcp"
+      - "127.0.0.1:18445:445/tcp"
+    restart: unless-stopped
+
+  # Real 1 — nginx static site
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: hpa-verify-nginx
+    ports:
+      - "127.0.0.1:18088:80/tcp"
+    volumes:
+      - ../benchmark/nginx-baseline.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../benchmark/nginx-baseline-index.html:/usr/share/nginx/html/index.html:ro
+    restart: unless-stopped
+
+  # Real 2 — Redis (no AUTH; honest RESP)
+  redis:
+    image: redis:7.4-alpine
+    container_name: hpa-verify-redis
+    ports:
+      - "127.0.0.1:16379:6379/tcp"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped

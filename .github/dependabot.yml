@@ -1,0 +1,21 @@
+# Dependency and action update automation. Complements the pip-audit job in
+# security.yml, which only runs on push/PR — this surfaces new CVEs and action
+# bumps even between code changes.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"

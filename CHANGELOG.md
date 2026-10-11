@@ -6,8 +6,106 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-10-11
+
+### Added
+
+- Two new UX front ends, both persisting to a shared local SQLite database
+  (`~/.honeypot-auditor/audits.db`, override via `HONEYPOT_AUDITOR_DB`):
+  **`honeypot-auditor wizard`** — interactive step-by-step terminal audit
+  (target → preset → ports → depth → timeout → authorization) with Rich result
+  tables and history; **`honeypot-auditor serve [--port N]`** — a graphical web
+  UI styled with vendored [XP.css](https://github.com/botoxparty/XP.css) (MIT).
+  The server binds **127.0.0.1 only**, rejects non-local `Host` headers (DNS
+  rebinding), serializes audits (engine settings are process globals), and the
+  browser renders all report data via `textContent` (no HTML injection)
+- Wizard: optional report-file export step (json/html/csv/markdown/sarif);
+  Web UI: per-audit download links (JSON/HTML/CSV/MD) served from stored
+  SQLite history
+- Report formats `--format html|csv|markdown` alongside json/sarif —
+  self-contained styled HTML, per-indicator CSV (subnet sweeps → per-host
+  rows), Markdown for PRs/wikis; all written owner-only (0600)
+- Four new protocol engines and POP3S support, all RFC-behavioral (no product
+  signatures): **DHCP** (`dhcp.xid_echo`/`framing`/`canned_offer` — capability-gated
+  on privileged client port 68), **NetBIOS** (NBNS 137 + session service 139:
+  `trnid_echo`, `framing`, `canned_nbstat`, `session_grant`, `session_framing`),
+  **Syslog** (UDP 514 / TCP RFC 6587: `unexpected_reply`, `tcp_reply` — any answer
+  on the ack-less channel violates the RFC), **Modbus TCP** (502 / lab 1502 —
+  first ICS/OT face: MBAP transaction-ID echo, framing coherence, broadcast unit
+  255 answered, undefined FC 0x4f served, illegal read quantity served; read-only),
+  and **POP3S** (995/1995 reuse the pop3 engine over implicit TLS with a new
+  `pop3.pre_tls_banner` plaintext-leak tell). SNMP, DNS, NTP, TFTP, and SSDP were
+  already shipped engines (**34** engines · **88** active strategy slots · **271**
+  scored indicators)
+- SMTP / POP3 detection: two additional protocol tells each — SMTP
+  `rset_envelope` (envelope survives an explicit RSET: canned transaction state)
+  and `starttls_lie` (STARTTLS advertised + 220 but the TLS handshake fails,
+  probed in an isolated session); POP3 `preauth_uidl` (LIST/UIDL answered in
+  AUTHORIZATION state) and `command_case` (lowercase `capa` rejected while
+  uppercase `CAPA` works — RFC 1939 keywords are case-insensitive)
+- SMTP probes pass `local_hostname` to smtplib, skipping its eager
+  `socket.getfqdn()` — a multi-second DNS stall per connection on hosts whose
+  name does not resolve
+- Dependabot (pip + github-actions, weekly) and a weekly `schedule:` trigger on the
+  security workflow, so new CVEs surface between PRs
+- CycloneDX SBOM attached to GitHub Releases (`publish.yml`); GHCR images now ship
+  provenance + SBOM attestations (`publish-ghcr.yml`)
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) and OpenSSF Scorecard badge
+- Beginner tutorial for the local web UI (`docs/tutorials/web-ui.md`)
+
+### Changed
+
+- Audit reports (JSON / SARIF / HTML / CSV / Markdown / nmap-exclude) are written
+  `0600` — they carry target evidence and probe transcripts
+- Container: digest-pinned base image, OCI labels, non-root `auditor` user
+- Coverage gate raised 60% → 75% → 80% (pyproject + Makefile + CI workflow);
+  suite now covers SMB/NTLM helpers, wizard flows, web UI error/CSRF/download
+  routes, signature pack evaluation/matchers, and netutil TCP/UDP helpers
+  (total ~80.4%, wizard 100%, web UI 99%)
+- Security support table trimmed to 1.0.x (0.9.x security-fixes only); authorization
+  gate docs now state that hostnames resolving into LAN/RFC1918 scan without
+  confirmation (README + SECURITY.md)
+- `docs/PUBLISHING.md` documents signed release tags (`git tag -s`)
+- Typed the remaining unannotated defs (`probes/ftp.py` helpers; `cli.py`
+  `_run_named` / `_write_report` / `_audit_subnet`); SMB helpers debug-log their
+  swallowed exceptions instead of staying silent
+- CI: `timeout-minutes` and `concurrency` groups across workflows
+- README / site live demo: show **v1.0.4** dd-honeypot (DataTrap) GIF
+  (`docs/tutorials/dd-honeypot-lab-demo/…`) with web-UI overview/result screenshots
+- dd-honeypot beginner lab (`docs/tutorials/dd-honeypot-lab-demo/`): canonical
+  path-only onboarding, SSH host port **2222**, accurate Telnet/deep expectations,
+  expected Bedrock/MySQL log-noise note; drop `demo/` recorder scripts and local
+  `.dockerignore` / `.gitignore`
+- Strategy guides reorganized into per-protocol folders under
+  [`docs/strategies/<proto>/`](docs/strategies/)
+
+### Removed
+
+- Dead `netutil_async.py` module and stale `requirements.txt` (`pyproject.toml` is
+  the single dependency source; README + entry-script hints updated)
+
 ### Fixed
 
+- CSV exports (single-host and subnet, incl. web UI downloads) now neutralize
+  spreadsheet formula injection: evidence cells derived from remote banners
+  that start with `=`, `+`, `-`, `@`, or a tab/CR are prefixed with `'`
+  (OWASP CSV injection guidance) — a malicious audited host could previously
+  plant executable formulas in reports opened in Excel/LibreOffice
+- SMB NTLM challenge capture: impacket's `Structure` is not a dict in current
+  versions, so `.get()` on the parsed Type-2 message raised and silently
+  dropped target-info/AV-pair/version metadata (challenge bytes survived);
+  field access is now KeyError-safe on both impacket layouts
+- SMTP: after extension STARTTLS answers 220, reopen a cleartext session before
+  envelope/RSET probes (avoids poisoning MAIL/RCPT on a TLS-armed socket); close
+  the isolated STARTTLS TLS wrap; POP3 early-return skips use named helpers
+  instead of fragile magic indices
+- Web UI hardening from code review: exact-match localhost `Host` guard
+  (`127.0.0.1.evil.com` no longer bypasses it), `nosniff` + CSP headers, and
+  audit serialization now actually spans the engine run (engine settings are
+  process globals — concurrent audits would race)
+- DHCP: client socket no longer leaks when the privileged bind races/fails;
+  NetBIOS: dropped an unused parameter; wizard: storage failures no longer
+  crash the loop
 - CI: ruff import order in `tests/test_mongodb.py`; security workflow audits
   product deps before installing Semgrep (avoids Semgrep’s pinned PyJWT CVE noise)
 - `mssql.prelogin_blind` canned gate uses nmap/canned shape only (not
@@ -18,15 +116,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - MSSQL/MySQL auth-error clones require user-attributed fixed embedding; probes
   use distinct `entropy_varied_creds`
 - Telnet AYT scores post-AYT bytes only (banner drained via `tcp_roundtrips`)
-
-### Changed
-
-- README / site live demo: show **v1.0.3** dd-honeypot (DataTrap) GIF instead of the
-  v1.0.0 three-face lab tour (`docs/tutorials/dd-honeypot-lab-demo/…`)
-- dd-honeypot beginner lab (`docs/tutorials/dd-honeypot-lab-demo/`): canonical
-  path-only onboarding, SSH host port **2222**, accurate Telnet/deep expectations,
-  expected Bedrock/MySQL log-noise note; drop `demo/` recorder scripts and local
-  `.dockerignore` / `.gitignore`
 
 ## [1.0.3] - 2026-09-30
 
@@ -122,7 +211,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   object-list dump (`docs/KUBERNETES.md`)
 - SSDP / UPnP discovery UDP engine on ports 1900/11900: unicast `M-SEARCH`
   framing, header facade, ST echo, response clone, corroboration-gated stock
-  `SERVER`, `LOCATION` loopback, method stub (`docs/udp/SSDP.md`)
+  `SERVER`, `LOCATION` loopback, method stub (`docs/strategies/ssdp/`)
 - Docker Engine HTTP API engine on ports 2375/12375 with protocol non-compliance
   detection: ping/version framing, stock ApiVersion/Version/GitCommit, unknown-path
   version/info facade, DELETE/PUT `/_ping` method stubs, `/info` missing fields or
@@ -147,7 +236,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - TFTP UDP engine on ports 69/1069: TID `fixed_source_port`, opcode/error/mode/WRQ
   facades, RFC 2347 `option_blindness`, corroboration-gated `stock_payload`, plus
   `tid_reuse` (`state_nonpersist`), `response_clone`, and `no_retransmit`
-  (`docs/udp/TFTP.md`)
+  (`docs/strategies/tftp/`)
 - Three-strategy expansion for nine protocols that previously used
   **static_signature** only: DNS, NTP, Elasticsearch, IPP/CUPS, Memcached, HTTP,
   SIP, Git, and HTTP proxy now activate **arbitrary_auth** + **state_nonpersist**
@@ -157,10 +246,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   probe-key set/delete, never `flush_all`)
 - Docs sync: surface NTP in README/BASIC banner, ports table, site index,
   agents/llms briefs, SCORING, and `docs/udp/README.md` (guide already at
-  `docs/udp/NTP.md`)
+  `docs/strategies/ntp/`)
 - NTP UDP engine on ports 123/1123: framing, mode/VN facade, originate echo,
   stratum facade, response clone, and corroboration-gated zeroed clock metrics /
-  epoch-zero / stock refid (`docs/udp/NTP.md`; never monlist/mode-7)
+  epoch-zero / stock refid (`docs/strategies/ntp/`; never monlist/mode-7)
 - Memcached ASCII engine on ports 11211/21211 with protocol non-compliance
   detection: VERSION/stats framing, unknown-command ERROR fidelity, get-miss END,
   bitwise-identical canned stats, stock VERSION lures (corroboration-gated for
@@ -175,7 +264,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - DNS (UDP/53, lab 15353) RFC non-compliance engine under `probes/udp/`: header
   framing, txid echo, illegal OPCODE facade, question echo, RCODE stub on
   `.invalid`, response clone, corroboration-gated 0x20 case mismatch, EDNS OPT
-  facade, stock TXT/SOA lure (`docs/udp/DNS.md`)
+  facade, stock TXT/SOA lure (`docs/strategies/dns/`)
 - UDP probe scaffold: `UdpExchange` / `udp_exchange` / `udp_exchange_to` in
   `netutil` (peer port + RTT; `udp_transact` remains a back-compat wrapper),
   `probes/udp/` package with `UDPEngine` discovery merged into
@@ -209,7 +298,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   acceptance, request-id echo, invalid version facade, noSuch success on missing OID,
   BER/PDU framing, stock sysDescr lures, GetNext stub, wrong MIB ASN.1 types
   (`sysObjectID` / `sysUpTime`), OID-name echo failures, bitwise-identical canned
-  replies (`docs/SNMP.md`)
+  replies (`docs/strategies/snmp/`)
 - Docs/site sync for SNMP + MQTT: protocol table / FAQ / JSON-LD on `docs/index.html`,
   `llms.txt` / `llms-full.txt` / `sitemap.xml`, scoring strategy blurbs
 

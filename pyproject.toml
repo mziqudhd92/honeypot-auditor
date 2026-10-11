@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "honeypot-auditor"
-version = "1.0.3"
+version = "1.0.4"
 description = "Multi-protocol CLI that fingerprints whether an authorized target behaves like a low-interaction honeypot."
 readme = "README.md"
 license = "MIT"
@@ -77,6 +77,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 honeypot_auditor = [
   "data/*.json",
+  "data/xp/*",
   "signatures/core/*.json",
 ]
 
@@ -106,7 +107,7 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "@(abc\\.)?abstractmethod",
 ]
-fail_under = 60
+fail_under = 80
 precision = 2
 show_missing = true
 skip_covered = false

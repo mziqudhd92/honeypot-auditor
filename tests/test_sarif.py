@@ -39,6 +39,9 @@ def test_sarif_schema_fields(tmp_path):
     path = export_sarif(report, tmp_path / "out.sarif")
     assert path.is_file()
     assert "ssh.static" in path.read_text(encoding="utf-8")
+    mode = path.stat().st_mode & 0o777
+    if mode != 0o666:  # skip platforms that ignore chmod bitmasks
+        assert mode & 0o077 == 0, f"SARIF should be owner-only, got {oct(mode)}"
 
 
 def test_sarif_emits_summary_when_no_hits():

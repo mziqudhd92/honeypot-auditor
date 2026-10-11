@@ -59,8 +59,13 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "smtp": {
         "arbitrary_auth": "AUTH any-password · open relay",
-        "state_nonpersist": "MAIL then RCPT 503 (lost envelope)",
-        "static_signature": "loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone",
+        "state_nonpersist": (
+            "MAIL then RCPT 503 (lost envelope) · envelope survives RSET"
+        ),
+        "static_signature": (
+            "loopback identity · VRFY/EXPN/STARTTLS/ETRN monotone · "
+            "STARTTLS capability lie"
+        ),
     },
     "http": {
         "arbitrary_auth": (
@@ -75,10 +80,13 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
     },
     "pop3": {
         "arbitrary_auth": "two random USER/PASS pairs",
-        "state_nonpersist": "STAT/NOOP before authentication",
+        "state_nonpersist": (
+            "STAT/NOOP before authentication · LIST/UIDL before authentication"
+        ),
         "static_signature": (
             "+OK greeting framing · unknown-command rejection · "
-            "auth-failed -ERR blanket (STAT/CAPA/HPAU) · stock lure banner"
+            "auth-failed -ERR blanket (STAT/CAPA/HPAU) · stock lure banner · "
+            "lowercase-verb rejection · plaintext before TLS ClientHello (POP3S)"
         ),
     },
     "imap": {
@@ -309,6 +317,39 @@ PROTOCOL_STRATEGIES: dict[str, dict[str, str]] = {
             "TID fixed_source_port · opcode/error/mode/WRQ facades · "
             "RFC 2347 option blindness · response clone · no OACK/DATA retransmit · "
             "DATA block >512 without negotiated blksize · stock ERROR/DATA lure"
+        ),
+    },
+    "dhcp": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "xid not echoed across two DISCOVERs (RFC 2131 §4.1)",
+        "static_signature": (
+            "BOOTP framing (cookie/op/option 53 · ACK/NAK to DISCOVER) · "
+            "canned OFFER clone for distinct xid/chaddr"
+        ),
+    },
+    "netbios": {
+        "arbitrary_auth": "session granted for a called name that cannot exist (0x82)",
+        "state_nonpersist": "NBNS transaction ID not echoed across two queries",
+        "static_signature": (
+            "RFC 1002 header/RR framing · canned node-status clone for distinct names · "
+            "session response type outside 0x82/0x83/0x8F"
+        ),
+    },
+    "syslog": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "",
+        "static_signature": (
+            "reply on the ack-less UDP channel (RFC 5426) · reply/echo on the "
+            "RFC 6587 TCP framing channel"
+        ),
+    },
+    "modbus": {
+        "arbitrary_auth": "",
+        "state_nonpersist": "MBAP transaction ID not echoed across two requests",
+        "static_signature": (
+            "MBAP framing (protocol ID / length coherence) · broadcast (unit 255) "
+            "answered · undefined function code answered normally · illegal read "
+            "quantity served"
         ),
     },
 }

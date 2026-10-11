@@ -15,8 +15,7 @@ try:
 except ModuleNotFoundError as exc:
     print(
         f"Missing dependency {exc.name!r}. Install once:\n"
-        "  pip install -r requirements.txt\n"
-        "Or: pip install rich paramiko requests\n"
+        "  pip install rich paramiko requests\n"
         'Or from this repo: pip install -e ".[full]"',
         file=sys.stderr,
     )

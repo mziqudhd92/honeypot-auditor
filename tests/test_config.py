@@ -233,7 +233,12 @@ def test_match_ftp_stale_banner_and_auth_lure():
 
 
 def test_match_smtp_placeholder_identity():
-    from honeypot_auditor.config import match_smtp_lost_envelope, match_smtp_placeholder_identity
+    from honeypot_auditor.config import (
+        match_smtp_lost_envelope,
+        match_smtp_placeholder_identity,
+        match_smtp_rset_envelope,
+        match_smtp_starttls_lie,
+    )
 
     assert match_smtp_placeholder_identity("220 localhost ESMTP")
     assert match_smtp_placeholder_identity("250 ip-127-0-0-1.internal")
@@ -244,6 +249,14 @@ def test_match_smtp_placeholder_identity():
     assert match_smtp_lost_envelope(250, 503, "Must have sender before recipient")
     assert match_smtp_lost_envelope(250, 550, "relay denied") is None
     assert match_smtp_lost_envelope(503, 503, "Must have sender before recipient") is None
+    assert match_smtp_rset_envelope(250, 250, 250)
+    assert match_smtp_rset_envelope(250, 250, 503) is None
+    assert match_smtp_rset_envelope(250, 502, 250) is None
+    assert match_smtp_rset_envelope("x", 250, 250) is None
+    assert match_smtp_starttls_lie("250-STARTTLS\n250 PIPELINING", 220, "ssl alert")
+    assert match_smtp_starttls_lie("250 PIPELINING", 220, "ssl alert") is None
+    assert match_smtp_starttls_lie("250-STARTTLS", 502, "ssl alert") is None
+    assert match_smtp_starttls_lie("250-STARTTLS", 220, "") is None
 
 
 def test_match_redis_class_tells():

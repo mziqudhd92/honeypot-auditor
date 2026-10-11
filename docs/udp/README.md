@@ -1,10 +1,10 @@
 # UDP probe package
 
-Layout and transport for UDP engines. TCP guides live under
-[`docs/tcp/`](../tcp/README.md). **DNS**, **NTP**, **SSDP**, and **TFTP** ship here.
-Existing **SNMP** stays flat at `docs/SNMP.md` until an optional relocate PR;
-**SIP** is documented under [`docs/tcp/SIP.md`](../tcp/SIP.md) (UDP-first with
-TCP fallback).
+Transport and netutil notes for UDP engines. **Per-protocol strategy guides
+live under [`docs/strategies/`](../strategies/)** — one folder per protocol.
+
+TCP guides index: [`docs/tcp/`](../tcp/README.md). **SIP** is UDP-first with
+TCP fallback → [`strategies/sip`](../strategies/sip/).
 
 ## Layout
 
@@ -17,22 +17,21 @@ src/honeypot_auditor/probes/udp/
   ssdp.py          # SSDP/UPnP discovery engine
   tftp.py          # RFC 1350 + light RFC 2347
 
+docs/strategies/
+  dns/ ntp/ ssdp/ tftp/ snmp/   # strategy guides + code maps
 docs/udp/
-  README.md        # this file
-  DNS.md           # DNS probe guide
-  NTP.md           # NTP probe guide
-  SSDP.md          # SSDP probe guide
-  TFTP.md          # TFTP probe guide
-
-tests/udp/
-  conftest.py      # MockUDPTransceiver
-  test_netutil_udp.py
-  test_discovery.py
-  test_dns.py
-  test_ntp.py
-  test_ssdp.py
-  test_tftp.py
+  README.md                     # this transport index (+ move stubs)
 ```
+
+## Strategy guides
+
+| Protocol | Guide | Axes |
+|----------|-------|------|
+| DNS | [strategies/dns](../strategies/dns/) | all three |
+| NTP | [strategies/ntp](../strategies/ntp/) | all three |
+| TFTP | [strategies/tftp](../strategies/tftp/) | state + static |
+| SSDP | [strategies/ssdp](../strategies/ssdp/) | static only |
+| SNMP | [strategies/snmp](../strategies/snmp/) | auth + static |
 
 ## Discovery rules
 
@@ -86,8 +85,7 @@ class UdpExchange:
 - No SSDP multicast joins / `NOTIFY` floods (unicast `M-SEARCH` only)
 
 SSDP scores **static_signature** only, including corroboration-gated
-`ssdp.man_facade` (answers without `MAN: "ssdp:discover"`) and
-`ssdp.host_blind` (nonsense `HOST` still 200). See [SSDP.md](SSDP.md).
+`ssdp.man_facade` and `ssdp.host_blind`. See [strategies/ssdp](../strategies/ssdp/).
 
 ## ICMP refused vs timeout
 
@@ -106,4 +104,4 @@ optional path when refuse detection is needed.
 - Do not put product honeypot brand IOCs in probes.
 - Do not add SOCKS/UDP proxy transport here.
 - Do not auto-source ports/strategies from probe modules into config.
-- Do not move `snmp.py` / `sip.py` in protocol PRs (optional migrate later).
+- Do not move `snmp.py` / `sip.py` probe modules in protocol PRs (docs already under `strategies/`).

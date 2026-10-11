@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from honeypot_auditor import __version__
 from honeypot_auditor.models import AuditReport, Indicator
+from honeypot_auditor.reporters.json_export import write_owner_only
 
 _SARIF_VERSION = "2.1.0"
 _TOOL_NAME = "honeypot-auditor"
@@ -140,7 +141,7 @@ def build_sarif(report: AuditReport) -> dict:
 def export_sarif(report: AuditReport, path: str | Path) -> Path:
     dest = Path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(json.dumps(build_sarif(report), indent=2) + "\n", encoding="utf-8")
+    write_owner_only(dest, json.dumps(build_sarif(report), indent=2) + "\n")
     return dest
 
 
@@ -156,5 +157,5 @@ def build_sarif_many(reports: list[AuditReport]) -> dict:
 def export_sarif_many(reports: list[AuditReport], path: str | Path) -> Path:
     dest = Path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(json.dumps(build_sarif_many(reports), indent=2) + "\n", encoding="utf-8")
+    write_owner_only(dest, json.dumps(build_sarif_many(reports), indent=2) + "\n")
     return dest

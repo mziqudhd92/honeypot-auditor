@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 import threading
 from contextlib import suppress
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _NTLM_HOOK_LOCK = threading.Lock()
 
@@ -26,6 +29,15 @@ def optional_impacket():
         return None, None
 
 
+def _field(obj: Any, key: str, default: Any = b"") -> Any:
+    """KeyError-safe Structure access — impacket Structure has no .get()."""
+    try:
+        value = obj[key]
+    except KeyError:
+        return default
+    return default if value is None else value
+
+
 def capture_ntlm_challenge(host: str, port: int, *, timeout: int) -> dict[str, Any] | None:
     """Run SESSION_SETUP until Type-2 is parsed; return challenge bytes and AV metadata."""
     SMBConnection, _SessionError = optional_impacket()
@@ -39,8 +51,8 @@ def capture_ntlm_challenge(host: str, port: int, *, timeout: int) -> dict[str, A
     def _stop_after_type2(_type1, type2, *_args, **_kwargs):
         challenge = ntlm.NTLMAuthChallenge(type2)
         meta["challenge"] = challenge["challenge"]
-        meta["target_info"] = challenge.get("TargetInfoFields", b"")[:512]
-        meta["version"] = challenge.get("Version", b"")
+        meta["target_info"] = _field(challenge, "TargetInfoFields")[:512]
+        meta["version"] = _field(challenge, "Version")
         if challenge["TargetInfoFields_len"] > 0:
             meta["av_pairs"] = ntlm.AV_PAIRS(
                 challenge["TargetInfoFields"][: challenge["TargetInfoFields_len"]]
@@ -60,10 +72,12 @@ def capture_ntlm_challenge(host: str, port: int, *, timeout: int) -> dict[str, A
                 meta["login_error"] = str(exc)
             try:
                 meta["native_os"] = str(conn.getServerOS() or "")
-            except Exception:
+            except Exception as exc:
+                logger.debug("SMB getServerOS failed for %s:%s: %s", host, port, exc)
                 meta["native_os"] = ""
             return meta if meta.get("challenge") else None
-        except Exception:
+        except Exception as exc:
+            logger.debug("SMB challenge capture failed for %s:%s: %s", host, port, exc)
             return None
         finally:
             ntlm.getNTLMSSPType3 = real_type3

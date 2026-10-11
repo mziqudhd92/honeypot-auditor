@@ -11,6 +11,7 @@ import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from honeypot_auditor import __version__
 from honeypot_auditor.analyzer import build_report
@@ -38,6 +39,10 @@ from honeypot_auditor.reporters.json_export import export, export_nmap_exclude, 
 from honeypot_auditor.reporters.sarif import export_sarif, export_sarif_many
 from honeypot_auditor.settings import ProbeProfile, settings
 from honeypot_auditor.signatures.evaluate import evaluate_signatures
+
+if TYPE_CHECKING:
+    from rich.console import Console
+    from rich.progress import Progress, TaskID
 from honeypot_auditor.transport import _apply_jitter, get_transport_manager
 
 try:
@@ -51,10 +56,16 @@ BANNER = (
 
 CLI_EPILOG = """
 examples:
-  honeypot-auditor --target 127.0.0.1
+  honeypot-auditor --target 127.0.0.1 --format html        # report.html / .csv / .md too
+  honeypot-auditor --target 127.0.0.1 --format json
   honeypot-auditor --target 203.0.113.10 --confirm-authorized --deep
   honeypot-auditor --target 35.171.9.193 -p 22 --confirm-authorized -n
   honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16
+
+subcommands:
+  wizard               interactive step-by-step audit (saves to local SQLite)
+  serve [--port N]     local web UI on 127.0.0.1 only (XP.css, saves to SQLite)
+  check-sig PATH       validate a declarative signature pack offline
 
 help:
   -h, --help, /help    show this message and exit (H-AUDITOR figlet header)
@@ -291,9 +302,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--format",
-        choices=("json", "sarif"),
+        choices=("json", "sarif", "html", "csv", "markdown"),
         default="json",
-        help="Primary report format (default json)",
+        help="Primary report format (default json; markdown writes .md)",
     )
     p.add_argument(
         "--signature-pack",
@@ -361,7 +372,10 @@ def _format_job_error(exc: BaseException, *, timeout: float) -> str:
 
 
 async def _run_named(
-    name: str, fn: Callable[[], list[Indicator]], progress, task_id
+    name: str,
+    fn: Callable[[], list[Indicator]],
+    progress: Progress | None,
+    task_id: TaskID | None,
 ) -> list[Indicator]:
     _apply_jitter()
     mgr = get_transport_manager()
@@ -384,7 +398,7 @@ async def _run_named(
             )
         ]
     finally:
-        if progress is not None:
+        if progress is not None and task_id is not None:
             progress.update(task_id, advance=1, description=f"Finished {name}")
 
 
@@ -413,9 +427,7 @@ def _build_notes(
     if safe:
         notes.append("Safe mode: handshake-only probes (no deep shell/path/auth attempts).")
     if getattr(args, "passive_first_confirm", False) and safe:
-        notes.append(
-            "--passive-first-confirm: active verify after passive skip (safe-mode only)."
-        )
+        notes.append("--passive-first-confirm: active verify after passive skip (safe-mode only).")
     if args.extra_ports:
         notes.append("-p/--port selects only the listed ports (preset not applied)")
     elif getattr(args, "ports", ""):
@@ -556,8 +568,8 @@ def _probe_jobs(
     skip_active = False
     if settings.osint_only:
         skip_active = True
-    elif settings.passive_first and (passive_inds or providers) and _passive_score_high(
-        passive_inds
+    elif (
+        settings.passive_first and (passive_inds or providers) and _passive_score_high(passive_inds)
     ):
         skip_active = True
     if skip_active and not confirm:
@@ -628,13 +640,34 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.capabilities = caps
 
 
-def _write_report(report: AuditReport, args: argparse.Namespace, ip: str, console) -> Path:
+def _export_report(report: AuditReport, out: str, fmt: str) -> Path:
+    """Dispatch one finished report to the chosen file format."""
+    from honeypot_auditor.reporters.text_export import (
+        export_csv,
+        export_html,
+        export_markdown,
+    )
+
+    if fmt == "sarif":
+        return export_sarif(report, str(Path(out).with_suffix(".sarif")))
+    if fmt == "html":
+        return export_html(_report_payload_for(report), str(Path(out).with_suffix(".html")))
+    if fmt == "csv":
+        return export_csv(_report_payload_for(report), str(Path(out).with_suffix(".csv")))
+    if fmt == "markdown":
+        return export_markdown(_report_payload_for(report), str(Path(out).with_suffix(".md")))
+    return export(report, out)
+
+
+def _report_payload_for(report: AuditReport) -> dict:
+    from honeypot_auditor.reporters.json_export import _report_payload
+
+    return _report_payload(report)
+
+
+def _write_report(report: AuditReport, args: argparse.Namespace, ip: str, console: Console) -> Path:
     out = args.output or f"honeypot-audit-{ip.replace(':', '_')}.json"
-    if args.format == "sarif":
-        sarif_path = str(Path(out).with_suffix(".sarif"))
-        dest = export_sarif(report, sarif_path)
-    else:
-        dest = export(report, out)
+    dest = _export_report(report, out, args.format)
     nmap_exclude = getattr(args, "output_nmap_exclude", "")
     if nmap_exclude and report.score >= 60:
         export_nmap_exclude(report.resolved_ip, nmap_exclude)
@@ -778,7 +811,7 @@ async def _audit_subnet(
     hosts: list[str],
     args: argparse.Namespace,
     ports: dict[str, list[int]],
-    console,
+    console: Console,
 ) -> list[AuditReport]:
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
@@ -910,6 +943,34 @@ async def run_audit(args: argparse.Namespace) -> int:
     out = _subnet_output_path(args.target, args.output)
     if args.format == "sarif":
         dest = export_sarif_many(reports, Path(out).with_suffix(".sarif"))
+    elif args.format in ("html", "csv", "markdown"):
+        from honeypot_auditor.reporters.json_export import write_owner_only
+        from honeypot_auditor.reporters.text_export import (
+            build_html_subnet,
+            build_markdown_subnet,
+            export_csv_subnet,
+        )
+
+        payload = {
+            "target": args.target,
+            "host_count": len(reports),
+            "started_at": started,
+            "finished_at": finished,
+            "notes": notes,
+            "hosts": [_report_payload_for(r) for r in reports],
+        }
+        suffix = {"html": ".html", "csv": ".csv", "markdown": ".md"}[args.format]
+        dest = Path(out).with_suffix(suffix)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if args.format == "csv":
+            dest = export_csv_subnet(payload, dest)
+        else:
+            text = (
+                build_html_subnet(payload)
+                if args.format == "html"
+                else build_markdown_subnet(payload)
+            )
+            write_owner_only(dest, text)
     else:
         dest = export_subnet(
             target=args.target,
@@ -933,6 +994,14 @@ def main(argv: list[str] | None = None) -> int:
     argv = _normalize_argv(argv)
     if argv and argv[0] == "check-sig":
         return run_check_sig(argv[1:])
+    if argv and argv[0] == "serve":
+        from honeypot_auditor.webserver import run_webserver
+
+        return run_webserver(argv[1:])
+    if argv and argv[0] == "wizard":
+        from honeypot_auditor.wizard import run_wizard
+
+        return run_wizard()
     parser = build_parser()
     if _wants_help(argv):
         print_cli_header()

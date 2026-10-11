@@ -348,7 +348,7 @@ EOF
 ```
 
 Every `id` maps to a documented detection strategy in
-[`docs/STRATEGIES.md`](../../STRATEGIES.md).
+[`docs/strategies/`](../../strategies/).
 
 ---
 

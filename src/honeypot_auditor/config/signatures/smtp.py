@@ -47,3 +47,37 @@ def match_smtp_lost_envelope(mail_code: int, rcpt_code: int, rcpt_msg: str = "")
     if any(t in blob for t in ("sender", "mail from", "need mail", "mail first")):
         return "MAIL FROM accepted then RCPT 503 (envelope not stored)"
     return None
+
+
+def match_smtp_rset_envelope(mail_code: int, rset_code: int, rcpt_code: int) -> str | None:
+    """2xx MAIL, 2xx RSET, then 2xx RCPT: the envelope survived an explicit RSET.
+
+    Real MTAs clear the reverse-path on RSET, so a follow-up RCPT must fail with
+    503 need-MAIL. A canned transaction state keeps answering 2xx.
+    """
+    try:
+        mail_n, rset_n, rcpt_n = int(mail_code), int(rset_code), int(rcpt_code)
+    except (TypeError, ValueError):
+        return None
+    if 200 <= mail_n < 300 and 200 <= rset_n < 300 and 200 <= rcpt_n < 300:
+        return "RCPT still 2xx after RSET (envelope state is canned)"
+    return None
+
+
+def match_smtp_starttls_lie(ehlo_text: str, starttls_code: int, tls_error: str) -> str | None:
+    """STARTTLS advertised and 220-answered, but the TLS handshake never completes.
+
+    Only fires on the RFC-wrong half (advertised + 220 + broken handshake);
+    a plaintext STARTTLS refusal is honest behavior, and a completed handshake
+    is a real service.
+    """
+    if "starttls" not in (ehlo_text or "").lower():
+        return None
+    try:
+        if int(starttls_code) != 220:
+            return None
+    except (TypeError, ValueError):
+        return None
+    if tls_error:
+        return f"STARTTLS advertised and 220-answered but TLS handshake failed ({tls_error})"
+    return None

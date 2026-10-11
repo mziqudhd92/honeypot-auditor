@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v1.0.3 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v1.0.4 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -11,6 +11,7 @@
 [![PyPI](https://img.shields.io/pypi/v/honeypot-auditor?style=flat-square)](https://pypi.org/project/honeypot-auditor/)
 [![Python](https://img.shields.io/pypi/pyversions/honeypot-auditor?style=flat-square)](https://pypi.org/project/honeypot-auditor/)
 [![tests](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml/badge.svg)](https://github.com/mziqudhd92/honeypot-auditor/actions/workflows/test.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mziqudhd92/honeypot-auditor/badge)](https://scorecard.dev/viewer/?uri=github.com/mziqudhd92/honeypot-auditor)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Pages](https://img.shields.io/badge/site-BBS%20Pages-33ff66?style=flat-square&labelColor=050805)](https://mziqudhd92.github.io/honeypot-auditor/)
 
@@ -21,16 +22,16 @@
 
 ```
   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-  █  >>> LIVE DEMO · v1.0.3 · DD-HONEYPOT · 5 SERVICES · -v / --deep <<<   █
+  █  >>> LIVE DEMO · v1.0.4 · DD-HONEYPOT · 5 SERVICES · -v / --deep <<<   █
   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 ```
 
-![dd-honeypot (DataTrap) demo v1.0.3 — SSH, Telnet, MySQL, Redis, PostgreSQL](docs/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif)
+![dd-honeypot (DataTrap) demo v1.0.4 — SSH, Telnet, MySQL, Redis, PostgreSQL](docs/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif)
 
 ```
   "five DataTrap faces on loopback: map the ports, run -v, then --deep.
    Honeyscore 100% — Confirmed Honeypot. same fingerprinter, new decoy."
-                        — dd-honeypot lab · v1.0.3 · authorized only
+                        — dd-honeypot lab · v1.0.4 · authorized only
 ```
 
 ```
@@ -61,13 +62,22 @@ Passive intel ([Shodan Honeyscore](https://honeyscore.shodan.io/)) plus active,
 **non-destructive** probes across the usual decoy faces. Outputs a weighted
 **Honeyscore (0–100%)**, Rich console table, versioned JSON report.
 
-Quickstart Tutorial: [AWS Spot honeypot lab](docs/tutorials/aws-spot-honeypot-lab.md)
+Quickstart Tutorials: [AWS Spot honeypot lab](docs/tutorials/aws-spot-honeypot-lab.md) · [Local web UI](docs/tutorials/web-ui.md) (`serve`, XP.css)
 
 Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
 
+<p align="center">
+  <img src="docs/tutorials/readme-web-ui-overview.png" alt="Honeypot Auditor local web UI (XP.css): New audit form, result panel, and IP-grouped SQLite history with a Confirmed Honeypot row expanded." width="920">
+</p>
+
 ```
-  [ BASIC ]  passive intel · Nmap NSE · 30 protocol engines (TCP + UDP) · up to 3 strategies each
+  "localhost UI · IP-grouped history · Open a saved audit for the full tell tree."
+                        — honeypot-auditor serve · XP.css · 127.0.0.1 only
+```
+
+```
+  [ BASIC ]  passive intel · Nmap NSE · 34 protocol engines (TCP + UDP) · up to 3 strategies each
   [ DEEP  ]  shell semantics · OS coherence · HASSH · TCP stack · FSM fuzz
              · co-tenancy buffet detect · latency · latency-under-load · egress bait
              (flag: --deep · more intrusive · same authorization rules)
@@ -120,7 +130,7 @@ honeypot-auditor --target 127.0.0.1
 **No pip install** (git checkout — install minimal deps once):
 
 ```bash
-pip install -r requirements.txt    # or: pip install rich paramiko requests
+pip install rich paramiko requests    # pyproject.toml is the single source of truth
 python3 honeypot-auditor.py --help
 python3 honeypot-auditor.py --target 127.0.0.1
 ```
@@ -150,6 +160,29 @@ honeypot-auditor --target 203.0.113.10 -p 22 --confirm-authorized
 honeypot-auditor --target 192.168.1.0/24 --scan-concurrency 16 \
   --confirm-authorized
 # subnet JSON → honeypot-audit-subnet-192.168.1.0_24.json (summary + per-host reports)
+
+# interactive wizard · step-by-step target/preset/depth, Rich tables, saves to SQLite
+honeypot-auditor wizard
+
+# local web UI (XP.css) · binds 127.0.0.1 ONLY · every audit saved to SQLite
+honeypot-auditor serve            # → http://127.0.0.1:8337
+honeypot-auditor serve --port 9000
+```
+
+Both wizard and web UI persist every finished audit to a local SQLite database
+(`~/.honeypot-auditor/audits.db`, override with `HONEYPOT_AUDITOR_DB`). The web
+UI never listens on a public interface: the server binds `127.0.0.1`, rejects
+non-local `Host` headers (DNS-rebinding guard) and foreign `Origin`/`Referer`
+on POSTs (CSRF guard), and renders all report data without HTML injection. The
+stylesheet is the vendored [XP.css](https://github.com/botoxparty/XP.css) (MIT).
+
+<p align="center">
+  <img src="docs/tutorials/readme-web-ui-result.png" alt="Honeypot Auditor stored-audit detail: Audit #3 Confirmed Honeypot at 100%, JSON/HTML/CSV/MD downloads, and ssh.kex_facade Cowrie tell expanded." width="920">
+</p>
+
+```
+  "Audit #3 · 100% · Cowrie KEX facade in the tell tree — download JSON/HTML/CSV/MD."
+                        — same SQLite row the wizard writes
 ```
 
 ---
@@ -206,8 +239,10 @@ score/scoped formulas, fidelity, and the per-protocol matrix. See [`docs/SCORING
     [####################]  >= 60%         CONFIRMED HONEYPOT
 ```
 
-The protocol table’s **Strategies** column counts only the three probe strategies per face (up to 3).
-Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lure research stacks.
+The protocol table’s **Strategies** column counts active basic axes per face (up to
+**3**; **88** slots total). **Indicators** is the number of scored tells in that
+engine (**271** total). Shodan and co-tenancy are host-level. Co-tenancy will not
+fire alone on multi-lure research stacks.
 
 ---
 
@@ -227,7 +262,8 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
   --intel-provider NAME      opt in to a named passive-intel plugin (repeatable)
   --intel-key NAME=KEY       provider key; prefer HONEYPOT_AUDITOR_INTEL_<NAME>_KEY
   --output report.json       JSON path (subnet default: honeypot-audit-subnet-<cidr>.json)
-  --confirm-authorized       REQUIRED if any scanned IP is public
+  --confirm-authorized       REQUIRED if any scanned IP is public (hostnames that
+                             resolve to private/LAN space scan without it — see SECURITY.md)
   -v, --verbose              score formula, hits/intra, scoped math, matrix, indicators
   -n, --with-nmap            run Nmap -sV / NSE phase (slow; off by default)
   --deep                     advanced six-axis probes
@@ -243,7 +279,7 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
   --max-concurrent 32        global socket concurrency budget
   --seed N                   RNG seed for blend profile
   --preset deception-audit   blue-team QA preset (both ports + --deep)
-  --format json|sarif        report format (default json)
+  --format json|sarif|html|csv|markdown  report format (default json; markdown → .md)
   --output-nmap-exclude path append IP when Honeyscore >= 60
   check-sig PATH             validate declarative signature pack offline
   --timeout SECS             socket timeout (default 3)
@@ -253,46 +289,56 @@ Shodan and co-tenancy are host-level. Co-tenancy will not fire alone on multi-lu
 
 ## -=[ SUPPORTED PROTOCOLS / PORTS ]=-
 
-| Protocol | Transport | Default ports (iana · lab) | Strategies | Guide |
-|----------|-----------|---------------------------:|:----------:|-------|
-| SSH | TCP | 22 · 2222 | 3 | [SSH](docs/tcp/SSH.md) |
-| Telnet | TCP | 23 · 2323 | 3 | [TELNET](docs/tcp/TELNET.md) |
-| FTP | TCP | 21 · 2121 | 3 | [FTP](docs/tcp/FTP.md) |
-| SMTP | TCP | 25 · 2525 | 3 | [SMTP](docs/tcp/SMTP.md) |
-| POP3 | TCP | 110 · 1110 | 3 | [POP3](docs/tcp/POP3.md) |
-| IMAP | TCP | 143 · 1143 | 3 | [IMAP](docs/tcp/IMAP.md) |
-| HTTP | TCP | 80 / 443 · 8081 | 3 | [HTTP](docs/tcp/HTTP.md) |
-| HTTP proxy | TCP | 3128 · 8080 | 3 | [HTTPPROXY](docs/tcp/HTTPPROXY.md) |
-| SMB | TCP | 445 · 1445 | 3 | [SMB](docs/tcp/SMB.md) |
-| Redis | TCP | 6379 · 6379 | 3 | [REDIS](docs/tcp/REDIS.md) |
-| MQTT | TCP | 1883 · 11883 | 3 | [MQTT](docs/tcp/MQTT.md) |
-| MySQL | TCP | 3306 · 3306 | 2 | [MYSQL](docs/tcp/MYSQL.md) |
-| Postgres | TCP | 5432 · 5432 | 2 | [POSTGRES](docs/tcp/POSTGRES.md) |
-| MSSQL | TCP | 1433 · 1433 | 2 | [MSSQL](docs/tcp/MSSQL.md) |
-| MongoDB | TCP | 27017 · 27017 | 2 | [MONGODB](docs/tcp/MONGODB.md) |
-| VNC | TCP | 5900 · 5000 | 2 | [VNC](docs/tcp/VNC.md) |
-| RDP | TCP | 3389 · 3389 | 2 | [RDP](docs/tcp/RDP.md) |
-| Git | TCP | 9418 · 9418 | 3 | [GIT](docs/tcp/GIT.md) |
-| Elasticsearch | TCP | 9200 · 19200 | 3 | [ELASTICSEARCH](docs/tcp/ELASTICSEARCH.md) |
-| Docker | TCP | 2375 · 12375 | 3 | [DOCKER](docs/tcp/DOCKER.md) |
-| Kubernetes | TCP | 6443 · 16443 | 3 | [KUBERNETES](docs/tcp/KUBERNETES.md) |
-| IPP / CUPS | TCP | 631 · 1631 | 3 | [IPP](docs/tcp/IPP.md) |
-| Memcached | TCP | 11211 · 21211 | 3 | [MEMCACHED](docs/tcp/MEMCACHED.md) |
-| SIP | UDP→TCP | 5060 · 5060 | 3 | [SIP](docs/tcp/SIP.md) |
-| PPTP | TCP | 1723 · 11723 | 3 | [PPTP](docs/tcp/PPTP.md) |
-| SNMP | UDP | 161 · 1161 | 2 | [SNMP](docs/SNMP.md) |
-| DNS | UDP | 53 · 15353 | 3 | [DNS](docs/udp/DNS.md) |
-| NTP | UDP | 123 · 1123 | 3 | [NTP](docs/udp/NTP.md) |
-| TFTP | UDP | 69 · 1069 | 2 | [TFTP](docs/udp/TFTP.md) |
-| SSDP | UDP | 1900 · 11900 | 1 | [SSDP](docs/udp/SSDP.md) |
+| Protocol | Transport | Default ports (iana · lab) | Strategies | Indicators | Guide |
+|----------|-----------|---------------------------|:----------:|:----------:|-------|
+| SSH | TCP | 22 · 2222 | 3 | 10 | [SSH](docs/strategies/ssh/) |
+| Telnet | TCP | 23 · 2323 | 3 | 9 | [TELNET](docs/strategies/telnet/) |
+| FTP | TCP | 21 · 2121 | 3 | 8 | [FTP](docs/strategies/ftp/) |
+| SMTP | TCP | 25 · 2525 | 3 | 7 | [SMTP](docs/strategies/smtp/) |
+| POP3 | TCP | 110 · 1110 | 3 | 9 | [POP3](docs/strategies/pop3/) |
+| IMAP | TCP | 143 · 1143 | 3 | 6 | [IMAP](docs/strategies/imap/) |
+| HTTP | TCP | 80 / 443 · 8081 | 3 | 12 | [HTTP](docs/strategies/http/) |
+| HTTP proxy | TCP | 3128 · 8080 | 3 | 4 | [HTTPPROXY](docs/strategies/httpproxy/) |
+| SMB | TCP | 445 · 1445 | 3 | 7 | [SMB](docs/strategies/smb/) |
+| Redis | TCP | 6379 · 6379 | 3 | 18 | [REDIS](docs/strategies/redis/) |
+| MQTT | TCP | 1883 · 11883 | 3 | 10 | [MQTT](docs/strategies/mqtt/) |
+| MySQL | TCP | 3306 · 3306 | 2 | 7 | [MYSQL](docs/strategies/mysql/) |
+| Postgres | TCP | 5432 · 5432 | 2 | 2 | [POSTGRES](docs/strategies/postgres/) |
+| MSSQL | TCP | 1433 · 1433 | 2 | 6 | [MSSQL](docs/strategies/mssql/) |
+| MongoDB | TCP | 27017 · 27017 | 2 | 5 | [MONGODB](docs/strategies/mongodb/) |
+| VNC | TCP | 5900 · 5000 | 2 | 3 | [VNC](docs/strategies/vnc/) |
+| RDP | TCP | 3389 · 3389 | 2 | 2 | [RDP](docs/strategies/rdp/) |
+| Git | TCP | 9418 · 9418 | 3 | 3 | [GIT](docs/strategies/git/) |
+| Elasticsearch | TCP | 9200 · 19200 | 3 | 12 | [ELASTICSEARCH](docs/strategies/elasticsearch/) |
+| Docker | TCP | 2375 · 12375 | 3 | 10 | [DOCKER](docs/strategies/docker/) |
+| Kubernetes | TCP | 6443 · 16443 | 3 | 10 | [KUBERNETES](docs/strategies/kubernetes/) |
+| IPP / CUPS | TCP | 631 · 1631 | 3 | 15 | [IPP](docs/strategies/ipp/) |
+| Memcached | TCP | 11211 · 21211 | 3 | 13 | [MEMCACHED](docs/strategies/memcached/) |
+| SIP | UDP→TCP | 5060 · 5060 | 3 | 5 | [SIP](docs/strategies/sip/) |
+| PPTP | TCP | 1723 · 11723 | 3 | 5 | [PPTP](docs/strategies/pptp/) |
+| SNMP | UDP | 161 · 1161 | 2 | 10 | [SNMP](docs/strategies/snmp/) |
+| DNS | UDP | 53 · 15353 | 3 | 12 | [DNS](docs/strategies/dns/) |
+| NTP | UDP | 123 · 1123 | 3 | 11 | [NTP](docs/strategies/ntp/) |
+| TFTP | UDP | 69 · 1069 | 2 | 12 | [TFTP](docs/strategies/tftp/) |
+| SSDP | UDP | 1900 · 11900 | 1 | 13 | [SSDP](docs/strategies/ssdp/) |
+| DHCP | UDP | 67 · 1067 | 2 | 3 | [DHCP](docs/strategies/dhcp/) |
+| NetBIOS | UDP+TCP | 137,139 · 1139 | 3 | 5 | [NetBIOS](docs/strategies/netbios/) |
+| Syslog | UDP+TCP | 514 · 10514 | 1 | 2 | [Syslog](docs/strategies/syslog/) |
+| Modbus TCP | TCP | 502 · 1502 | 2 | 5 | [MODBUS](docs/strategies/modbus/) |
 
-See [`docs/STRATEGIES.md`](docs/STRATEGIES.md) for strategy narratives and
+Implicit-TLS faces reuse their cleartext engines over TLS: **IMAPS** 993 · 1993
+(imap) and **POP3S** 995 · 1995 (pop3, incl. the pre-TLS plaintext-banner tell).
+**DHCP**, **NetBIOS**, **Syslog**, and **Modbus TCP** are new in this release
+(SNMP / DNS / NTP / TFTP / SSDP were already shipped).
+
+See [`docs/strategies/`](docs/strategies/) for per-protocol strategy guides and
 [`docs/SCORING.md`](docs/SCORING.md) for fidelity / corroboration. Recent
-indicator expansions (still within the same strategy slots): MSSQL / MongoDB /
-MySQL / Redis / SSDP / SSH / Telnet / FTP — two additional protocol tells each
-(e.g. Redis `EX` TTL + `MULTI`/`EXEC`, SSDP `MAN`/`HOST` façades, SSH SFTP +
-hollow `direct-tcpip`, MySQL scramble freeze / 1045 clones). Per-protocol guides
-under [`docs/tcp/`](docs/tcp/) and [`docs/udp/`](docs/udp/).
+expansions: MSSQL / MongoDB / MySQL / Redis / SSDP / SSH / Telnet / FTP — two
+additional tells each; SMTP (`rset_envelope`, `starttls_lie`) and POP3
+(`preauth_uidl`, `command_case`, `pre_tls_banner`); plus report formats
+`--format html|csv|markdown` and wizard/web-UI export downloads. Per-protocol
+guides under [`docs/strategies/`](docs/strategies/) (transport notes:
+[`docs/tcp/`](docs/tcp/), [`docs/udp/`](docs/udp/)).
 
 ---
 
@@ -350,6 +396,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v1.0.3 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v1.0.4 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```

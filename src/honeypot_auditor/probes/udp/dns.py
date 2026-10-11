@@ -8,7 +8,7 @@ RFC non-compliance strategies (non-destructive QUERY only — never AXFR/UPDATE/
     RCODE stub on .invalid, response clone, 0x20 case mismatch (gated),
     EDNS FORMERR on valid OPT, stock TXT/SOA lure tokens (gated)
 
-UDP/53 (lab 15353). See docs/udp/DNS.md. Budget ≤8 UDP exchanges.
+UDP/53 (lab 15353). See docs/strategies/dns/. Budget ≤8 UDP exchanges.
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ RFC non-compliance strategies (non-destructive RRQ/WRQ headers only — never DA
     arithmetic, stock ERROR/DATA lure
   · state_nonpersist — server TID reused across independent RRQs
 
-UDP/69 (lab 1069). See docs/udp/TFTP.md, RFC 1350, RFC 2347.
+UDP/69 (lab 1069). See docs/strategies/tftp/, RFC 1350, RFC 2347.
 """
 
 from __future__ import annotations
