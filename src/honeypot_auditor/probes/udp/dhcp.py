@@ -84,6 +84,31 @@ def _dhcp_message_type(reply: bytes) -> int:
     return 0
 
 
+def _bind_dhcp_client_port(sock: socket.socket) -> None:
+    """Bind the RFC 2131 client port (UDP/68).
+
+    INADDR_ANY is required so broadcast DHCPOFFERs can be received. This is a
+    short-lived probe socket, not a listening service.
+    """
+    # nosemgrep: python.lang.security.audit.network.bind.avoid-bind-to-all-interfaces
+    sock.bind(("0.0.0.0", _CLIENT_PORT))  # codeql[py/bind-socket-all-network-interfaces]
+
+
+def _client_port_available() -> str:
+    """Empty string when UDP/68 can be bound; otherwise a capability skip reason."""
+    probe_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        _bind_dhcp_client_port(probe_sock)
+        return ""
+    except OSError as exc:
+        return (
+            "capability: DHCP probes bind the privileged client port 68 "
+            f"(run elevated) — bind failed: {closed_reason(str(exc))}"
+        )
+    finally:
+        probe_sock.close()
+
+
 def _dhcp_exchange_pair(host: str, port: int) -> tuple[bytes, int, bytes, int, str]:
     """Two DISCOVERs (distinct xid/chaddr) from the privileged client port.
 
@@ -96,7 +121,7 @@ def _dhcp_exchange_pair(host: str, port: int) -> tuple[bytes, int, bytes, int, s
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     try:
-        sock.bind(("0.0.0.0", _CLIENT_PORT))
+        _bind_dhcp_client_port(sock)
         sock.settimeout(settings.timeout_seconds)
         sock.sendto(_build_discover(xid_a, chaddr_a), (host, port))
         reply_a = b""
@@ -131,18 +156,9 @@ def _framing_fault(reply: bytes) -> str:
 
 
 def probe_dhcp(host: str, port: int) -> list[Indicator]:
-    try:
-        probe_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            probe_sock.bind(("0.0.0.0", _CLIENT_PORT))
-        finally:
-            probe_sock.close()
-    except OSError as exc:
-        reason = (
-            "capability: DHCP probes bind the privileged client port 68 "
-            f"(run elevated) — bind failed: {closed_reason(str(exc))}"
-        )
-        return skip_suite(_DHCP_SKIP, reason, protocol="dhcp", error=str(exc))
+    gate = _client_port_available()
+    if gate:
+        return skip_suite(_DHCP_SKIP, gate, protocol="dhcp", error=gate)
 
     reply_a, xid_a, reply_b, xid_b, error = _dhcp_exchange_pair(host, port)
     replies = [r for r in (reply_a, reply_b) if r]

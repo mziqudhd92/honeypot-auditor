@@ -255,6 +255,7 @@ def _tls_wrap(sock, timeout: float):
     """Wrap a cleartext socket with TLS (verification off — fingerprinting only)."""
     sock.settimeout(timeout)  # bound the handshake itself, not just post-TLS reads
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     wrapped = context.wrap_socket(sock)

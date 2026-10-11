@@ -22,6 +22,15 @@ def _offer(
     return bytes(packet) + options
 
 
+def _probe_with_pair(pair):
+    """Run probe_dhcp with the privilege gate open and a mocked exchange."""
+    with (
+        patch.object(dhcp, "_client_port_available", return_value=""),
+        patch.object(dhcp, "_dhcp_exchange_pair", return_value=pair),
+    ):
+        return dhcp.probe_dhcp("127.0.0.1", 67)
+
+
 def test_dhcp_capability_gate_skips_without_privileged_bind():
     sock = MagicMock()
     sock.bind.side_effect = OSError("operation not permitted")
@@ -40,8 +49,7 @@ def test_dhcp_conformant_offer_pair_is_clean():
         0x05060708,
         "",
     )
-    with patch.object(dhcp, "_dhcp_exchange_pair", return_value=pair):
-        inds = dhcp.probe_dhcp("127.0.0.1", 67)
+    inds = _probe_with_pair(pair)
     by_id = {i.id: i for i in inds}
     assert not by_id["dhcp.xid_echo"].triggered
     assert not by_id["dhcp.framing"].triggered
@@ -52,8 +60,7 @@ def test_dhcp_fixed_xid_and_clone_fire():
     # Same reply bytes twice: xid cannot match two different requests, and the
     # OFFER payload is a canned clone.
     pair = (_offer(0xAABBCCDD), 0x01020304, _offer(0xAABBCCDD), 0x05060708, "")
-    with patch.object(dhcp, "_dhcp_exchange_pair", return_value=pair):
-        inds = dhcp.probe_dhcp("127.0.0.1", 67)
+    inds = _probe_with_pair(pair)
     by_id = {i.id: i for i in inds}
     assert by_id["dhcp.xid_echo"].triggered
     assert by_id["dhcp.canned_offer"].triggered
@@ -66,8 +73,7 @@ def test_dhcp_offers_identical_apart_from_xid_chaddr_is_canned():
     b = bytearray(_offer(0x22222222))
     b[28:34] = b"\xbb" * 6
     pair = (bytes(a), 0x11111111, bytes(b), 0x22222222, "")
-    with patch.object(dhcp, "_dhcp_exchange_pair", return_value=pair):
-        inds = dhcp.probe_dhcp("127.0.0.1", 67)
+    inds = _probe_with_pair(pair)
     by_id = {i.id: i for i in inds}
     assert by_id["dhcp.canned_offer"].triggered
     assert "canned template" in by_id["dhcp.canned_offer"].detail
@@ -76,8 +82,7 @@ def test_dhcp_offers_identical_apart_from_xid_chaddr_is_canned():
 
 def test_dhcp_ack_to_discover_is_a_framing_fault():
     pair = (_offer(0x01020304, msg_type=5), 0x01020304, b"", 0x05060708, "")
-    with patch.object(dhcp, "_dhcp_exchange_pair", return_value=pair):
-        inds = dhcp.probe_dhcp("127.0.0.1", 67)
+    inds = _probe_with_pair(pair)
     by_id = {i.id: i for i in inds}
     assert by_id["dhcp.framing"].triggered
     assert "DHCPOFFER" in by_id["dhcp.framing"].detail
@@ -94,6 +99,5 @@ def test_dhcp_framing_unit_cases():
 
 def test_dhcp_no_reply_skips_suite():
     pair = (b"", 1, b"", 2, "timeout")
-    with patch.object(dhcp, "_dhcp_exchange_pair", return_value=pair):
-        inds = dhcp.probe_dhcp("127.0.0.1", 67)
+    inds = _probe_with_pair(pair)
     assert all(i.skipped for i in inds)

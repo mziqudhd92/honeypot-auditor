@@ -47,7 +47,10 @@ def _connect(db_path: str | Path | None) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     # Restrict the DB directory/file — reports can include target metadata.
     with suppress(OSError):
-        os.chmod(path.parent, 0o700)
+        # Owner-only directory (0o700); not world/group writable.
+        os.chmod(  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
+            path.parent, 0o700
+        )
     conn = sqlite3.connect(path)
     with suppress(OSError):
         os.chmod(path, 0o600)

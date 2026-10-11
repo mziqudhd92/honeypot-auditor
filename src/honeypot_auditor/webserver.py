@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, urlsplit
 
@@ -48,8 +49,6 @@ _DATA_DIR = None  # resolved lazily so tests can point elsewhere if needed
 def _static_dir():
     global _DATA_DIR
     if _DATA_DIR is None:
-        from pathlib import Path
-
         _DATA_DIR = Path(__file__).resolve().parent / "data" / "xp"
     return _DATA_DIR
 
@@ -177,11 +176,17 @@ class _Handler(BaseHTTPRequestHandler):
         elif path.startswith("/static/"):
             name = path.rsplit("/", 1)[-1]
             content_type = _STATIC_TYPES.get(name)
-            if content_type is None:
+            # Whitelist only — reject path separators / traversal even if somehow present.
+            if content_type is None or "/" in name or "\\" in name or name != Path(name).name:
+                self._send_json({"error": "not found"}, status=404)
+                return
+            static_root = _static_dir().resolve()
+            candidate = (static_root / name).resolve()
+            if candidate.parent != static_root:
                 self._send_json({"error": "not found"}, status=404)
                 return
             try:
-                body = (_static_dir() / name).read_bytes()
+                body = candidate.read_bytes()
             except OSError:
                 self._send_json({"error": "not found"}, status=404)
                 return
@@ -222,27 +227,42 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "bad audit id"}, status=400)
             return
         fmt = parts[4]
+        # Map path token → (body, content-type, safe extension). Extension is a
+        # constant from this table so it never carries raw user path bytes into
+        # Content-Disposition (CodeQL py/http-response-splitting).
+        exporters = {
+            "json": (
+                lambda p: json.dumps(p, indent=2).encode("utf-8"),
+                "application/json",
+                "json",
+            ),
+            "html": (lambda p: build_html(p).encode("utf-8"), "text/html; charset=utf-8", "html"),
+            "csv": (
+                lambda p: build_csv_text(p).encode("utf-8"),
+                "text/csv; charset=utf-8",
+                "csv",
+            ),
+            "md": (
+                lambda p: build_markdown(p).encode("utf-8"),
+                "text/markdown; charset=utf-8",
+                "md",
+            ),
+        }
+        exporter = exporters.get(fmt)
+        if exporter is None:
+            self._send_json({"error": "format must be json|html|csv|md"}, status=400)
+            return
         record = storage.get_audit(audit_id)
         if record is None:
             self._send_json({"error": "not found"}, status=404)
             return
-        payload = record["report"]
-        if fmt == "json":
-            body, ctype = json.dumps(payload, indent=2).encode("utf-8"), "application/json"
-        elif fmt == "html":
-            body, ctype = build_html(payload).encode("utf-8"), "text/html; charset=utf-8"
-        elif fmt == "csv":
-            body, ctype = build_csv_text(payload).encode("utf-8"), "text/csv; charset=utf-8"
-        elif fmt == "md":
-            body, ctype = build_markdown(payload).encode("utf-8"), "text/markdown; charset=utf-8"
-        else:
-            self._send_json({"error": "format must be json|html|csv|md"}, status=400)
-            return
+        build, ctype, ext = exporter
+        body = build(record["report"])
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header(
-            "Content-Disposition", f'attachment; filename="honeypot-audit-{audit_id}.{fmt}"'
+            "Content-Disposition", f'attachment; filename="honeypot-audit-{audit_id}.{ext}"'
         )
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
