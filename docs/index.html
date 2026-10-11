@@ -49,7 +49,7 @@
         "name": "honeypot-auditor",
         "applicationCategory": "SecurityApplication",
         "operatingSystem": "Linux, macOS, Windows",
-        "softwareVersion": "1.0.3",
+        "softwareVersion": "1.0.4",
         "license": "https://opensource.org/licenses/MIT",
         "url": "https://mziqudhd92.github.io/honeypot-auditor/",
         "downloadUrl": "https://pypi.org/project/honeypot-auditor/",
@@ -111,7 +111,7 @@
             "name": "Which protocols does honeypot-auditor support?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Thirty protocol engines: SSH, Telnet, FTP, SMTP, POP3, IMAP, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, MongoDB, MQTT, SNMP, DNS, NTP, TFTP, SSDP/UPnP, PPTP, Elasticsearch, Kubernetes API, Docker Engine API, IPP/CUPS, and Memcached. Each uses 1–3 basic detection strategies in the current release (80 active strategy slots). By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, IMAP 143 and 1143, MQTT 1883 and 11883, SNMP UDP 161 and 1161, DNS UDP 53 and 15353, NTP UDP 123 and 1123, TFTP UDP 69 and 1069, SSDP UDP 1900 and 11900, PPTP TCP 1723 and 11723, Redis 6379, Elasticsearch 9200 and 19200, Docker 2375 and 12375, IPP 631 and 1631, Kubernetes 6443 and 16443, Memcached 11211 and 21211, and so on). Ports 993/1993 are IMAPS, 8883/18883 are MQTTS (implicit TLS); STARTTLS on 143 is out of scope. SNMP, DNS, NTP, TFTP, and SSDP speak UDP with RFC non-compliance tells. DNS, NTP, Elasticsearch, IPP/CUPS, Memcached, HTTP, SIP, PPTP, Git, and HTTP proxy each use all three basic strategies (arbitrary_auth + state_nonpersist + static_signature). Docker Engine API and Kubernetes API score protocol non-compliance under static_signature. Redis speaks RESP with dual AUTH, key-persist / DBSIZE / EX TTL state checks, MULTI/EXEC stubs, and split command-facade indicators. SSDP adds corroboration-gated MAN and HOST façades under static_signature. SSH/Telnet/FTP and MySQL/MSSQL/MongoDB include expanded shell and DB tells without changing strategy-slot counts. -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
+              "text": "Thirty-four protocol engines: SSH, Telnet, FTP, SMTP, POP3, IMAP, HTTP, SMB, SIP, VNC, Redis, MySQL, Postgres, Git, RDP, HTTP proxy, MSSQL, MongoDB, MQTT, SNMP, DNS, NTP, TFTP, SSDP/UPnP, PPTP, DHCP, NetBIOS, Syslog, Modbus TCP, Elasticsearch, Kubernetes API, Docker Engine API, IPP/CUPS, and Memcached. Each uses 1–3 basic detection strategies in the current release (88 active strategy slots, 271 scored indicators). By default both IANA and lab ports are checked (SSH 22 and 2222, HTTP 80 and 8081, IMAP 143 and 1143, MQTT 1883 and 11883, SNMP UDP 161 and 1161, DNS UDP 53 and 15353, NTP UDP 123 and 1123, TFTP UDP 69 and 1069, SSDP UDP 1900 and 11900, PPTP TCP 1723 and 11723, Redis 6379, Elasticsearch 9200 and 19200, Docker 2375 and 12375, IPP 631 and 1631, Kubernetes 6443 and 16443, Memcached 11211 and 21211, and so on). Ports 993/1993 are IMAPS, 8883/18883 are MQTTS (implicit TLS); STARTTLS on 143 is out of scope. SNMP, DNS, NTP, TFTP, and SSDP speak UDP with RFC non-compliance tells. DNS, NTP, Elasticsearch, IPP/CUPS, Memcached, HTTP, SIP, PPTP, Git, and HTTP proxy each use all three basic strategies (arbitrary_auth + state_nonpersist + static_signature). Docker Engine API and Kubernetes API score protocol non-compliance under static_signature. Redis speaks RESP with dual AUTH, key-persist / DBSIZE / EX TTL state checks, MULTI/EXEC stubs, and split command-facade indicators. SSDP adds corroboration-gated MAN and HOST façades under static_signature. SSH/Telnet/FTP and MySQL/MSSQL/MongoDB include expanded shell and DB tells without changing strategy-slot counts. -p/--port selects only those ports (nmap-style). --deep adds six cross-protocol behavioral axes on top of the basic strategies."
             }
           },
           {
@@ -166,8 +166,8 @@
   <div class="wrap">
     <div class="marquee" aria-hidden="true">
       <span>
-        *** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v1.0.3 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
-        &nbsp;&nbsp;&nbsp;*** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v1.0.3 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
+        *** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v1.0.4 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
+        &nbsp;&nbsp;&nbsp;*** CARRIER DETECTED *** H0N3YP0T-AUD1T0R v1.0.4 *** WAREZ? NAH — HEADERS *** PROBE ONLY WHAT YOU OWN *** SPREAD THE SAUCE *** NO CARRIER ***
       </span>
     </div>
 
@@ -176,7 +176,7 @@
       <h1>H0N3YP0T-AUD1T0R <span class="blink">█</span></h1>
       <p class="tagline">Multi-protocol decoy fingerprinter / lab util · Python 3.10+ · MIT · “dialing in…”</p>
       <pre class="nfo">.______________________________________________________________________________.
-|  :: RELEASE ........ v1.0.3                                                  |
+|  :: RELEASE ........ v1.0.4                                                  |
 |  :: TYPE ........... Multi-Protocol Decoy Fingerprinter                      |
 |  :: DISKS .......... 0 · pure electrons · no floppies harmed                 |
 |  :: PROTECTION ..... NONE · MIT · spread the sauce                           |
@@ -233,11 +233,11 @@
       <section class="panel demo" id="demo">
         <h2>-=[ LIVE DEMO ]=-</h2>
         <figure>
-          <pre class="nfo">>>> v1.0.3 · DD-HONEYPOT · 5 SERVICES · -v / --deep <<<</pre>
-          <img src="tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif" width="920" height="620" alt="Animated terminal demo (honeypot-auditor v1.0.3): Thales dd-honeypot / DataTrap with SSH, Telnet, MySQL, Redis, and PostgreSQL — basic -v then --deep, Honeyscore 100%">
+          <pre class="nfo">>>> v1.0.4 · DD-HONEYPOT · 5 SERVICES · -v / --deep <<<</pre>
+          <img src="tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif" width="920" height="620" alt="Animated terminal demo (honeypot-auditor v1.0.4): Thales dd-honeypot / DataTrap with SSH, Telnet, MySQL, Redis, and PostgreSQL — basic -v then --deep, Honeyscore 100%">
           <figcaption>
             “five DataTrap faces on loopback: map the ports, run -v, then --deep. Honeyscore 100%.”
-            <cite>— dd-honeypot lab · v1.0.3 · authorized only</cite>
+            <cite>— dd-honeypot lab · v1.0.4 · authorized only</cite>
             · <a class="term-doc" href="tutorials/dd-honeypot-lab-demo/TUTORIAL.md">beginner tutorial</a>
           </figcaption>
         </figure>
@@ -443,13 +443,14 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
       <section class="panel" id="protocols">
         <h2>-=[ SUPPORTED PROTOCOLS / PORTS ]=-</h2>
         <p>
-          <strong>30</strong> protocol engines in the current version
-          (<strong>25 TCP-capable</strong> + <strong>5 UDP-only</strong>; SIP is UDP-first with TCP fallback).
+          <strong>34</strong> protocol engines in the current version
+          (<strong>25 TCP</strong> + <strong>6 UDP-only</strong> + <strong>3 UDP+TCP</strong>;
+          SIP is UDP-first with TCP fallback).
           Each uses up to <strong>3</strong>
           probe strategies (arbitrary auth · state non-persistence · static signature). The
           <strong>Strategies</strong> column is how many of those three axes are active
-          (<strong>80</strong> slots total). <strong>Indicators</strong> is the number of
-          scored tells in that engine (<strong>255</strong> total) — not passive intel or
+          (<strong>88</strong> slots total). <strong>Indicators</strong> is the number of
+          scored tells in that engine (<strong>271</strong> total) — not passive intel or
           co-tenancy.
         </p>
         <p>
@@ -478,7 +479,7 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
               <tr><td>Telnet</td><td>TCP</td><td>23 · 2323</td><td>3</td><td>9</td></tr>
               <tr><td>FTP</td><td>TCP</td><td>21 · 2121</td><td>3</td><td>8</td></tr>
               <tr><td>SMTP</td><td>TCP</td><td>25 · 2525</td><td>3</td><td>7</td></tr>
-              <tr><td>POP3</td><td>TCP</td><td>110 · 1110</td><td>3</td><td>8</td></tr>
+              <tr><td>POP3</td><td>TCP</td><td>110 · 1110</td><td>3</td><td>9</td></tr>
               <tr><td>IMAP</td><td>TCP</td><td>143 · 1143</td><td>3</td><td>6</td></tr>
               <tr><td>HTTP</td><td>TCP</td><td>80 / 443 · 8081</td><td>3</td><td>12</td></tr>
               <tr><td>HTTP proxy</td><td>TCP</td><td>3128 · 8080</td><td>3</td><td>4</td></tr>
@@ -504,6 +505,10 @@ honeypot-auditor --target HOST -p 22 --confirm-authorized --deep</pre>
               <tr><td>NTP</td><td>UDP</td><td>123 · 1123</td><td>3</td><td>11</td></tr>
               <tr><td>TFTP</td><td>UDP</td><td>69 · 1069</td><td>2</td><td>12</td></tr>
               <tr><td>SSDP</td><td>UDP</td><td>1900 · 11900</td><td>1</td><td>13</td></tr>
+              <tr><td>DHCP</td><td>UDP</td><td>67 · 1067</td><td>2</td><td>3</td></tr>
+              <tr><td>NetBIOS</td><td>UDP+TCP</td><td>137,139 · 1139</td><td>3</td><td>5</td></tr>
+              <tr><td>Syslog</td><td>UDP+TCP</td><td>514 · 10514</td><td>1</td><td>2</td></tr>
+              <tr><td>Modbus TCP</td><td>TCP</td><td>502 · 1502</td><td>2</td><td>5</td></tr>
             </tbody>
           </table>
         </div>
@@ -652,7 +657,7 @@ https://mziqudhd92.github.io/honeypot-auditor/agents.md</pre>
     </main>
 
     <footer class="footer panel">
-      <p>h0n3yp0t 4ud1t0r · v1.0.3 · spread headers not malware · <span class="blink">NO CARRIER</span></p>
+      <p>h0n3yp0t 4ud1t0r · v1.0.4 · spread headers not malware · <span class="blink">NO CARRIER</span></p>
       <p><a href="#top">↑ top</a> · <a href="https://github.com/mziqudhd92/honeypot-auditor">github</a> · <a href="https://pypi.org/project/honeypot-auditor/">pypi</a></p>
     </footer>
   </div>

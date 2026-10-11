@@ -1,7 +1,7 @@
 # Probe strategies
 
-**30** protocol engines (**25 TCP-capable** + **5 UDP-only**; SIP is UDP-first
-with TCP fallback). Each uses up to **3** basic probe strategies:
+**34** protocol engines (**25 TCP** + **6 UDP-only** + **3 UDP+TCP** dual-channel;
+SIP is UDP-first with TCP fallback). Each uses up to **3** basic probe strategies:
 
 | Strategy | Role |
 |----------|------|
@@ -30,8 +30,8 @@ That tree is the canonical place to audit and review strategies by protocol.
 | Scoring / fidelity | [`docs/SCORING.md`](SCORING.md) |
 | Axis catalog (code) | `PROTOCOL_STRATEGIES` in `src/honeypot_auditor/config/scoring.py` |
 
-README **Strategies** = active axes (up to 3; **80** slots). **Indicators** =
-scored tells (**255** total).
+README **Strategies** = active axes (up to 3; **88** slots). **Indicators** =
+scored tells (**271** total).
 
 ## `-p` extras
 

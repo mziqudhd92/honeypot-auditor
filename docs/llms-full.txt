@@ -1,6 +1,6 @@
 # honeypot-auditor — full brief for answer engines & agents
 
-Version: 1.0.3
+Version: 1.0.4
 License: MIT
 Canonical site: https://mziqudhd92.github.io/honeypot-auditor/
 Repository: https://github.com/mziqudhd92/honeypot-auditor
@@ -15,10 +15,11 @@ honeypot-auditor is a Python CLI that fingerprints whether a host behaves like a
 
 | Concept | Meaning |
 |---------|---------|
-| Basic probes | Passive intel, Nmap NSE (optional), SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB/MQTT/SNMP/DNS/NTP/TFTP/SSDP/PPTP/Elasticsearch/Docker/Kubernetes/IPP/Memcached |
+| Basic probes | Passive intel, Nmap NSE (optional), 34 engines: SSH/Telnet/SMB/FTP/POP3/IMAP/HTTP/Redis/SMTP/VNC/SIP/MySQL/Git/RDP/HTTP-proxy/MSSQL/MongoDB/MQTT/SNMP/DNS/NTP/TFTP/SSDP/PPTP/DHCP/NetBIOS/Syslog/Modbus/Elasticsearch/Docker/Kubernetes/IPP/Memcached (**88** slots · **271** indicators) |
 | Redis (RESP) | Dual AUTH · persist/DBSIZE/TTL · MULTI/EXEC stub · COMMAND/INFO/PING stubs · AUTH wall · QUIT zombie · no FLUSHALL (see tcp/REDIS.md) |
 | SSDP (UPnP) | Unicast M-SEARCH static_signature · ST echo · MAN/HOST façades (corroboration-gated) · no multicast/NOTIFY (see udp/SSDP.md) |
-| Shell / DB expansions | SSH SFTP + hollow direct-tcpip · Telnet AYT/cmd desert · FTP FEAT lie/QUIT zombie · MySQL scramble/1045 clone · MSSQL PRELOGIN blind/LOGIN7 clone · MongoDB responseTo/hello clone (strategy slots still 80) |
+| Shell / DB expansions | SSH SFTP + hollow direct-tcpip · Telnet AYT/cmd desert · FTP FEAT lie/QUIT zombie · MySQL scramble/1045 clone · MSSQL PRELOGIN blind/LOGIN7 clone · MongoDB responseTo/hello clone |
+| UX / reports | `wizard` + `serve` (XP.css, 127.0.0.1 only, SQLite history); `--format json|sarif|html|csv|markdown` |
 | Subnet scan | IPv4 CIDR up to `/24` (254 hosts); `--scan-concurrency`; combined JSON report |
 | Deep mode (`--deep`) | Shell semantics, OS coherence, HASSH/TCP stack, protocol FSM, co-tenancy, temporal (serial + concurrent-load latency)/egress |
 | CLI UX | Figlet `H0N3YP0T-AUD1T0R` header; `-h` / `--help` / `/help`; Rich-styled help text |
@@ -68,10 +69,10 @@ honeypot-auditor --target HOST --ports ftp=21,http=80,smb=445,ssh=9 --confirm-au
 # JSON out (single host)
 honeypot-auditor --target HOST --confirm-authorized --output report.json
 
-# Blue deception QA (v1.0.3)
+# Blue deception QA (v1.0.4)
 honeypot-auditor --target DECOY --preset deception-audit --deep -v --confirm-authorized
 
-# Red authorized OPSEC (v1.0.3)
+# Red authorized OPSEC (v1.0.4)
 honeypot-auditor --target HOST --safe-mode --passive-first --proxy socks5h://127.0.0.1:9050 --confirm-authorized
 
 # SARIF export

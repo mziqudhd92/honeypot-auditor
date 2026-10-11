@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v1.0.3 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v1.0.4 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -22,16 +22,16 @@
 
 ```
   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-  █  >>> LIVE DEMO · v1.0.3 · DD-HONEYPOT · 5 SERVICES · -v / --deep <<<   █
+  █  >>> LIVE DEMO · v1.0.4 · DD-HONEYPOT · 5 SERVICES · -v / --deep <<<   █
   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 ```
 
-![dd-honeypot (DataTrap) demo v1.0.3 — SSH, Telnet, MySQL, Redis, PostgreSQL](docs/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif)
+![dd-honeypot (DataTrap) demo v1.0.4 — SSH, Telnet, MySQL, Redis, PostgreSQL](docs/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif)
 
 ```
   "five DataTrap faces on loopback: map the ports, run -v, then --deep.
    Honeyscore 100% — Confirmed Honeypot. same fingerprinter, new decoy."
-                        — dd-honeypot lab · v1.0.3 · authorized only
+                        — dd-honeypot lab · v1.0.4 · authorized only
 ```
 
 ```
@@ -66,6 +66,15 @@ Quickstart Tutorials: [AWS Spot honeypot lab](docs/tutorials/aws-spot-honeypot-l
 
 Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
 made Cowrie sweat in `'09 and still catches clones in `'26.
+
+<p align="center">
+  <img src="docs/tutorials/readme-web-ui-overview.png" alt="Honeypot Auditor local web UI (XP.css): New audit form, result panel, and IP-grouped SQLite history with a Confirmed Honeypot row expanded." width="920">
+</p>
+
+```
+  "localhost UI · IP-grouped history · Open a saved audit for the full tell tree."
+                        — honeypot-auditor serve · XP.css · 127.0.0.1 only
+```
 
 ```
   [ BASIC ]  passive intel · Nmap NSE · 34 protocol engines (TCP + UDP) · up to 3 strategies each
@@ -167,6 +176,15 @@ non-local `Host` headers (DNS-rebinding guard) and foreign `Origin`/`Referer`
 on POSTs (CSRF guard), and renders all report data without HTML injection. The
 stylesheet is the vendored [XP.css](https://github.com/botoxparty/XP.css) (MIT).
 
+<p align="center">
+  <img src="docs/tutorials/readme-web-ui-result.png" alt="Honeypot Auditor stored-audit detail: Audit #3 Confirmed Honeypot at 100%, JSON/HTML/CSV/MD downloads, and ssh.kex_facade Cowrie tell expanded." width="920">
+</p>
+
+```
+  "Audit #3 · 100% · Cowrie KEX facade in the tell tree — download JSON/HTML/CSV/MD."
+                        — same SQLite row the wizard writes
+```
+
 ---
 
 ## -=[ STRATEGIES ]=-
@@ -222,8 +240,8 @@ score/scoped formulas, fidelity, and the per-protocol matrix. See [`docs/SCORING
 ```
 
 The protocol table’s **Strategies** column counts active basic axes per face (up to
-**3**; **80** slots total). **Indicators** is the number of scored tells in that
-engine (**255** total). Shodan and co-tenancy are host-level. Co-tenancy will not
+**3**; **88** slots total). **Indicators** is the number of scored tells in that
+engine (**271** total). Shodan and co-tenancy are host-level. Co-tenancy will not
 fire alone on multi-lure research stacks.
 
 ---
@@ -303,22 +321,24 @@ fire alone on multi-lure research stacks.
 | NTP | UDP | 123 · 1123 | 3 | 11 | [NTP](docs/strategies/ntp/) |
 | TFTP | UDP | 69 · 1069 | 2 | 12 | [TFTP](docs/strategies/tftp/) |
 | SSDP | UDP | 1900 · 11900 | 1 | 13 | [SSDP](docs/strategies/ssdp/) |
-| DHCP | UDP | 67 · 1067 | 3 | 3 | [DHCP](docs/strategies/dhcp/) |
+| DHCP | UDP | 67 · 1067 | 2 | 3 | [DHCP](docs/strategies/dhcp/) |
 | NetBIOS | UDP+TCP | 137,139 · 1139 | 3 | 5 | [NetBIOS](docs/strategies/netbios/) |
-| Syslog | UDP+TCP | 514 · 10514 | 2 | 2 | [Syslog](docs/strategies/syslog/) |
+| Syslog | UDP+TCP | 514 · 10514 | 1 | 2 | [Syslog](docs/strategies/syslog/) |
 | Modbus TCP | TCP | 502 · 1502 | 2 | 5 | [MODBUS](docs/strategies/modbus/) |
 
 Implicit-TLS faces reuse their cleartext engines over TLS: **IMAPS** 993 · 1993
 (imap) and **POP3S** 995 · 1995 (pop3, incl. the pre-TLS plaintext-banner tell).
-SNMP, DNS, and TFTP were already shipped engines; DHCP, NetBIOS, and Syslog are
-new in this release.
+**DHCP**, **NetBIOS**, **Syslog**, and **Modbus TCP** are new in this release
+(SNMP / DNS / NTP / TFTP / SSDP were already shipped).
 
 See [`docs/strategies/`](docs/strategies/) for per-protocol strategy guides and
 [`docs/SCORING.md`](docs/SCORING.md) for fidelity / corroboration. Recent
-indicator expansions (axis slots unchanged): MSSQL / MongoDB / MySQL / Redis /
-SSDP / SSH / Telnet / FTP — two additional tells each, plus SMTP
-(`rset_envelope`, `starttls_lie`) and POP3 (`preauth_uidl`, `command_case`).
-Per-protocol guides under [`docs/strategies/`](docs/strategies/) (transport notes: [`docs/tcp/`](docs/tcp/), [`docs/udp/`](docs/udp/)).
+expansions: MSSQL / MongoDB / MySQL / Redis / SSDP / SSH / Telnet / FTP — two
+additional tells each; SMTP (`rset_envelope`, `starttls_lie`) and POP3
+(`preauth_uidl`, `command_case`, `pre_tls_banner`); plus report formats
+`--format html|csv|markdown` and wizard/web-UI export downloads. Per-protocol
+guides under [`docs/strategies/`](docs/strategies/) (transport notes:
+[`docs/tcp/`](docs/tcp/), [`docs/udp/`](docs/udp/)).
 
 ---
 
@@ -376,6 +396,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v1.0.3 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v1.0.4 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```

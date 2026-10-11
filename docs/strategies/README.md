@@ -12,7 +12,7 @@ matchers, and tests.
 | **state_nonpersist** | Session or object state that a real daemon would keep |
 | **static_signature** | Framing, facade, stock lure, and conformance tells |
 
-**30** protocol folders · **80** active axis slots · **255** scored indicators.
+**34** protocol folders · **88** active axis slots · **271** scored indicators.
 Host-level axes (Shodan / co-tenancy) are not per-protocol.
 
 Source of truth for axes: `PROTOCOL_STRATEGIES` in
@@ -26,7 +26,7 @@ Source of truth for axes: `PROTOCOL_STRATEGIES` in
 | Telnet | TCP | 3 | 9 | [`telnet/`](telnet/) | [`telnet.py`](../../src/honeypot_auditor/probes/telnet.py) |
 | FTP | TCP | 3 | 8 | [`ftp/`](ftp/) | [`ftp.py`](../../src/honeypot_auditor/probes/ftp.py) |
 | SMTP | TCP | 3 | 7 | [`smtp/`](smtp/) | [`smtp.py`](../../src/honeypot_auditor/probes/smtp.py) |
-| POP3 | TCP | 3 | 8 | [`pop3/`](pop3/) | [`pop3.py`](../../src/honeypot_auditor/probes/pop3.py) |
+| POP3 | TCP | 3 | 9 | [`pop3/`](pop3/) | [`pop3.py`](../../src/honeypot_auditor/probes/pop3.py) |
 | IMAP | TCP | 3 | 6 | [`imap/`](imap/) | [`imap.py`](../../src/honeypot_auditor/probes/imap.py) |
 | HTTP | TCP | 3 | 12 | [`http/`](http/) | [`http.py`](../../src/honeypot_auditor/probes/http.py) |
 | HTTP proxy | TCP | 3 | 4 | [`httpproxy/`](httpproxy/) | [`httpproxy.py`](../../src/honeypot_auditor/probes/httpproxy.py) |
@@ -52,6 +52,10 @@ Source of truth for axes: `PROTOCOL_STRATEGIES` in
 | NTP | UDP | 3 | 11 | [`ntp/`](ntp/) | [`ntp.py`](../../src/honeypot_auditor/probes/udp/ntp.py) |
 | TFTP | UDP | 2 | 12 | [`tftp/`](tftp/) | [`tftp.py`](../../src/honeypot_auditor/probes/udp/tftp.py) |
 | SSDP | UDP | 1 | 13 | [`ssdp/`](ssdp/) | [`ssdp.py`](../../src/honeypot_auditor/probes/udp/ssdp.py) |
+| DHCP | UDP | 2 | 3 | [`dhcp/`](dhcp/) | [`dhcp.py`](../../src/honeypot_auditor/probes/udp/dhcp.py) |
+| NetBIOS | UDP+TCP | 3 | 5 | [`netbios/`](netbios/) | [`netbios.py`](../../src/honeypot_auditor/probes/udp/netbios.py) |
+| Syslog | UDP+TCP | 1 | 2 | [`syslog/`](syslog/) | [`syslog.py`](../../src/honeypot_auditor/probes/udp/syslog.py) |
+| Modbus TCP | TCP | 2 | 5 | [`modbus/`](modbus/) | [`modbus.py`](../../src/honeypot_auditor/probes/modbus.py) |
 
 ## Review checklist (per protocol)
 

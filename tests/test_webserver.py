@@ -40,6 +40,17 @@ def test_index_serves_xp_css_page(server):
     assert status == 200
     assert b"/static/XP.css" in body
     assert b"H-AUDITOR.EXE" in body
+    assert b"History is grouped by IP" in body
+    assert b"groupAuditsByIp" in body
+    assert b'class="tree-view"' in body
+    assert b"<progress" in body
+    assert b'label for="deep"' in body
+    assert b'label for="authorized"' in body
+    assert b'id="detailmodal"' in body
+    assert b'class="xp-taskbar"' in body
+    assert b'Start menu' in body
+    assert b'aria-label="Minimize"' in body
+    assert b'aria-label="Maximize"' in body
 
 
 def test_static_assets_served(server):
@@ -72,6 +83,10 @@ def test_audit_run_persists_to_sqlite(server):
     assert status == 200 and json.loads(body)["audits"]
     status, body = _get(f"{server}/api/audits/{payload['audit_id']}")
     assert status == 200 and json.loads(body)["report"]["target"] == "127.0.0.1"
+    status, body = _get(f"{server}/audits/{payload['audit_id']}")
+    assert status == 200
+    assert b"Stored Audit Detail" in body
+    assert str(payload["audit_id"]).encode() in body
 
 
 def test_public_target_without_confirmation_is_rejected(server):

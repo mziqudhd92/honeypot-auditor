@@ -6,12 +6,12 @@ Prefer this file + `llms.txt` + `llms-full.txt` over scraping marketing HTML.
 
 ## What this is
 
-**honeypot-auditor** — MIT-licensed Python CLI that fingerprints low-interaction honeypots via non-destructive multi-protocol probes (**30** engines including MQTT, SNMP, DNS, NTP, TFTP, SSDP, PPTP, Redis, Elasticsearch, Docker Engine API, Kubernetes API, IPP/CUPS, and Memcached). Outputs weighted **Honeyscore (0–100%)**, Rich table, JSON.
+**honeypot-auditor** — MIT-licensed Python CLI that fingerprints low-interaction honeypots via non-destructive multi-protocol probes (**34** engines including MQTT, SNMP, DNS, NTP, TFTP, SSDP, PPTP, DHCP, NetBIOS, Syslog, Modbus TCP, Redis, Elasticsearch, Docker Engine API, Kubernetes API, IPP/CUPS, and Memcached; **88** strategy slots · **271** indicators). Outputs weighted **Honeyscore (0–100%)**, Rich table, JSON; also `wizard` / `serve` UX and `--format html|csv|markdown`.
 
 - Site: https://mziqudhd92.github.io/honeypot-auditor/
 - Repo: https://github.com/mziqudhd92/honeypot-auditor
 - PyPI: https://pypi.org/project/honeypot-auditor/
-- Version: **1.0.3**
+- Version: **1.0.4**
 - Contact: security@helloaeterna.com
 
 ## Hard rules for agents
@@ -122,7 +122,7 @@ docs/                   GitHub Pages site + llms/agents briefs
 
 Animated GIFs (authorized lab captures):
 
-- https://mziqudhd92.github.io/honeypot-auditor/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif (v1.0.3 · dd-honeypot / DataTrap)
+- https://mziqudhd92.github.io/honeypot-auditor/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif (v1.0.4 · dd-honeypot / DataTrap)
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-lab-tour-v1.0.0.gif
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-cowrie-demo.gif
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-dionaea-demo.gif

@@ -6,41 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Added
-
-- **Modbus TCP engine** (502 / lab 1502) — first ICS/OT protocol: MBAP
-  transaction-ID echo, framing coherence (protocol ID / length), broadcast
-  (unit 255) answered, undefined function code 0x4f served, illegal read
-  quantity served (spec V1.1b3 behavioral; read-only probes)
-- Report formats `--format html|csv|markdown` alongside json/sarif —
-  self-contained styled HTML, per-indicator CSV (subnet sweeps → per-host
-  rows), Markdown for PRs/wikis; all written owner-only (0600)
-- Wizard: optional report-file export step (json/html/csv/markdown/sarif);
-  Web UI: per-audit download links (JSON/HTML/CSV/MD) served from stored
-  SQLite history
-
-### Fixed
-
-- CSV exports (single-host and subnet, incl. web UI downloads) now neutralize
-  spreadsheet formula injection: evidence cells derived from remote banners
-  that start with `=`, `+`, `-`, `@`, or a tab/CR are prefixed with `'`
-  (OWASP CSV injection guidance) — a malicious audited host could previously
-  plant executable formulas in reports opened in Excel/LibreOffice
-- CI coverage gate realigned with the repo gate (75% → 80% in the test
-  workflow, matching pyproject.toml and the Makefile)
-- SMB NTLM challenge capture: impacket's `Structure` is not a dict in current
-  versions, so `.get()` on the parsed Type-2 message raised and silently
-  dropped target-info/AV-pair/version metadata (challenge bytes survived);
-  field access is now KeyError-safe on both impacket layouts
-
-### Changed
-
-- Test coverage gate raised from 75% to 80% (pyproject + Makefile); suite now
-  covers SMB/NTLM helpers, the wizard flows, web UI error/CSRF/download
-  routes, signature pack evaluation/matchers, and netutil TCP/UDP helpers
-  (total 80.4%, wizard 100%, web UI 99%)
-
-## [1.1.0] - 2026-10-06
+## [1.0.4] - 2026-10-11
 
 ### Added
 
@@ -53,14 +19,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   The server binds **127.0.0.1 only**, rejects non-local `Host` headers (DNS
   rebinding), serializes audits (engine settings are process globals), and the
   browser renders all report data via `textContent` (no HTML injection)
-- Three new protocol engines and POP3S support, all RFC-behavioral (no product
+- Wizard: optional report-file export step (json/html/csv/markdown/sarif);
+  Web UI: per-audit download links (JSON/HTML/CSV/MD) served from stored
+  SQLite history
+- Report formats `--format html|csv|markdown` alongside json/sarif —
+  self-contained styled HTML, per-indicator CSV (subnet sweeps → per-host
+  rows), Markdown for PRs/wikis; all written owner-only (0600)
+- Four new protocol engines and POP3S support, all RFC-behavioral (no product
   signatures): **DHCP** (`dhcp.xid_echo`/`framing`/`canned_offer` — capability-gated
   on privileged client port 68), **NetBIOS** (NBNS 137 + session service 139:
   `trnid_echo`, `framing`, `canned_nbstat`, `session_grant`, `session_framing`),
   **Syslog** (UDP 514 / TCP RFC 6587: `unexpected_reply`, `tcp_reply` — any answer
-  on the ack-less channel violates the RFC), and **POP3S** (995/1995 reuse the pop3
-  engine over implicit TLS with a new `pop3.pre_tls_banner` plaintext-leak tell).
-  SNMP, DNS, and TFTP were already shipped engines
+  on the ack-less channel violates the RFC), **Modbus TCP** (502 / lab 1502 —
+  first ICS/OT face: MBAP transaction-ID echo, framing coherence, broadcast unit
+  255 answered, undefined FC 0x4f served, illegal read quantity served; read-only),
+  and **POP3S** (995/1995 reuse the pop3 engine over implicit TLS with a new
+  `pop3.pre_tls_banner` plaintext-leak tell). SNMP, DNS, NTP, TFTP, and SSDP were
+  already shipped engines (**34** engines · **88** active strategy slots · **271**
+  scored indicators)
 - SMTP / POP3 detection: two additional protocol tells each — SMTP
   `rset_envelope` (envelope survives an explicit RSET: canned transaction state)
   and `starttls_lie` (STARTTLS advertised + 220 but the TLS handshake fails,
@@ -75,13 +51,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - CycloneDX SBOM attached to GitHub Releases (`publish.yml`); GHCR images now ship
   provenance + SBOM attestations (`publish-ghcr.yml`)
 - `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) and OpenSSF Scorecard badge
+- Beginner tutorial for the local web UI (`docs/tutorials/web-ui.md`)
 
 ### Changed
 
-- Audit reports (JSON / SARIF / nmap-exclude) are written `0600` — they carry target
-  evidence and probe transcripts
+- Audit reports (JSON / SARIF / HTML / CSV / Markdown / nmap-exclude) are written
+  `0600` — they carry target evidence and probe transcripts
 - Container: digest-pinned base image, OCI labels, non-root `auditor` user
-- Coverage gate raised 60% → 75% (suite currently at ~77%)
+- Coverage gate raised 60% → 75% → 80% (pyproject + Makefile + CI workflow);
+  suite now covers SMB/NTLM helpers, wizard flows, web UI error/CSRF/download
+  routes, signature pack evaluation/matchers, and netutil TCP/UDP helpers
+  (total ~80.4%, wizard 100%, web UI 99%)
 - Security support table trimmed to 1.0.x (0.9.x security-fixes only); authorization
   gate docs now state that hostnames resolving into LAN/RFC1918 scan without
   confirmation (README + SECURITY.md)
@@ -90,6 +70,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   `_run_named` / `_write_report` / `_audit_subnet`); SMB helpers debug-log their
   swallowed exceptions instead of staying silent
 - CI: `timeout-minutes` and `concurrency` groups across workflows
+- README / site live demo: show **v1.0.4** dd-honeypot (DataTrap) GIF
+  (`docs/tutorials/dd-honeypot-lab-demo/…`) with web-UI overview/result screenshots
+- dd-honeypot beginner lab (`docs/tutorials/dd-honeypot-lab-demo/`): canonical
+  path-only onboarding, SSH host port **2222**, accurate Telnet/deep expectations,
+  expected Bedrock/MySQL log-noise note; drop `demo/` recorder scripts and local
+  `.dockerignore` / `.gitignore`
+- Strategy guides reorganized into per-protocol folders under
+  [`docs/strategies/<proto>/`](docs/strategies/)
 
 ### Removed
 
@@ -98,8 +86,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
-### Fixed
-
+- CSV exports (single-host and subnet, incl. web UI downloads) now neutralize
+  spreadsheet formula injection: evidence cells derived from remote banners
+  that start with `=`, `+`, `-`, `@`, or a tab/CR are prefixed with `'`
+  (OWASP CSV injection guidance) — a malicious audited host could previously
+  plant executable formulas in reports opened in Excel/LibreOffice
+- SMB NTLM challenge capture: impacket's `Structure` is not a dict in current
+  versions, so `.get()` on the parsed Type-2 message raised and silently
+  dropped target-info/AV-pair/version metadata (challenge bytes survived);
+  field access is now KeyError-safe on both impacket layouts
+- SMTP: after extension STARTTLS answers 220, reopen a cleartext session before
+  envelope/RSET probes (avoids poisoning MAIL/RCPT on a TLS-armed socket); close
+  the isolated STARTTLS TLS wrap; POP3 early-return skips use named helpers
+  instead of fragile magic indices
 - Web UI hardening from code review: exact-match localhost `Host` guard
   (`127.0.0.1.evil.com` no longer bypasses it), `nosniff` + CSP headers, and
   audit serialization now actually spans the engine run (engine settings are
@@ -117,15 +116,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - MSSQL/MySQL auth-error clones require user-attributed fixed embedding; probes
   use distinct `entropy_varied_creds`
 - Telnet AYT scores post-AYT bytes only (banner drained via `tcp_roundtrips`)
-
-### Changed
-
-- README / site live demo: show **v1.0.3** dd-honeypot (DataTrap) GIF instead of the
-  v1.0.0 three-face lab tour (`docs/tutorials/dd-honeypot-lab-demo/…`)
-- dd-honeypot beginner lab (`docs/tutorials/dd-honeypot-lab-demo/`): canonical
-  path-only onboarding, SSH host port **2222**, accurate Telnet/deep expectations,
-  expected Bedrock/MySQL log-noise note; drop `demo/` recorder scripts and local
-  `.dockerignore` / `.gitignore`
 
 ## [1.0.3] - 2026-09-30
 

@@ -13,7 +13,7 @@ you can browse later.
 > The server cannot be exposed to other machines — it has no option to bind a
 > public interface.
 
-![honeypot-auditor web UI (XP.css) — audit form, result panel, and SQLite history](web-ui-overview.png)
+![honeypot-auditor web UI (XP.css) — New audit form, result panel, and IP-grouped SQLite history](web-ui-overview.png)
 
 ---
 
@@ -25,7 +25,7 @@ The web server ships inside the normal package — nothing extra to install:
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 pip install "honeypot-auditor[full]"
 
-honeypot-auditor --version   # 1.1.0 or newer (the UI shipped in 1.1.0)
+honeypot-auditor --version   # 1.0.4 or newer (the UI shipped in 1.0.4)
 ```
 
 From a git checkout instead? `pip install -e ".[full]"` gives you the same
@@ -57,7 +57,7 @@ The main window has three panels:
 |-------|--------------|
 | **New audit** | The form: target, preset, ports, timeout, deep mode, authorization |
 | **Result** | Verdict, Honeyscore bar, and the list of triggered tells |
-| **Audit history** | Every audit saved in the local SQLite database — click a row to reopen its full report |
+| **Audit history** | SQLite history grouped by IP — expand a host, browse audits newest-first, then **Open** |
 
 Fill in the form and press **Run audit**:
 
@@ -100,9 +100,14 @@ Every finished audit is stored locally, before you see the result:
 - **Database location:** `~/.honeypot-auditor/audits.db`
   (override with the `HONEYPOT_AUDITOR_DB` environment variable — useful for
   tests or a shared lab folder)
-- Click any row in **Audit history** to reopen the full stored JSON report.
+- **Audit history** groups saved rows by resolved IP. Expand a host to see its
+  audits newest-first, then press **Open** for the full report (JSON/HTML/CSV/MD
+  downloads included).
 - The detail panel has **Download report** links — export the stored audit as
   `JSON`, `HTML`, `CSV`, or `Markdown` (`/api/audits/<id>/download/<fmt>`).
+
+![Stored audit detail — Confirmed Honeypot at 100% with Cowrie tells and report downloads](readme-web-ui-result.png)
+
 - To query it directly:
 
 ```bash
