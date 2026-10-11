@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import stat
+
+import pytest
 
 from honeypot_auditor.reporters.text_export import (
     build_csv_text,
@@ -87,6 +90,7 @@ def test_csv_rows_and_ordering():
     assert "127.0.0.1" in first
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX 0600 modes are not enforced on Windows")
 def test_exports_write_owner_only_files(tmp_path):
     payload = _payload()
     for dest, fn in (

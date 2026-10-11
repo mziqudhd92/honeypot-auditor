@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from honeypot_auditor import storage
@@ -63,6 +65,7 @@ def test_explicit_db_path_argument(db):
     assert storage.list_audits(db_path=db.parent / "unused.db") == []
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX 0600 modes are not enforced on Windows")
 def test_db_file_is_owner_readable_only(db):
     report = _run_report()
     storage.save_report(report, db_path=db)

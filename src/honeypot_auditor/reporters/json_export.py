@@ -15,7 +15,8 @@ REPORT_SCHEMA_VERSION = "1.0"
 def write_owner_only(dest: Path, text: str) -> None:
     """Write report text readable only by the owner (reports hold target evidence)."""
     fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+    # newline="" so csv.writer's \r\n is not re-translated to \r\r\n on Windows.
+    with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
         fh.write(text)
     with suppress(OSError):
         dest.chmod(0o600)  # enforce on files created earlier with default perms
