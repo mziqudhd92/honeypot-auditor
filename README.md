@@ -64,9 +64,6 @@ Passive intel ([Shodan Honeyscore](https://honeyscore.shodan.io/)) plus active,
 
 Quickstart Tutorials: [AWS Spot honeypot lab](docs/tutorials/aws-spot-honeypot-lab.md) · [Local web UI](docs/tutorials/web-ui.md) (`serve`, XP.css)
 
-Not exploits. Not exfil. Banner/state/auth semantics. The kind of stuff that
-made Cowrie sweat in `'09 and still catches clones in `'26.
-
 <p align="center">
   <img src="docs/tutorials/readme-web-ui-overview.png" alt="Honeypot Auditor local web UI (XP.css): New audit form, result panel, and IP-grouped SQLite history with a Confirmed Honeypot row expanded." width="920">
 </p>
