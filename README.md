@@ -44,7 +44,7 @@
 |  Scanning random /16 because Shodan said "interesting" = YOU are the bait.   |
 |                                                                              |
 |  TYPE ...... Multi-Protocol Decoy Fingerprinter / Lab Util                   |
-|  PLATFORM .. Linux · macOS · Windows (Python 3.10+)                          |
+|  PLATFORM .. Linux · macOS · Windows (Python 3.11+)                          |
 |  LICENSE ... MIT · spread the sauce · keep the copyright                     |
 |  PYPI ...... pypi.org/project/honeypot-auditor                               |
 |  REPO ...... github.com/mziqudhd92/honeypot-auditor                          |

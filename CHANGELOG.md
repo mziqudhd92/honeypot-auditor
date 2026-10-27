@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- Bump transitive `filelock` to **≥4.2.4** (GHSA-v4x8-3wr5-3wq8 / CVE-2026-112940).
+  Patched releases require Python ≥3.11, so `requires-python` is now **≥3.11**
+  (CI matrix 3.11/3.12/3.14).
+
 ## [1.0.4] - 2026-10-11
 
 ### Added
