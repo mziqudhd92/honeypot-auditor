@@ -151,3 +151,11 @@ python_version = "3.11"
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
 targets = ["src", "honeypot-auditor.py"]
+
+[tool.uv]
+override-dependencies = [
+  "mcp>=1.30.0,<2",
+  "opentelemetry-api>=1.45.1",
+  "opentelemetry-sdk>=1.45.1",
+  "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+]
