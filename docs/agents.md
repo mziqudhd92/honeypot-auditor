@@ -11,7 +11,7 @@ Prefer this file + `llms.txt` + `llms-full.txt` over scraping marketing HTML.
 - Site: https://mziqudhd92.github.io/honeypot-auditor/
 - Repo: https://github.com/mziqudhd92/honeypot-auditor
 - PyPI: https://pypi.org/project/honeypot-auditor/
-- Version: **1.0.4**
+- Version: **1.0.5**
 - Contact: security@helloaeterna.com
 
 ## Hard rules for agents
@@ -122,7 +122,7 @@ docs/                   GitHub Pages site + llms/agents briefs
 
 Animated GIFs (authorized lab captures):
 
-- https://mziqudhd92.github.io/honeypot-auditor/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif (v1.0.4 · dd-honeypot / DataTrap)
+- https://mziqudhd92.github.io/honeypot-auditor/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif (v1.0.5 · dd-honeypot / DataTrap)
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-lab-tour-v1.0.0.gif
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-cowrie-demo.gif
 - https://mziqudhd92.github.io/honeypot-auditor/demo/honeypot-auditor-dionaea-demo.gif

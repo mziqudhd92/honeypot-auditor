@@ -1,6 +1,6 @@
 ```
 .______________________________________________________________________________.
-|  :: H-AUDITOR :: v1.0.4 :: "DIALING IN... CARRIER DETECTED" ::                |
+|  :: H-AUDITOR :: v1.0.5 :: "DIALING IN... CARRIER DETECTED" ::                |
 |------------------------------------------------------------------------------|
 |  "warez? nah. headers. we trade banners, not bins."                          |
 |  "if it answers any password, it ain't production — it's a lure."            |
@@ -22,16 +22,16 @@
 
 ```
   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-  █  >>> LIVE DEMO · v1.0.4 · DD-HONEYPOT · 5 SERVICES · -v / --deep <<<   █
+  █  >>> LIVE DEMO · v1.0.5 · DD-HONEYPOT · 5 SERVICES · -v / --deep <<<   █
   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 ```
 
-![dd-honeypot (DataTrap) demo v1.0.4 — SSH, Telnet, MySQL, Redis, PostgreSQL](docs/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif)
+![dd-honeypot (DataTrap) demo v1.0.5 — SSH, Telnet, MySQL, Redis, PostgreSQL](docs/tutorials/dd-honeypot-lab-demo/honeypot-auditor-dd-honeypot-demo.gif)
 
 ```
   "five DataTrap faces on loopback: map the ports, run -v, then --deep.
    Honeyscore 100% — Confirmed Honeypot. same fingerprinter, new decoy."
-                        — dd-honeypot lab · v1.0.4 · authorized only
+                        — dd-honeypot lab · v1.0.5 · authorized only
 ```
 
 ```
@@ -393,6 +393,6 @@ Vuln reports → [SECURITY.md](SECURITY.md)
 
 ```
 .------------------------------------------------------------------------------.
-|  h0n3yp0t 4ud1t0r · v1.0.4 · spread headers not malware · EOF · NO CARRIER   |
+|  h0n3yp0t 4ud1t0r · v1.0.5 · spread headers not malware · EOF · NO CARRIER   |
 '------------------------------------------------------------------------------'
 ```
