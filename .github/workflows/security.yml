@@ -21,29 +21,29 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: "3.12"
-          cache: pip
+          enable-cache: true
       # Audit the product deps first. Semgrep currently pins PyJWT<2.14 (CVE stream
       # in pip-audit); install it only after the audit so CI is not blocked on a
       # toolchain pin outside this project's dependency tree.
       - name: Install project and audit toolchain
         run: |
-          pip install -e ".[full,dev]"
-          pip install "bandit>=1.9" "detect-secrets>=1.5" "pip-audit>=2.10"
+          uv sync --frozen --extra full --extra dev
+          uv pip install "bandit>=1.9" "detect-secrets>=1.5" "pip-audit>=2.10"
       - name: Dependency vulnerabilities
-        run: pip-audit
+        run: uv run pip-audit
       - name: Install Semgrep
-        run: pip install "semgrep>=1.176"
+        run: uv pip install "semgrep>=1.176"
       - name: Semgrep
-        run: semgrep scan --config p/python --config p/security-audit --config p/secrets --error --metrics off .
+        run: uv run semgrep scan --config p/python --config p/security-audit --config p/secrets --error --metrics off .
       - name: Bandit
-        run: bandit -c pyproject.toml -r src honeypot-auditor.py
+        run: uv run bandit -c pyproject.toml -r src honeypot-auditor.py
       - name: Secret candidates
         shell: bash
         run: |
-          detect-secrets scan --exclude-files 'tests/fixtures/.*' > /tmp/detect-secrets.json
+          uv run detect-secrets scan --exclude-files 'tests/fixtures/.*' > /tmp/detect-secrets.json
           python - <<'PY'
           import json
 

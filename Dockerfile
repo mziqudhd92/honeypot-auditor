@@ -6,10 +6,20 @@ LABEL org.opencontainers.image.title="honeypot-auditor" \
       org.opencontainers.image.source="https://github.com/mziqudhd92/honeypot-auditor" \
       org.opencontainers.image.licenses="MIT"
 
+# uv binary from the official image (digest-pinned); installs from uv.lock.
+COPY --from=ghcr.io/astral-sh/uv:0.9.5@sha256:f459f6f73a8c4ef5d69f4e6fbbdb8af751d6fa40ec34b39a1ab469acd6e289b7 \
+     /uv /usr/local/bin/uv
+
 WORKDIR /app
-COPY pyproject.toml README.md LICENSE ./
+COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src ./src
-RUN pip install --no-cache-dir ".[full]" \
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN uv sync --frozen --extra full --no-dev --no-editable \
     && useradd --create-home --shell /usr/sbin/nologin auditor \
     && chown -R auditor:auditor /app
 
