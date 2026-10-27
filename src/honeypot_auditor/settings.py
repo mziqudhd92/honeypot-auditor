@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from honeypot_auditor.capabilities import Capabilities, probe_capabilities
 
 
-class ProbeProfile(str, Enum):
+class ProbeProfile(StrEnum):
     AUDIT = "audit"
     BLEND = "blend"
     SAFE = "safe"

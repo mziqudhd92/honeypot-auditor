@@ -12,7 +12,7 @@ import json
 import os
 import sqlite3
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from honeypot_auditor.models import AuditReport
@@ -67,7 +67,7 @@ def save_report(
 ) -> int:
     """Persist one finished audit; returns the new row id."""
     payload = report_payload(report)
-    created = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    created = datetime.now(UTC).isoformat(timespec="seconds")
     conn = _connect(db_path)
     try:
         cursor = conn.execute(
