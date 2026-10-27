@@ -8,7 +8,7 @@ Repository: **https://github.com/mziqudhd92/honeypot-auditor**
 
 | Event | What runs |
 |-------|-----------|
-| Push / PR to `main` | Unit tests (3.10–3.14), ruff, coverage, build, security, golden |
+| Push / PR to `main` | Unit tests (3.11–3.14), ruff, coverage, build, security, golden |
 | Push tag `vX.Y.Z` | **`publish-pypi.yml`** → PyPI (Trusted Publishing, PEP 740 attestations) + GHCR (provenance + SBOM attestations) |
 | GitHub Release `vX.Y.Z` | **`publish.yml`** → tests + version check + CycloneDX SBOM attached to the release (does **not** upload to PyPI) |
 

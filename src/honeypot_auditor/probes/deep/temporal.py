@@ -5,6 +5,7 @@ from __future__ import annotations
 import statistics
 import time
 from contextlib import suppress
+from datetime import UTC
 from email.utils import parsedate_to_datetime
 
 from honeypot_auditor.models import Indicator, skipped_indicator
@@ -224,9 +225,8 @@ def _parse_http_date(value: str) -> float | None:
     try:
         dt = parsedate_to_datetime(value)
         if dt.tzinfo is None:
-            from datetime import timezone
 
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt.timestamp()
     except (TypeError, ValueError, IndexError, OverflowError):
         return None

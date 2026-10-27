@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- Bump transitive `filelock` to **≥4.2.4** (GHSA-v4x8-3wr5-3wq8 /
+  GHSA-567q-5qvw-pf92 / GHSA-9vhv-jxww-xfm5). Patched releases require
+  Python ≥3.11, so `requires-python` is now **≥3.11** (CI matrix 3.11/3.12/3.14).
+- Override semgrep-pinned toolchain deps in `[tool.uv]`: `mcp≥1.30,<2`
+  (GHSA-84m7-p3x7-pcfv) and `opentelemetry-api/sdk/exporter ≥1.45.1`
+  (GHSA-xcq7-p3pf-p88h).
+
 ## [1.0.4] - 2026-10-11
 
 ### Added

@@ -9,7 +9,7 @@ import re
 import socket
 import sys
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -765,7 +765,7 @@ async def _audit_host(
     target: str | None = None,
     jobs: list[tuple[str, Callable[[], list[Indicator]]]] | None = None,
 ) -> AuditReport:
-    started = datetime.now(timezone.utc).isoformat()
+    started = datetime.now(UTC).isoformat()
     # Build jobs first so --passive-first-confirm can align args/settings before notes/report.
     jobs = jobs if jobs is not None else _probe_jobs(ip, ports, args, include_shodan=include_shodan)
     notes = _build_notes(
@@ -784,7 +784,7 @@ async def _audit_host(
             indicators.extend(await _run_named(name, fn, None, None))
 
     indicators.extend(evaluate_signatures(indicators))
-    finished = datetime.now(timezone.utc).isoformat()
+    finished = datetime.now(UTC).isoformat()
     return build_report(
         target=target or ip,
         resolved_ip=ip,
@@ -891,7 +891,7 @@ async def run_audit(args: argparse.Namespace) -> int:
     caps = settings.capabilities
     cap_dict = caps.as_dict()
     cap_warnings = caps.warnings
-    started = datetime.now(timezone.utc).isoformat()
+    started = datetime.now(UTC).isoformat()
     console.print(f"[dim]ports {_port_note(ports) or '(none)'}[/dim]\n")
 
     if scan_kind == "host":
@@ -934,7 +934,7 @@ async def run_audit(args: argparse.Namespace) -> int:
         return 0
 
     reports = await _audit_subnet(args.target, hosts, args, ports, console)
-    finished = datetime.now(timezone.utc).isoformat()
+    finished = datetime.now(UTC).isoformat()
     notes = _build_notes(args, subnet=True, public_target=bool(public_hosts), ports=ports)
     render_subnet_summary(args.target, reports, console=console)
     if args.verbose:

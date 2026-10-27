@@ -34,7 +34,7 @@ All commands below assume you start from the **honeypot-auditor repository root*
 | Tool | Check it works | Notes |
 |------|----------------|-------|
 | Docker Desktop | `docker --version` | Any recent version; start Docker Desktop first |
-| Python 3.10+ | `python3 --version` | For the auditor |
+| Python 3.11+ | `python3 --version` | For the auditor |
 | git | `git --version` | To clone this repository |
 | `nc` (netcat) | `nc -h` / `nc -v` | Optional reachability checks (PowerShell alternative below) |
 
