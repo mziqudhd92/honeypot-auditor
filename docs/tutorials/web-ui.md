@@ -25,7 +25,7 @@ The web server ships inside the normal package — nothing extra to install:
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
 pip install "honeypot-auditor[full]"
 
-honeypot-auditor --version   # 1.0.4 or newer (the UI shipped in 1.0.4)
+honeypot-auditor --version   # 1.0.5 or newer (the UI shipped in 1.0.4)
 ```
 
 From a git checkout instead? `pip install -e ".[full]"` gives you the same

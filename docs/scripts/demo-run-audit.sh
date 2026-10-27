@@ -28,7 +28,7 @@ if [[ -d /hpaudit-src ]]; then
   UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --extra full --directory /tmp/hpaudit-build
 else
   python3 -m venv /opt/venv
-  uv pip install --python /opt/venv/bin/python "honeypot-auditor[full]==1.0.0"
+  uv pip install --python /opt/venv/bin/python "honeypot-auditor[full]==1.0.5"
 fi
 
 echo ""

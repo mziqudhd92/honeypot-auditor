@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-10-27
+
 ### Security
 
 - Bump transitive `filelock` to **≥4.2.4** (GHSA-v4x8-3wr5-3wq8 /
@@ -14,6 +16,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Override semgrep-pinned toolchain deps in `[tool.uv]`: `mcp≥1.30,<2`
   (GHSA-84m7-p3x7-pcfv) and `opentelemetry-api/sdk/exporter ≥1.45.1`
   (GHSA-xcq7-p3pf-p88h).
+- Harden CI and supply chain for OpenSSF Scorecard / code scanning: explicit
+  `permissions: contents: read` on workflows, job-scoped write tokens for GHCR
+  and Pages, `uv sync --frozen` (lockfile) instead of unhashed `pip install`,
+  digest-pinned `dd-honeypot` lab base image, and checksum-verified `uv` binary
+  install in demo scripts.
+- Enable main branch ruleset + protection (required status checks, PR reviews,
+  last-push approval) with admin bypass for solo merges.
+
+### Changed
+
+- Docker image installs from `uv.lock` via digest-pinned `astral-sh/uv`.
+- Scorecard workflow supports `workflow_dispatch` for on-demand rescans.
 
 ## [1.0.4] - 2026-10-11
 
