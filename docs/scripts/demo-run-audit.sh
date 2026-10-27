@@ -14,9 +14,14 @@ OUTFILE="${3:?outfile}"
 apt-get update -qq
 apt-get install -y -qq python3-venv python3-full nmap ca-certificates curl >/dev/null
 
-# Install uv (lockfile-aware) so demos avoid unhashed pip install.
-curl -LsSf https://astral.sh/uv/0.9.5/install.sh | sh
-export PATH="${HOME}/.local/bin:${PATH}"
+# Install uv from a checksum-verified release tarball (no curl|sh).
+UV_VER=0.9.5
+UV_ARCHIVE="uv-x86_64-unknown-linux-gnu.tar.gz"
+UV_SHA256=2cf10babba653310606f8b49876cfb679928669e7ddaa1fb41fb00ce73e64f66
+curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VER}/${UV_ARCHIVE}" -o "/tmp/${UV_ARCHIVE}"
+echo "${UV_SHA256}  /tmp/${UV_ARCHIVE}" | sha256sum -c -
+tar -xzf "/tmp/${UV_ARCHIVE}" -C /tmp
+install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
 
 if [[ -d /hpaudit-src ]]; then
   cp -a /hpaudit-src /tmp/hpaudit-build
