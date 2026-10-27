@@ -12,14 +12,18 @@ PORTS="${2:?ports}"
 OUTFILE="${3:?outfile}"
 
 apt-get update -qq
-apt-get install -y -qq python3-venv python3-full nmap ca-certificates >/dev/null
+apt-get install -y -qq python3-venv python3-full nmap ca-certificates curl >/dev/null
 
-python3 -m venv /opt/venv
+# Install uv (lockfile-aware) so demos avoid unhashed pip install.
+curl -LsSf https://astral.sh/uv/0.9.5/install.sh | sh
+export PATH="${HOME}/.local/bin:${PATH}"
+
 if [[ -d /hpaudit-src ]]; then
   cp -a /hpaudit-src /tmp/hpaudit-build
-  /opt/venv/bin/pip install -q "/tmp/hpaudit-build[full]"
+  UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --extra full --directory /tmp/hpaudit-build
 else
-  /opt/venv/bin/pip install -q "honeypot-auditor[full]==1.0.0"
+  python3 -m venv /opt/venv
+  uv pip install --python /opt/venv/bin/python "honeypot-auditor[full]==1.0.0"
 fi
 
 echo ""

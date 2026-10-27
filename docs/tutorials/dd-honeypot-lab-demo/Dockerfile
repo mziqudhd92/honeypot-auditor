@@ -11,7 +11,8 @@
 #             -p 127.0.0.1:6380:6379 -p 127.0.0.1:5433:5432 \
 #             dd-honeypot-lab
 
-FROM ghcr.io/thalesgroup/dd-honeypot:latest
+# Digest-pinned multi-arch index for ghcr.io/thalesgroup/dd-honeypot:latest
+FROM ghcr.io/thalesgroup/dd-honeypot@sha256:2f1be85824659f61bfca49d11b98d645ad87b93bddabe0d3fb59662982fe2703
 
 # The container scans /data/honeypot at startup: one subfolder per honeypot,
 # each with a config.json (see TUTORIAL.md for the schema).

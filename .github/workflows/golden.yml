@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   actionlint:
     runs-on: ubuntu-latest
@@ -32,29 +35,32 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev,full]"
-      - run: pytest tests/ -q --no-cov -m replay
+          enable-cache: true
+      - run: uv sync --frozen --extra full --extra dev
+      - run: uv run pytest tests/ -q --no-cov -m replay
 
   unit:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev,full]"
-      - run: ruff check src tests
-      - run: pytest tests/ -q --no-cov -m "not integration"
+          enable-cache: true
+      - run: uv sync --frozen --extra full --extra dev
+      - run: uv run ruff check src tests
+      - run: uv run pytest tests/ -q --no-cov -m "not integration"
       - run: bash docs/scripts/sync-public-docs.sh
       - name: Wheel package-data smoke
         run: |
-          python -m build -w -o /tmp/hpa-wheel
-          pip install --force-reinstall /tmp/hpa-wheel/honeypot_auditor-*.whl
-          python - <<'PY'
+          uv run python -m build -w -o /tmp/hpa-wheel
+          uv pip install --force-reinstall /tmp/hpa-wheel/honeypot_auditor-*.whl
+          # --no-sync: keep the just-installed wheel; do not re-sync the project.
+          uv run --no-sync python - <<'PY'
           from honeypot_auditor.signatures.loader import load_core_pack
           from honeypot_auditor.tls_fingerprint import load_tls_profiles
           from honeypot_auditor.http2_fingerprint import load_http2_profiles
@@ -73,10 +79,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev,full]"
+          enable-cache: true
+      - run: uv sync --frozen --extra full --extra dev
       - name: Start benchmark lab
         run: docker compose -f tests/fixtures/benchmark/docker-compose.yml up -d
       - name: Wait for ports
@@ -87,7 +94,7 @@ jobs:
             sleep 2
           done
       - name: Golden integration asserts
-        run: pytest tests/integration/test_golden.py -q --no-cov -m integration
+        run: uv run pytest tests/integration/test_golden.py -q --no-cov -m integration
       - name: Tear down
         if: always()
         run: docker compose -f tests/fixtures/benchmark/docker-compose.yml down -v
