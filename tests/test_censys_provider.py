@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from honeypot_auditor.plugins.censys_provider import censys_provider
 
 
 def _ts(days_ago: float = 0.5) -> str:
-    return (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%S")
+    return (datetime.now(UTC) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def test_censys_diverse_snapshot_is_medium_not_high_sudden():

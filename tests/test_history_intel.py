@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from honeypot_auditor.probes.history_intel import (
@@ -14,7 +14,7 @@ from honeypot_auditor.probes.history_intel import (
 
 
 def _ts(days_ago: float = 1.0) -> str:
-    return (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%S")
+    return (datetime.now(UTC) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def test_eip_web_mail_ssh_burst_not_high_fidelity():

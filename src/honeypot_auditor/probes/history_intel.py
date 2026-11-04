@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
@@ -91,13 +91,13 @@ def _parse_ts(raw: str) -> datetime | None:
     try:
         dt = datetime.fromisoformat(text)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
     except ValueError:
         pass
     for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+            return datetime.strptime(text, fmt).replace(tzinfo=UTC)
         except ValueError:
             continue
     return None
@@ -108,7 +108,7 @@ def evaluate_sudden_buffet(history_rows: list[dict[str, Any]]) -> Indicator | No
     projected = [p for p in (project_history_row(r) for r in history_rows) if p]
     if not projected:
         return None
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     window_start = now - timedelta(days=SUDDEN_WINDOW_DAYS)
     in_window: list[dict[str, Any]] = []
     for row in projected:
