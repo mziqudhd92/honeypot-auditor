@@ -53,7 +53,7 @@ def lookup(ip: str, api_key: str | None) -> list[Indicator]:
         Indicator(
             id="reputation",
             title="Provider reputation result",
-            category="shodan",
+            category="passive_intel",
             triggered=False,
             detail=f"no passive match for {ip}",
         )
@@ -77,7 +77,8 @@ are namespaced as `intel.<provider>.*`. Categories are restricted to:
 
 | Category | Scores? | Use |
 |----------|---------|-----|
-| `shodan` | Yes (passive-intel weight bucket) | Backwards-compatible scoring tells |
+| `passive_intel` | Yes (0.25 weight bucket) | Preferred scoring tells |
+| `shodan` | Yes (alias → `passive_intel`) | Legacy plugins only |
 | `info` | **No** — never contributes to Honeyscore | Informational annotations only |
 
 Provider failures become skipped indicators, and API keys are redacted from errors and reports.

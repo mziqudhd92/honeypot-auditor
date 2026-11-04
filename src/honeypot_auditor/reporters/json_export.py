@@ -53,6 +53,8 @@ def _report_payload(report: AuditReport) -> dict:
         payload["deception_leaks"] = report.deception_leaks
     if report.dual_stack:
         payload["dual_stack"] = report.dual_stack
+    if report.observables:
+        payload["observables"] = report.observables
     return payload
 
 

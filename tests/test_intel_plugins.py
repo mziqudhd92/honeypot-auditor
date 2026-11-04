@@ -18,10 +18,27 @@ def _finding() -> list[Indicator]:
         Indicator(
             id="honeypot_tag",
             title="Provider reports a honeypot tag",
-            category="shodan",
+            category="passive_intel",
             triggered=True,
         )
     ]
+
+
+def test_legacy_shodan_category_rewritten_to_passive_intel():
+    def legacy_provider(ip, key):
+        return [
+            Indicator(
+                id="legacy",
+                title="legacy shodan category",
+                category="shodan",
+                triggered=True,
+            )
+        ]
+
+    with patch.object(intel, "_registry", {"example": legacy_provider}):
+        rows = intel.run_intel_provider("example", "203.0.113.10")
+    assert rows[0].category == "passive_intel"
+    assert rows[0].id == "intel.example.legacy"
 
 
 def test_named_provider_is_loaded_without_importing_unrelated_entry_points():

@@ -49,7 +49,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             skipped_indicator(
                 "shodan.honeyscore",
                 "Shodan Honeyscore > 0.6",
-                "shodan",
+                "passive_intel",
                 skip_reason,
                 protocol="shodan",
             )
@@ -58,7 +58,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             skipped_indicator(
                 "shodan.tags",
                 "Shodan host tag contains honeypot",
-                "shodan",
+                "passive_intel",
                 skip_reason,
                 protocol="shodan",
             )
@@ -67,7 +67,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             skipped_indicator(
                 "shodan.open_ports",
                 "Shodan reports many open services",
-                "shodan",
+                "passive_intel",
                 skip_reason,
                 protocol="shodan",
             )
@@ -76,7 +76,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             skipped_indicator(
                 "shodan.buffet",
                 "Shodan port buffet with identical product strings",
-                "shodan",
+                "passive_intel",
                 skip_reason,
                 protocol="shodan",
             )
@@ -87,26 +87,26 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
         reason = "Shodan does not index loopback/RFC1918 addresses"
         return [
             skipped_indicator(
-                "shodan.honeyscore", "Shodan Honeyscore > 0.6", "shodan", reason, protocol="shodan"
+                "shodan.honeyscore", "Shodan Honeyscore > 0.6", "passive_intel", reason, protocol="shodan"
             ),
             skipped_indicator(
                 "shodan.tags",
                 "Shodan host tag contains honeypot",
-                "shodan",
+                "passive_intel",
                 reason,
                 protocol="shodan",
             ),
             skipped_indicator(
                 "shodan.open_ports",
                 "Shodan reports many open services",
-                "shodan",
+                "passive_intel",
                 reason,
                 protocol="shodan",
             ),
             skipped_indicator(
                 "shodan.buffet",
                 "Shodan port buffet with identical product strings",
-                "shodan",
+                "passive_intel",
                 reason,
                 protocol="shodan",
             ),
@@ -118,7 +118,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             skipped_indicator(
                 "shodan.honeyscore",
                 "Shodan Honeyscore > 0.6",
-                "shodan",
+                "passive_intel",
                 score_err,
                 protocol="shodan",
                 error=score_err,
@@ -130,7 +130,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             Indicator(
                 id="shodan.honeyscore",
                 title="Shodan Honeyscore > 0.6",
-                category="shodan",
+                category="passive_intel",
                 triggered=triggered,
                 protocol="shodan",
                 detail=f"honeyscore={score}",
@@ -144,7 +144,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             skipped_indicator(
                 "shodan.tags",
                 "Shodan host tag contains honeypot",
-                "shodan",
+                "passive_intel",
                 host_err,
                 protocol="shodan",
                 error=host_err,
@@ -154,7 +154,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             skipped_indicator(
                 "shodan.open_ports",
                 "Shodan reports many open services",
-                "shodan",
+                "passive_intel",
                 host_err,
                 protocol="shodan",
                 error=host_err,
@@ -164,7 +164,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
             skipped_indicator(
                 "shodan.buffet",
                 "Shodan port buffet with identical product strings",
-                "shodan",
+                "passive_intel",
                 host_err,
                 protocol="shodan",
                 error=host_err,
@@ -178,7 +178,7 @@ def shodan_lookup(ip: str, api_key: str | None) -> list[Indicator]:
         Indicator(
             id="shodan.tags",
             title="Shodan host tag contains honeypot",
-            category="shodan",
+            category="passive_intel",
             triggered=hit,
             protocol="shodan",
             detail="tags=" + (", ".join(tags) if tags else "(none)"),
@@ -385,7 +385,7 @@ def _shodan_port_indicators(host_info: dict) -> list[Indicator]:
         Indicator(
             id="shodan.open_ports",
             title="Shodan reports many open services",
-            category="shodan",
+            category="passive_intel",
             triggered=open_count >= 8,
             protocol="shodan",
             detail=f"open_services={open_count}",
@@ -394,7 +394,7 @@ def _shodan_port_indicators(host_info: dict) -> list[Indicator]:
         Indicator(
             id="shodan.buffet",
             title="Shodan port buffet with identical product strings",
-            category="shodan",
+            category="passive_intel",
             triggered=buffet_hit,
             protocol="shodan",
             detail=f"open_services={open_count}; top_product={top_product!r} count={max_same}",

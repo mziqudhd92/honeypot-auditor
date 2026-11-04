@@ -315,12 +315,15 @@ def probe_tls_stack(host: str, port: int) -> list[Indicator]:
     if blend:
         triggered = bool(cn_hit) or not stable
 
+    from honeypot_auditor.tls_fingerprint import pem_cert_sha256
+
     evidence = json.dumps(
         {
             "ja3s": ja3s,
             "ja4s": ja4s,
             "raw_kexinit": "",
             "cert_snippet": cert_text[:240],
+            "cert_sha256": pem_cert_sha256(cert_text),
             "lure_match": lure_name,
         }
     )

@@ -72,8 +72,14 @@ def run_intel_provider(name: str, ip: str, api_key: str | None = None) -> list[I
         if not isinstance(result, list) or not all(isinstance(ind, Indicator) for ind in result):
             raise TypeError("provider must return list[Indicator]")
         for ind in result:
-            if ind.category not in {"shodan", "info"}:
-                raise ValueError("provider indicators must use the 'shodan' or 'info' category")
+            # Legacy "shodan" category is rewritten to passive_intel for scoring.
+            if ind.category == "shodan":
+                ind.category = "passive_intel"
+            if ind.category not in {"passive_intel", "info"}:
+                raise ValueError(
+                    "provider indicators must use the 'passive_intel' or 'info' category"
+                    " (legacy 'shodan' is accepted as an alias for passive_intel)"
+                )
             if not ind.id.startswith(f"intel.{normalized}."):
                 ind.id = f"intel.{normalized}.{ind.id}"
             ind.protocol = protocol
@@ -85,7 +91,7 @@ def run_intel_provider(name: str, ip: str, api_key: str | None = None) -> list[I
             skipped_indicator(
                 f"intel.{normalized}.unavailable",
                 f"Passive intelligence provider {normalized}",
-                "shodan",
+                "passive_intel",
                 detail,
                 protocol=protocol,
                 error=detail,

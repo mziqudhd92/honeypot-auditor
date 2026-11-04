@@ -30,6 +30,64 @@ def test_match_lure_profile_empty_when_no_match():
     assert kind == ""
 
 
+def test_packaged_lure_hashes_are_not_placeholders():
+    from honeypot_auditor.tls_fingerprint import (
+        _is_placeholder,
+        clear_tls_profile_cache,
+        load_tls_profiles,
+        match_lure_profile,
+    )
+
+    clear_tls_profile_cache()
+    lures = load_tls_profiles()["lures"]
+    assert lures
+    for name, prof in lures.items():
+        ja3s = str(prof.get("ja3s") or "")
+        ja4s = str(prof.get("ja4s") or "")
+        assert not (_is_placeholder(ja3s) and _is_placeholder(ja4s)), name
+        if ja3s and not _is_placeholder(ja3s):
+            hit, kind = match_lure_profile(ja3s)
+            assert hit == name
+            assert kind == "lure"
+        if ja4s and not _is_placeholder(ja4s):
+            hit, kind = match_lure_profile("", ja4s)
+            assert hit == name
+            assert kind == "lure"
+
+
+def test_tls_stack_lure_match_when_hash_seeded(monkeypatch):
+    import json
+
+    from honeypot_auditor.probes.deep import stack as tls_stack
+    from honeypot_auditor.tls_fingerprint import clear_tls_profile_cache, load_tls_profiles
+
+    clear_tls_profile_cache()
+    cowrie_ja3s = load_tls_profiles()["lures"]["cowrie_https"]["ja3s"]
+
+    class _Parsed:
+        version = 0x0303
+
+    monkeypatch.setattr(
+        tls_stack,
+        "tls_handshake",
+        lambda *a, **k: (b"\x16\x03\x03\x00\x01\x00", ""),
+    )
+    monkeypatch.setattr(tls_stack, "read_server_hello", lambda raw: _Parsed())
+    monkeypatch.setattr(tls_stack, "compute_ja3s", lambda parsed: cowrie_ja3s)
+    monkeypatch.setattr(tls_stack, "compute_ja4s", lambda parsed: "")
+    monkeypatch.setattr(
+        tls_stack,
+        "_stdlib_cert_peek",
+        lambda *a, **k: ("", None, None, ""),
+    )
+    monkeypatch.setattr(tls_stack, "match_tls_stock_cert", lambda text: None)
+
+    ind = tls_stack.probe_tls_stack("127.0.0.1", 443)[0]
+    evidence = json.loads(ind.evidence)
+    assert evidence["lure_match"] == "cowrie_https"
+    assert ind.triggered is True
+
+
 def test_merge_tls_profile_entry_lure_and_cdn():
     from honeypot_auditor.tls_fingerprint import merge_tls_profile_entry
 

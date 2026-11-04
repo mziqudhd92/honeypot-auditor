@@ -24,6 +24,7 @@ from honeypot_auditor.config import (
     effective_user_agent,
     match_http_proxy_lure,
 )
+from honeypot_auditor.config.signatures.c2_decoy import classify_c2_http_face
 from honeypot_auditor.httpwire import parse_header_map as _parse_headers
 from honeypot_auditor.httpwire import parse_header_names
 from honeypot_auditor.models import Indicator, optional_import
@@ -199,6 +200,7 @@ def probe_http(host: str, port: int) -> list[Indicator]:
     fetched = False
     get_status = 0
     get_headers: dict[str, str] = {}
+    get_body = b""
 
     if requests is not None:
         base = f"{_scheme(port)}://{host}:{port}"
@@ -222,6 +224,7 @@ def probe_http(host: str, port: int) -> list[Indicator]:
                 tell in server_val.lower() for tell in HTTP_SERVER_TELLS if server_val
             )
             body = resp.content[:2048]
+            get_body = body
             loc = get_headers.get("location", "")
             if resp.status_code in (301, 302, 303, 307) and "index.html" in loc.lower():
                 login_skin = True
@@ -644,7 +647,122 @@ def probe_http(host: str, port: int) -> list[Indicator]:
             detail="HTTP status received",
         ),
     ]
+    indicators.extend(
+        _c2_face_indicators(
+            host,
+            port,
+            get_status=get_status,
+            get_headers=get_headers or header_map,
+            get_body=get_body,
+            requests_mod=requests if fetched else None,
+        )
+    )
     return indicators
+
+
+def _probe_c2_dynamic_backend(requests_mod, base: str) -> tuple[bool, bool, bool]:
+    """Non-destructive checks for live C2 control-plane endpoints."""
+    graphql_ok = False
+    websocket_upgrade = False
+    api_json_ok = False
+    if requests_mod is None:
+        return graphql_ok, websocket_upgrade, api_json_ok
+    try:
+        g = requests_mod.post(  # nosec B501
+            f"{base}/graphql",
+            json={"query": "{ __typename }"},
+            timeout=min(2.0, settings.timeout_seconds),
+            headers={"User-Agent": effective_user_agent(), "Content-Type": "application/json"},
+            verify=False,
+            proxies=configure_requests_proxy() or None,
+        )
+        ctype = (g.headers.get("Content-Type") or "").lower()
+        if g.status_code < 500 and ("json" in ctype or b"data" in g.content[:200].lower()):
+            graphql_ok = True
+    except Exception as exc:
+        _log.debug("C2 GraphQL probe failed: %s", exc)
+    try:
+        w = requests_mod.get(  # nosec B501
+            f"{base}/",
+            timeout=min(2.0, settings.timeout_seconds),
+            headers={
+                "User-Agent": effective_user_agent(),
+                "Connection": "Upgrade",
+                "Upgrade": "websocket",
+                "Sec-WebSocket-Version": "13",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            },
+            verify=False,
+            proxies=configure_requests_proxy() or None,
+            allow_redirects=False,
+        )
+        if w.status_code in (101, 426) or "websocket" in (w.headers.get("Upgrade") or "").lower():
+            websocket_upgrade = True
+    except Exception as exc:
+        _log.debug("C2 WebSocket probe failed: %s", exc)
+    try:
+        a = requests_mod.get(  # nosec B501
+            f"{base}/api/v1/info",
+            timeout=min(2.0, settings.timeout_seconds),
+            headers={"User-Agent": effective_user_agent()},
+            verify=False,
+            proxies=configure_requests_proxy() or None,
+            allow_redirects=False,
+        )
+        ctype = (a.headers.get("Content-Type") or "").lower()
+        if a.status_code == 200 and "json" in ctype:
+            api_json_ok = True
+    except Exception as exc:
+        _log.debug("C2 API probe failed: %s", exc)
+    return graphql_ok, websocket_upgrade, api_json_ok
+
+
+def _c2_face_indicators(
+    host: str,
+    port: int,
+    *,
+    get_status: int,
+    get_headers: dict[str, str],
+    get_body: bytes,
+    requests_mod,
+) -> list[Indicator]:
+    if not get_status and not get_body:
+        return []
+    base = f"{_scheme(port)}://{host}:{port}"
+    gql, ws, api = _probe_c2_dynamic_backend(requests_mod, base) if requests_mod else (False, False, False)
+    ctype = get_headers.get("content-type") or get_headers.get("Content-Type") or ""
+    ind_id, detail, fidelity, needs_corr, fp = classify_c2_http_face(
+        status=get_status or 0,
+        content_type=ctype,
+        body=get_body or b"",
+        graphql_ok=gql,
+        websocket_upgrade=ws,
+        api_json_ok=api,
+    )
+    if not ind_id:
+        return []
+    return [
+        Indicator(
+            id=ind_id,
+            title=(
+                "HTTP face looks like a static C2 decoy clone"
+                if ind_id == "http.c2_decoy_clone"
+                else "HTTP face looks like a C2 panel or decoy (ambiguous)"
+            ),
+            category="static_signature",
+            triggered=True,
+            protocol="http",
+            detail=detail,
+            evidence=(get_body or b"")[:400].decode("latin-1", "replace"),
+            fidelity=fidelity,
+            requires_corroboration=needs_corr,
+            fingerprint_type=fp,
+            remediation=(
+                "Static C2 UI clones without a live backend are high-fidelity decoys; "
+                "stock 404/plain alone is ambiguous and needs corroboration"
+            ),
+        )
+    ]
 
 
 def _framework_404_session(status: int, server_val: str, headers: dict[str, str]) -> bool:

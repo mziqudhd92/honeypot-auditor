@@ -106,6 +106,27 @@ def _is_placeholder(value: str) -> bool:
     return not text or text in {"n/a", "placeholder"} or "placeholder" in text
 
 
+def pem_cert_sha256(pem_or_text: str) -> str:
+    """SHA-256 (hex) of the first certificate's DER bytes; empty if unparseable."""
+    text = pem_or_text or ""
+    begin = "-----BEGIN CERTIFICATE-----"
+    end = "-----END CERTIFICATE-----"
+    start = text.find(begin)
+    stop = text.find(end)
+    if start < 0 or stop < 0 or stop <= start:
+        return ""
+    import base64
+
+    b64 = "".join(text[start + len(begin) : stop].split())
+    try:
+        der = base64.b64decode(b64, validate=False)
+    except Exception:
+        return ""
+    if not der:
+        return ""
+    return hashlib.sha256(der).hexdigest()
+
+
 def parse_host_port(target: str, *, default_port: int = 443) -> tuple[str, int]:
     """Parse HOST:PORT, [IPv6]:PORT, or bare host/IPv6 (uses default_port)."""
     text = (target or "").strip()

@@ -4,11 +4,13 @@ import pytest
 
 from honeypot_auditor.analyzer import build_report, compute_score, threat_level
 from honeypot_auditor.config import (
+    WEIGHTS,
     match_ssh_banner,
     match_uname_signature,
     merge_ports,
     parse_port_overrides,
 )
+from honeypot_auditor.config.scoring import normalize_category
 from honeypot_auditor.models import Indicator
 
 
@@ -41,13 +43,30 @@ def test_cowrie_basic_tells_are_confirmed():
     score, hits = compute_score(inds)
     assert score == 100.0
     assert threat_level(score, inds) == "Confirmed Honeypot"
-    assert hits["shodan"]["triggered"]
+    assert hits["passive_intel"]["triggered"]
     assert hits["arbitrary_auth"]["triggered"]
     assert not hits["cotenancy"]["triggered"]
 
 
-def test_shodan_only_is_25():
+def test_passive_intel_weight_bucket_replaces_shodan():
+    assert "passive_intel" in WEIGHTS
+    assert "shodan" not in WEIGHTS
+    assert WEIGHTS["passive_intel"] == 0.25
+    assert normalize_category("shodan") == "passive_intel"
+    assert normalize_category("passive_intel") == "passive_intel"
+
+
+def test_legacy_shodan_category_aliases_to_passive_intel_score():
+    # Providers/indicators may still emit category="shodan"; scoring uses passive_intel.
     inds = [_ind("shodan", True), _ind("arbitrary_auth", False)]
+    score, hits = compute_score(inds)
+    assert score == 25.0
+    assert hits["passive_intel"]["triggered"]
+    assert "shodan" not in hits
+
+
+def test_shodan_only_is_25():
+    inds = [_ind("passive_intel", True), _ind("arbitrary_auth", False)]
     score, _ = compute_score(inds)
     assert score == 25.0
     # Fired tells below Suspected must never read as Likely Real Host.
@@ -55,22 +74,22 @@ def test_shodan_only_is_25():
 
 
 def test_clean_host_is_likely_real():
-    inds = [_ind("shodan", False), _ind("arbitrary_auth", False)]
+    inds = [_ind("passive_intel", False), _ind("arbitrary_auth", False)]
     score, _ = compute_score(inds)
     assert score == 0.0
     assert threat_level(score, inds) == "Likely Real Host"
 
 
 def test_skipped_does_not_count():
-    inds = [_ind("shodan", True, skipped=True), _ind("arbitrary_auth", False)]
+    inds = [_ind("passive_intel", True, skipped=True), _ind("arbitrary_auth", False)]
     score, hits = compute_score(inds)
     assert score == 0.0
-    assert not hits["shodan"]["triggered"]
-    assert not hits["shodan"]["attempted"]
+    assert not hits["passive_intel"]["triggered"]
+    assert not hits["passive_intel"]["attempted"]
 
 
 def test_all_skipped_inconclusive():
-    inds = [_ind("shodan", False, skipped=True)]
+    inds = [_ind("passive_intel", False, skipped=True)]
     report = build_report(
         target="127.0.0.1",
         resolved_ip="127.0.0.1",

@@ -22,6 +22,7 @@ from honeypot_auditor.config import (
     THREAT_SUSPECTED,
     WEIGHTS,
     as_port_list,
+    normalize_category,
 )
 from honeypot_auditor.models import AuditReport, Indicator
 
@@ -31,10 +32,11 @@ def category_triggered(indicators: Iterable[Indicator], category: str) -> bool:
 
 
 def category_hit_count(indicators: Iterable[Indicator], category: str) -> int:
+    want = normalize_category(category)
     return sum(
         1
         for ind in indicators
-        if ind.category == category
+        if normalize_category(ind.category) == want
         and ind.triggered
         and not ind.skipped
         and not ind.suppressed
@@ -42,8 +44,9 @@ def category_hit_count(indicators: Iterable[Indicator], category: str) -> int:
 
 
 def category_attempted(indicators: Iterable[Indicator], category: str) -> bool:
+    want = normalize_category(category)
     for ind in indicators:
-        if ind.category == category and not ind.skipped:
+        if normalize_category(ind.category) == want and not ind.skipped:
             return True
     return False
 
@@ -562,9 +565,9 @@ def compute_tactical_action(
     return "INCONCLUSIVE", "No clear tactical recommendation."
 
 
-def apply_stack_corroboration(indicators: list[Indicator]) -> list[Indicator]:
-    """Suppress requires_corroboration indicators without another category hit."""
-    has_other = any(
+def has_ungated_corroboration(indicators: Iterable[Indicator]) -> bool:
+    """True when at least one ungated, non-info tell can corroborate gated indicators."""
+    return any(
         i.triggered
         and not i.skipped
         and not i.suppressed
@@ -572,6 +575,11 @@ def apply_stack_corroboration(indicators: list[Indicator]) -> list[Indicator]:
         and i.category not in ("corroboration", "info")
         for i in indicators
     )
+
+
+def apply_stack_corroboration(indicators: list[Indicator]) -> list[Indicator]:
+    """Suppress requires_corroboration indicators without another category hit."""
+    has_other = has_ungated_corroboration(indicators)
     out: list[Indicator] = []
     for ind in indicators:
         if ind.requires_corroboration and ind.triggered and not has_other:
@@ -588,25 +596,32 @@ def apply_stack_corroboration(indicators: list[Indicator]) -> list[Indicator]:
 
 
 def redact_indicators(indicators: list[Indicator]) -> list[Indicator]:
-    from honeypot_auditor.redact import redact
+    from honeypot_auditor.redact import redact, redact_match_families
 
     out: list[Indicator] = []
-    honeytoken = False
+    families: list[str] = []
+    seen: set[str] = set()
     for ind in indicators:
-        ev, found = redact(ind.evidence)
-        det, found2 = redact(ind.detail)
-        honeytoken = honeytoken or found or found2
+        for text in (ind.evidence, ind.detail):
+            for family in redact_match_families(text):
+                if family not in seen:
+                    seen.add(family)
+                    families.append(family)
+        ev, _ = redact(ind.evidence)
+        det, _ = redact(ind.detail)
         out.append(replace(ind, evidence=ev, detail=det))
-    if honeytoken:
+    if families:
         out.append(
             Indicator(
-                id="info.honeytoken_detected",
-                title="Synthetic credential pattern redacted from output",
-                category="info",
+                id="deception.honeytoken_exposed",
+                title="Honeytoken / canary credential pattern exposed",
+                category="static_signature",
                 triggered=True,
                 protocol="info",
-                detail="Honeytoken patterns were redacted before export",
-                fidelity="low",
+                detail=f"Matched honeytoken families: {', '.join(families)}",
+                evidence=",".join(families),
+                fidelity="high",
+                remediation="Remove planted canaries from production-facing surfaces or expect CTI scoring",
             )
         )
     return out
@@ -787,6 +802,8 @@ def build_report(
         threat_level=level,
         indicators=indicators,
     )
+    from honeypot_auditor.observables import collect_observables
+
     return AuditReport(
         target=target,
         resolved_ip=resolved_ip,
@@ -810,4 +827,5 @@ def build_report(
         deception_leaks=build_deception_leaks(indicators),
         score_breakdown=score_breakdown,
         scoped_score=scoped_score,
+        observables=collect_observables(indicators),
     )
