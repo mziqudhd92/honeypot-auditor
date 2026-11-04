@@ -23,7 +23,9 @@ def _mini_report():
                 category="stack_fingerprint",
                 triggered=True,
                 protocol="ssh",
-                evidence=json.dumps({"hassh_server": "aabbccddeeff00112233445566778899"}),
+                evidence=json.dumps(
+                    {"hassh_server": "aabbccddeeff00112233445566778899"}  # pragma: allowlist secret
+                ),
                 fidelity="high",
             ),
             Indicator(
@@ -46,8 +48,11 @@ def test_stix_bundle_shape():
     report = _mini_report()
     # Attach TLS cert hash so x509-certificate SCO is emitted.
     report.observables = {
-        "ssh": {"hassh_server": "aabbccddeeff00112233445566778899"},
-        "tls": {"ja3s": "cafebabedeadbeefcafebabedeadbeef", "cert_sha256": "ab" * 32},
+        "ssh": {"hassh_server": "aabbccddeeff00112233445566778899"},  # pragma: allowlist secret
+        "tls": {
+            "ja3s": "cafebabedeadbeefcafebabedeadbeef",  # pragma: allowlist secret
+            "cert_sha256": "ab" * 32,
+        },
     }
     bundle = stix_export.build_stix_bundle(report)
     assert bundle["type"] == "bundle"

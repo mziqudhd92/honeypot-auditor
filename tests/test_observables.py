@@ -27,7 +27,7 @@ EQj2RBIT6ectBd/akp9BDfMPgZ/JTEPyrfTAgg8cLZD2otZ6xDbrtHS9Ft21bIsY
 RLRZnrau+JZYnGp/YAJ+CUQp4ipherU4VgXpeRTZZUwk/g==
 -----END CERTIFICATE-----
 """
-_FAKE_CERT_SHA256 = "75e4ada7199d1a271e463e24bc41fb9e14409de6ad28c4578e00219ff568181c"
+_FAKE_CERT_SHA256 = "75e4ada7199d1a271e463e24bc41fb9e14409de6ad28c4578e00219ff568181c"  # pragma: allowlist secret
 
 
 def _inds() -> list[Indicator]:
@@ -41,7 +41,7 @@ def _inds() -> list[Indicator]:
             evidence=json.dumps(
                 {
                     "banner": "SSH-2.0-OpenSSH_7.9",
-                    "hassh_server": "aabbccddeeff00112233445566778899",
+                    "hassh_server": "aabbccddeeff00112233445566778899",  # pragma: allowlist secret
                     "kex": "curve25519",
                 }
             ),
@@ -82,8 +82,8 @@ def _inds() -> list[Indicator]:
 
 def test_collect_observables_from_fixture_indicators():
     obs = collect_observables(_inds())
-    assert obs["ssh"]["hassh_server"] == "aabbccddeeff00112233445566778899"
-    assert obs["tls"]["ja3s"] == "cafebabedeadbeefcafebabedeadbeef"
+    assert obs["ssh"]["hassh_server"] == "aabbccddeeff00112233445566778899"  # pragma: allowlist secret
+    assert obs["tls"]["ja3s"] == "cafebabedeadbeefcafebabedeadbeef"  # pragma: allowlist secret
     assert obs["tls"]["ja4s"] == "t130200_1301_0000"
     assert obs["tls"]["cert_sha256"] == _FAKE_CERT_SHA256
     assert obs["ntlm"]["native_os"] == "Windows Server 2016"

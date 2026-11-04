@@ -43,7 +43,11 @@ jobs:
       - name: Secret candidates
         shell: bash
         run: |
-          uv run detect-secrets scan --exclude-files 'tests/fixtures/.*' > /tmp/detect-secrets.json
+          # data/*.json holds JA3S/JA4S fingerprint corpora (not credentials).
+          uv run detect-secrets scan \
+            --exclude-files 'tests/fixtures/.*' \
+            --exclude-files 'src/honeypot_auditor/data/.*' \
+            > /tmp/detect-secrets.json
           python - <<'PY'
           import json
 
