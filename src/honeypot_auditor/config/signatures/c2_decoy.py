@@ -25,10 +25,25 @@ _CS_UI = (
     "beacon",
     "aggressor",
 )
-_SLIVER_UI = (
-    "sliver",
-    "implant",
+# Default Cobalt Strike teamserver TLS face markers (ambiguous — never alone Confirm).
+# Match CN/O strings and the well-known default serial from public CS docs only.
+_CS_TLS_NAME = re.compile(r"cobalt\s*strike|major\s+cobalt", re.I)
+_CS_TLS_SERIAL = re.compile(
+    r"(?:serial(?:\s*number)?|serialNumber)\s*[:=]?\s*(?:0x)?0*146473198\b",
+    re.I,
 )
+
+
+def match_c2_stock_tls_cert(cert_text: str) -> str | None:
+    """Default CS teamserver TLS cert → ambiguous panel_or_decoy class only."""
+    text = cert_text or ""
+    if not text.strip():
+        return None
+    if _CS_TLS_NAME.search(text):
+        return "stock Cobalt Strike teamserver TLS name (ambiguous)"
+    if _CS_TLS_SERIAL.search(text):
+        return "stock Cobalt Strike teamserver TLS serial (ambiguous)"
+    return None
 
 
 def match_c2_stock_404_plain(status: int, content_type: str, body: bytes | str) -> str | None:
@@ -59,7 +74,7 @@ def match_c2_static_ui_clone(body: bytes | str) -> str | None:
             return "static Mythic-like UI markers"
     if any(tok in low for tok in _CS_UI):
         return "static Cobalt Strike-like UI markers"
-    if any(tok in low for tok in _SLIVER_UI):
+    if "sliver" in low:
         return "static Sliver-like UI markers"
     return None
 

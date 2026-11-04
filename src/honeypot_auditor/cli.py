@@ -590,7 +590,9 @@ def _probe_jobs(
         for port in ports.get(proto, []):
             jobs.append((f"{proto}:{port}", _port_probe_job(fn, ip, port, proto)))
     if (settings.deep or bool(getattr(args, "deep", False))) and not settings.safe_mode:
-        jobs.append(("deep", lambda: run_deep_probes(ip, ports)))
+        # Placeholder only — `_audit_host` runs `run_deep_probes(..., corroboration=)`
+        # after non-deep jobs so gated tells see real ungated hits.
+        jobs.append(("deep", lambda: []))
     return jobs
 
 
@@ -648,6 +650,31 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.capabilities = caps
 
 
+_EXPORT_SUFFIXES = (
+    ".stix.json",
+    ".misp.json",
+    ".sarif",
+    ".html",
+    ".csv",
+    ".md",
+    ".markdown",
+    ".json",
+)
+
+
+def _with_export_suffix(path: str | Path, suffix: str) -> Path:
+    """Apply an export suffix without doubling compound endings (e.g. .stix.json)."""
+    p = Path(path)
+    s = suffix if suffix.startswith(".") else f".{suffix}"
+    name = p.name
+    if name.endswith(s):
+        return p
+    for known in _EXPORT_SUFFIXES:
+        if name.endswith(known):
+            return p.with_name(name[: -len(known)] + s)
+    return p.with_name(name + s)
+
+
 def _export_report(report: AuditReport, out: str, fmt: str) -> Path:
     """Dispatch one finished report to the chosen file format."""
     from honeypot_auditor.reporters.misp_export import export_misp
@@ -659,17 +686,17 @@ def _export_report(report: AuditReport, out: str, fmt: str) -> Path:
     )
 
     if fmt == "sarif":
-        return export_sarif(report, str(Path(out).with_suffix(".sarif")))
+        return export_sarif(report, str(_with_export_suffix(out, ".sarif")))
     if fmt == "html":
-        return export_html(_report_payload_for(report), str(Path(out).with_suffix(".html")))
+        return export_html(_report_payload_for(report), str(_with_export_suffix(out, ".html")))
     if fmt == "csv":
-        return export_csv(_report_payload_for(report), str(Path(out).with_suffix(".csv")))
+        return export_csv(_report_payload_for(report), str(_with_export_suffix(out, ".csv")))
     if fmt == "markdown":
-        return export_markdown(_report_payload_for(report), str(Path(out).with_suffix(".md")))
+        return export_markdown(_report_payload_for(report), str(_with_export_suffix(out, ".md")))
     if fmt == "stix":
-        return export_stix(report, Path(out).with_suffix(".stix.json"))
+        return export_stix(report, _with_export_suffix(out, ".stix.json"))
     if fmt == "misp":
-        return export_misp(report, Path(out).with_suffix(".misp.json"))
+        return export_misp(report, _with_export_suffix(out, ".misp.json"))
     return export(report, out)
 
 
@@ -980,7 +1007,15 @@ async def run_audit(args: argparse.Namespace) -> int:
             console.print(f"[dim]{note}[/dim]")
     out = _subnet_output_path(args.target, args.output)
     if args.format == "sarif":
-        dest = export_sarif_many(reports, Path(out).with_suffix(".sarif"))
+        dest = export_sarif_many(reports, _with_export_suffix(out, ".sarif"))
+    elif args.format == "stix":
+        from honeypot_auditor.reporters.stix_export import export_stix_many
+
+        dest = export_stix_many(reports, _with_export_suffix(out, ".stix.json"))
+    elif args.format == "misp":
+        from honeypot_auditor.reporters.misp_export import export_misp_many
+
+        dest = export_misp_many(reports, _with_export_suffix(out, ".misp.json"))
     elif args.format in ("html", "csv", "markdown"):
         from honeypot_auditor.reporters.json_export import write_owner_only
         from honeypot_auditor.reporters.text_export import (
@@ -998,7 +1033,7 @@ async def run_audit(args: argparse.Namespace) -> int:
             "hosts": [_report_payload_for(r) for r in reports],
         }
         suffix = {"html": ".html", "csv": ".csv", "markdown": ".md"}[args.format]
-        dest = Path(out).with_suffix(suffix)
+        dest = _with_export_suffix(out, suffix)
         dest.parent.mkdir(parents=True, exist_ok=True)
         if args.format == "csv":
             dest = export_csv_subnet(payload, dest)

@@ -3,78 +3,43 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from honeypot_auditor.config import USER_AGENT
+from honeypot_auditor.config.history_families import (
+    EIP_FAMILIES,
+    LEGACY_DB_ICS_FAMILIES,
+    PORT_FAMILY,
+)
 from honeypot_auditor.models import Indicator, skipped_indicator
 from honeypot_auditor.settings import settings
 
-# Cheap port→family map for entropy scoring (not full product attribution).
-_PORT_FAMILY: dict[int, str] = {
-    21: "ftp",
-    22: "ssh",
-    23: "telnet",
-    25: "mail",
-    53: "dns",
-    80: "web",
-    110: "mail",
-    143: "mail",
-    161: "snmp",
-    443: "web",
-    445: "smb",
-    502: "modbus",
-    993: "mail",
-    995: "mail",
-    1433: "mssql",
-    1883: "mqtt",
-    3306: "mysql",
-    3389: "rdp",
-    5432: "postgres",
-    5900: "vnc",
-    6379: "redis",
-    8080: "web",
-    8443: "web",
-    9200: "elasticsearch",
-    27017: "mongo",
-}
-
-# EIP-recycle faces commonly appear together on cloud churn — low deception alone.
-_EIP_FAMILIES = frozenset({"web", "mail", "ssh"})
-
-# Legacy / DB / ICS families that raise sudden_buffet entropy.
-_LEGACY_DB_ICS = frozenset(
-    {
-        "telnet",
-        "smb",
-        "ftp",
-        "mysql",
-        "mssql",
-        "postgres",
-        "redis",
-        "mongo",
-        "modbus",
-        "snmp",
-        "mqtt",
-        "rdp",
-        "vnc",
-        "elasticsearch",
-        "dns",
-    }
-)
-
-SHODAN_HISTORY_URL = "https://api.shodan.io/shodan/host/{ip}/history"
-HISTORY_MAX_BYTES = 512_000
+# Documented host endpoint with history=true (not a separate /history path).
+SHODAN_HISTORY_URL = "https://api.shodan.io/shodan/host/{ip}"
+# History payloads with many banners routinely exceed 512KB; keep a hard cap.
+HISTORY_MAX_BYTES = 2_000_000
 HISTORY_TIMEOUT_SECONDS = 8.0
 SUDDEN_WINDOW_DAYS = 7
 SUDDEN_MIN_PORTS = 8
 SUDDEN_MIN_LEGACY_FAMILIES = 4
 
 
+def _scrub_api_key(detail: str, api_key: str) -> str:
+    """Keep API keys out of skip_reason / error fields (URLError may embed the keyed URL)."""
+    text = detail or ""
+    if api_key:
+        text = text.replace(api_key, "[REDACTED]")
+    # Query-string form even if key value was partially escaped in the exception.
+    text = re.sub(r"([?&]key=)[^&\s\"']+", r"\1[REDACTED]", text, flags=re.I)
+    return text
+
+
 def port_family(port: int, product: str = "") -> str:
-    fam = _PORT_FAMILY.get(int(port), "")
+    fam = PORT_FAMILY.get(int(port), "")
     if fam:
         return fam
     prod = (product or "").lower()
@@ -121,9 +86,18 @@ def _parse_ts(raw: str) -> datetime | None:
     text = (raw or "").strip()
     if not text:
         return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        pass
     for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(text.replace("Z", ""), fmt).replace(tzinfo=timezone.utc)
+            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
             continue
     return None
@@ -139,15 +113,16 @@ def evaluate_sudden_buffet(history_rows: list[dict[str, Any]]) -> Indicator | No
     in_window: list[dict[str, Any]] = []
     for row in projected:
         ts = _parse_ts(str(row.get("timestamp") or ""))
-        if ts is None or ts >= window_start:
+        # Unparseable / missing timestamps must not inflate the 7-day window.
+        if ts is not None and ts >= window_start:
             in_window.append(row)
     ports = {int(r["port"]) for r in in_window}
     if len(ports) < SUDDEN_MIN_PORTS:
         return None
     families = {str(r.get("family") or "other") for r in in_window}
-    legacy = families & _LEGACY_DB_ICS
-    eip_only = families <= _EIP_FAMILIES or (
-        len(legacy) < SUDDEN_MIN_LEGACY_FAMILIES and families <= (_EIP_FAMILIES | {"other"})
+    legacy = families & LEGACY_DB_ICS_FAMILIES
+    eip_only = families <= EIP_FAMILIES or (
+        len(legacy) < SUDDEN_MIN_LEGACY_FAMILIES and families <= (EIP_FAMILIES | {"other"})
     )
     if eip_only or len(legacy) < SUDDEN_MIN_LEGACY_FAMILIES:
         # EIP churn / low entropy — do not emit high-fidelity sudden_buffet.
@@ -191,7 +166,7 @@ def fetch_shodan_history(
     parsed = urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname != "api.shodan.io":
         return [], "refusing history URL outside HTTPS Shodan API allowlist"
-    full = url + "?" + urlencode({"key": api_key})
+    full = url + "?" + urlencode({"key": api_key, "history": "true"})
     req = Request(full, headers={"User-Agent": USER_AGENT})
     to = timeout if timeout is not None else min(HISTORY_TIMEOUT_SECONDS, settings.timeout_seconds)
     try:
@@ -205,7 +180,7 @@ def fetch_shodan_history(
     except TimeoutError:
         return [], "history request timed out; skipped"
     except OSError as exc:
-        return [], f"history request failed: {exc}"
+        return [], _scrub_api_key(f"history request failed: {exc}", api_key)
     try:
         data = json.loads(body)
     except json.JSONDecodeError:
@@ -215,7 +190,7 @@ def fetch_shodan_history(
         rows = [r for r in data if isinstance(r, dict)]
     elif isinstance(data, dict):
         if data.get("error"):
-            return [], str(data.get("error"))
+            return [], _scrub_api_key(str(data.get("error")), api_key)
         rows = [r for r in (data.get("data") or data.get("matches") or []) if isinstance(r, dict)]
     else:
         return [], "unexpected history payload shape"

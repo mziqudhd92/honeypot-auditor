@@ -76,8 +76,20 @@ def build_misp_event(report: AuditReport) -> dict:
     }
 
 
+def build_misp_events(reports: list[AuditReport]) -> dict:
+    """MISP search/export envelope: response entries are full {\"Event\": …} objects."""
+    return {"response": [build_misp_event(report) for report in reports]}
+
+
 def export_misp(report: AuditReport, path: str | Path) -> Path:
     dest = Path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     write_owner_only(dest, json.dumps(build_misp_event(report), indent=2) + "\n")
+    return dest
+
+
+def export_misp_many(reports: list[AuditReport], path: str | Path) -> Path:
+    dest = Path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    write_owner_only(dest, json.dumps(build_misp_events(reports), indent=2) + "\n")
     return dest

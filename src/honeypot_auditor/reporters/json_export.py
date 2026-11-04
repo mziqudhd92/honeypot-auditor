@@ -53,8 +53,8 @@ def _report_payload(report: AuditReport) -> dict:
         payload["deception_leaks"] = report.deception_leaks
     if report.dual_stack:
         payload["dual_stack"] = report.dual_stack
-    if report.observables:
-        payload["observables"] = report.observables
+    # Always present for CTI consumers (empty object when no fingerprints lifted).
+    payload["observables"] = report.observables or {}
     return payload
 
 

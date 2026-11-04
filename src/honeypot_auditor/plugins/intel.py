@@ -71,10 +71,11 @@ def run_intel_provider(name: str, ip: str, api_key: str | None = None) -> list[I
         result = provider(ip, api_key)
         if not isinstance(result, list) or not all(isinstance(ind, Indicator) for ind in result):
             raise TypeError("provider must return list[Indicator]")
+        from honeypot_auditor.config.scoring import normalize_category
+
         for ind in result:
             # Legacy "shodan" category is rewritten to passive_intel for scoring.
-            if ind.category == "shodan":
-                ind.category = "passive_intel"
+            ind.category = normalize_category(ind.category)
             if ind.category not in {"passive_intel", "info"}:
                 raise ValueError(
                     "provider indicators must use the 'passive_intel' or 'info' category"

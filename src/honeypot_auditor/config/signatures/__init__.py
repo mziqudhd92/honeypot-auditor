@@ -14,6 +14,7 @@ from honeypot_auditor.config.signatures.c2_decoy import (
     classify_c2_http_face,
     match_c2_static_ui_clone,
     match_c2_stock_404_plain,
+    match_c2_stock_tls_cert,
 )
 from honeypot_auditor.config.signatures.http import match_http_proxy_lure, match_tls_stock_cert
 from honeypot_auditor.config.signatures.mongo import (
@@ -108,6 +109,7 @@ __all__ = [
     "extract_mysql_scramble",
     "match_c2_static_ui_clone",
     "match_c2_stock_404_plain",
+    "match_c2_stock_tls_cert",
     "match_cowrie_identity",
     "match_cpuinfo_signature",
     "match_ftp_auth_lure",

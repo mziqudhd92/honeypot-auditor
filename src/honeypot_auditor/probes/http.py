@@ -660,6 +660,26 @@ def probe_http(host: str, port: int) -> list[Indicator]:
     return indicators
 
 
+def _looks_like_graphql_response(status: int, content_type: str, content: bytes) -> bool:
+    """Require a JSON GraphQL envelope — not HTML/JSON error pages containing 'data'."""
+    if int(status) >= 500:
+        return False
+    if "json" not in (content_type or "").lower():
+        return False
+    import json
+
+    try:
+        payload = json.loads((content or b"")[:4096].decode("utf-8", "replace"))
+    except (TypeError, ValueError, json.JSONDecodeError, UnicodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    if "data" in payload and payload.get("data") is not None:
+        return True
+    errors = payload.get("errors")
+    return isinstance(errors, list) and bool(errors)
+
+
 def _probe_c2_dynamic_backend(requests_mod, base: str) -> tuple[bool, bool, bool]:
     """Non-destructive checks for live C2 control-plane endpoints."""
     graphql_ok = False
@@ -677,7 +697,7 @@ def _probe_c2_dynamic_backend(requests_mod, base: str) -> tuple[bool, bool, bool
             proxies=configure_requests_proxy() or None,
         )
         ctype = (g.headers.get("Content-Type") or "").lower()
-        if g.status_code < 500 and ("json" in ctype or b"data" in g.content[:200].lower()):
+        if _looks_like_graphql_response(int(g.status_code), ctype, g.content or b""):
             graphql_ok = True
     except Exception as exc:
         _log.debug("C2 GraphQL probe failed: %s", exc)
@@ -729,7 +749,10 @@ def _c2_face_indicators(
     if not get_status and not get_body:
         return []
     base = f"{_scheme(port)}://{host}:{port}"
-    gql, ws, api = _probe_c2_dynamic_backend(requests_mod, base) if requests_mod else (False, False, False)
+    backend_probed = requests_mod is not None
+    gql, ws, api = (
+        _probe_c2_dynamic_backend(requests_mod, base) if backend_probed else (False, False, False)
+    )
     ctype = get_headers.get("content-type") or get_headers.get("Content-Type") or ""
     ind_id, detail, fidelity, needs_corr, fp = classify_c2_http_face(
         status=get_status or 0,
@@ -741,6 +764,14 @@ def _c2_face_indicators(
     )
     if not ind_id:
         return []
+    # GET-only / safe-mode paths never assert "no backend" — do not emit high-fidelity
+    # decoy_clone when dynamic endpoints were not probed (live panels would false-positive).
+    if not backend_probed and ind_id == "http.c2_decoy_clone":
+        ind_id = "http.c2_panel_or_decoy"
+        fidelity = "medium"
+        needs_corr = True
+        fp = ""
+        detail = f"{detail} (backend not probed; ambiguous panel_or_decoy)"
     return [
         Indicator(
             id=ind_id,
@@ -807,6 +838,8 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
         return skip_suite(_HTTP_SKIP, "HTTPS probe needs the requests package", protocol="http")
     text = ""
     header_map: dict[str, str] = {}
+    get_status = 0
+    get_body = b""
     if not tls:
         get_req = (
             b"GET / HTTP/1.1\r\n"
@@ -821,6 +854,14 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
             return _silent_accept_suite("TCP accept; request sent; no HTTP bytes before timeout")
         text = raw.decode("latin-1", "replace")
         header_map = _parse_headers(text)
+        first = text.split("\r\n", 1)[0] if text else ""
+        if first.startswith("HTTP/") and " " in first:
+            try:
+                get_status = int(first.split(" ", 2)[1])
+            except (IndexError, ValueError):
+                get_status = 0
+        parts = text.split("\r\n\r\n", 1)
+        get_body = parts[1].encode("latin-1", "replace")[:2048] if len(parts) > 1 else b""
     else:
         base = f"{_scheme(port)}://{host}:{port}"
         try:
@@ -837,13 +878,15 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
                 f"{k}: {v}" for k, v in resp.headers.items()
             )
             header_map = {k.lower(): v for k, v in resp.headers.items()}
+            get_status = int(resp.status_code)
+            get_body = (resp.content or b"")[:2048]
         except Exception as exc:
             if _tcp_accepts(host, port):
                 return _silent_accept_suite("TCP accept; no HTTPS/HTTP response before timeout")
             return skip_suite(_HTTP_SKIP, str(exc), protocol="http", error=str(exc))
     missing_dynamic = "date" not in header_map
     server_val = header_map.get("server", "")
-    return [
+    indicators = [
         Indicator(
             id="http.dynamic_headers",
             title="HTTP missing dynamic Date header",
@@ -863,3 +906,15 @@ def _probe_http_safe(host: str, port: int) -> list[Indicator]:
         ),
         *skipped,
     ]
+    # Classify C2 face from the safe GET only — no GraphQL/WebSocket follow-ups.
+    indicators.extend(
+        _c2_face_indicators(
+            host,
+            port,
+            get_status=get_status,
+            get_headers=header_map,
+            get_body=get_body,
+            requests_mod=None,
+        )
+    )
+    return indicators

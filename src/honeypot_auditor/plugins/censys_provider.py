@@ -67,14 +67,17 @@ def censys_provider(ip: str, api_key: str | None) -> list[Indicator]:
                 ]
             body = raw.decode("utf-8", "replace")
     except OSError as exc:
+        detail = str(exc)
+        if api_key:
+            detail = detail.replace(api_key, "[REDACTED]")
         return [
             skipped_indicator(
                 "history",
                 "Censys host history / service entropy",
                 "passive_intel",
-                f"censys request failed: {exc}",
+                f"censys request failed: {detail}",
                 protocol="intel:censys",
-                error=str(exc),
+                error=detail,
             )
         ]
     try:
@@ -97,34 +100,40 @@ def censys_provider(ip: str, api_key: str | None) -> list[Indicator]:
             continue
         port = svc.get("port")
         transport = str(svc.get("transport_protocol") or "tcp")
-        product = str((svc.get("service_name") or "")).strip()
+        product = str(svc.get("service_name") or "").strip()
         observed = str(svc.get("observed_at") or svc.get("last_updated_at") or "")
         projected = project_history_row(
             {"port": port, "transport": transport, "timestamp": observed, "product": product}
         )
         if projected:
             rows.append(projected)
-    # Reuse sudden_buffet entropy; rewrite id for censys provenance via run_intel_provider prefix.
+    # Current host snapshot ≠ historical emergence. Reuse entropy helpers for family
+    # diversity, but never emit high-fidelity sudden_buffet from a co-resident snapshot.
     ind = evaluate_sudden_buffet(rows)
-    if ind is None:
+    if ind is None or not ind.triggered:
         return [
             Indicator(
                 id="history",
                 title="Censys service entropy",
                 category="passive_intel",
                 triggered=False,
-                detail="no multi-family sudden buffet in Censys services snapshot",
+                detail="no multi-family co-resident services in Censys snapshot",
                 fidelity="low",
             )
         ]
     return [
         Indicator(
-            id="sudden_buffet",
-            title="Censys sudden multi-family service buffet",
+            id="multi_family_services",
+            title="Censys multi-family co-resident services",
             category="passive_intel",
-            triggered=ind.triggered,
-            detail=ind.detail.replace("Shodan history", "Censys services"),
+            triggered=True,
+            detail=(
+                "Censys current services show diverse legacy/DB/ICS families "
+                "(snapshot co-presence, not proven sudden emergence); "
+                + (ind.detail or "")
+            )[:500],
             evidence=ind.evidence,
-            fidelity=ind.fidelity,
+            fidelity="medium",
+            requires_corroboration=True,
         )
     ]

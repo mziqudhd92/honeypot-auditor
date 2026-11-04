@@ -40,16 +40,30 @@ def test_diverse_legacy_db_ics_is_high_sudden_buffet():
 
 
 def test_history_oversize_skips():
+    from honeypot_auditor.probes.history_intel import HISTORY_MAX_BYTES
+
     with patch("honeypot_auditor.probes.history_intel.urlopen") as mock_open:
         resp = MagicMock()
         resp.status = 200
-        resp.read.return_value = b"x" * (512_000 + 10)
+        resp.read.return_value = b"x" * (HISTORY_MAX_BYTES + 10)
         resp.__enter__ = lambda s: s
         resp.__exit__ = MagicMock(return_value=False)
         mock_open.return_value = resp
         rows, err = fetch_shodan_history("203.0.113.10", "key")
     assert rows == []
     assert "exceeded" in err
+
+
+def test_history_error_scrubs_api_key_from_detail():
+    keyed_url = "https://api.shodan.io/shodan/host/1.2.3.4?key=super-secret-key&history=true"
+    with patch(
+        "honeypot_auditor.probes.history_intel.urlopen",
+        side_effect=OSError(f"HTTP Error 401: {keyed_url}"),
+    ):
+        rows, err = fetch_shodan_history("1.2.3.4", "super-secret-key")
+    assert rows == []
+    assert "super-secret-key" not in err
+    assert "[REDACTED]" in err
 
 
 def test_history_timeout_skips():
@@ -94,3 +108,47 @@ def test_shodan_history_cli_flag_defaults_off():
 
     args = build_parser().parse_args(["--target", "127.0.0.1"])
     assert getattr(args, "shodan_history", False) is False
+
+
+def test_unparseable_timestamps_excluded_from_window():
+    # Eight diverse ports but only with empty / garbage timestamps → no buffet.
+    ports = [23, 445, 3306, 6379, 21, 1433, 5432, 502]
+    rows = [{"port": p, "transport": "tcp", "timestamp": "", "product": ""} for p in ports]
+    rows[0]["timestamp"] = "not-a-date"
+    assert evaluate_sudden_buffet(rows) is None
+
+
+def test_old_timestamps_outside_window_excluded():
+    ports = [23, 445, 3306, 6379, 21, 1433, 5432, 502]
+    rows = [
+        {"port": p, "transport": "tcp", "timestamp": _ts(30), "product": ""} for p in ports
+    ]
+    assert evaluate_sudden_buffet(rows) is None
+
+
+def test_fetch_shodan_history_uses_host_endpoint_with_history_flag():
+    captured: dict = {}
+
+    class _Resp:
+        status = 200
+
+        def read(self, _n=-1):
+            return b'{"data":[{"port":22,"timestamp":"2099-01-01T00:00:00","transport":"tcp"}]}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured["full_url"] = req.full_url
+        return _Resp()
+
+    with patch("honeypot_auditor.probes.history_intel.urlopen", side_effect=fake_urlopen):
+        rows, err = fetch_shodan_history("203.0.113.10", "test-key")
+    assert err == ""
+    assert rows
+    assert "/shodan/host/203.0.113.10?" in captured["full_url"]
+    assert "history=true" in captured["full_url"]
+    assert "/history?" not in captured["full_url"]
