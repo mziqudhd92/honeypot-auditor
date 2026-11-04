@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "honeypot-auditor"
-version = "1.0.5"
+version = "1.1.0"
 description = "Multi-protocol CLI that fingerprints whether an authorized target behaves like a low-interaction honeypot."
 readme = "README.md"
 license = "MIT"
@@ -63,6 +63,7 @@ honeypot-auditor = "honeypot_auditor.cli:main"
 
 [project.entry-points."honeypot_auditor.intel"]
 # Passive-intel plugins expose one callable: provider(ip, api_key) -> list[Indicator]
+censys = "honeypot_auditor.plugins.censys_provider:censys_provider"
 
 [project.urls]
 Homepage = "https://github.com/mziqudhd92/honeypot-auditor"

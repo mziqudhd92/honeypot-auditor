@@ -6,6 +6,87 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-04
+
+CTI-focused minor release: richer observables for export, safer C2/honeytoken
+scoring semantics, entropy-based passive history, and STIX/MISP file exports.
+Delivered slice-by-slice under TDD (failing acceptance tests first).
+
+### Added
+
+- **Top-level `observables`** on `AuditReport` and JSON export, lifted from probe
+  evidence via `honeypot_auditor.observables.collect_observables`:
+  - `ssh.hassh_server` from `deep.hassh`
+  - `tls.ja3s` / `tls.ja4s` / `tls.cert_sha256` from `deep.tls_stack` (DER SHA-256
+    via `pem_cert_sha256`; also backfilled from `cert_snippet` when needed)
+  - `ntlm.challenge` / `native_os` / `av_hostname` / `av_domain` from structured
+    SMB NTLM evidence (`smb.ntlm_challenge`, `deep.smb_target_mismatch`)
+- **Canary / honeytoken scoring:** expanded `redact.py` families (`canarytokens`,
+  `ASIA…` temp keys, Slack `xoxb-`, GitHub `ghp_`, plus existing AKIA/JWT/PEM/DB
+  URIs). Matches still redact to `[REDACTED_HONEYTOKEN]` and now emit scoring
+  `deception.honeytoken_exposed` (`category=static_signature`, `fidelity=high`)
+  instead of info-only `info.honeytoken_detected`
+- **Packaged TLS lure baselines** in `data/tls_profiles.json`: non-placeholder
+  JA3S/JA4S for authorized lab Cowrie/Dionaea-style HTTPS faces; placeholders
+  omitted rather than shipped. `match_lure_profile` + `deep.tls_stack` lure_match
+  covered by tests; capture path remains
+  `docs/scripts/capture-tls-baseline.sh --update-package`
+- **LLM honeypot extends** on `deep.llm_hallucination` (still
+  `requires_corroboration=True`):
+  - Latency cadence — trivial cmds (`echo`/`true`/`pwd`) consistently ≥1s
+  - Dual hash — `sha256sum`/`md5sum` of the same path drifting across calls
+  - Prior fake-success-on-invalid-cmd tell retained
+- **C2 decoy vs live teamserver** (canned HTTP only; never “CS detected ⇒
+  honeypot”):
+  - `http.c2_panel_or_decoy` — stock CS-like empty 404/`text/plain`, or UI
+    markers **with** a dynamic GraphQL/WebSocket/API backend; corroboration-gated,
+    medium/low fidelity
+  - `http.c2_decoy_clone` — static Mythic/CS/Sliver HTML UI **without** a live
+    control plane; high fidelity, `fingerprint_type=c2_decoy`
+  - Classifier in `config/signatures/c2_decoy.py`; strategy notes under
+    `docs/strategies/c2-decoy/`
+- **Shodan history (opt-in)** via `--shodan-history` (default off):
+  - Capped HTTPS REST history fetch (size + timeout guards; oversize/timeout
+    → skip, audit continues)
+  - Pure `evaluate_sudden_buffet(history_rows)` — entropy over port families,
+    not raw port count
+  - Web+mail+ssh EIP-recycle bursts stay **low** fidelity / non-high
+  - ≥8 ports in a 7-day window spanning ≥4 legacy/DB/ICS families →
+    `shodan.sudden_buffet` high fidelity
+  - Projection keeps only cheap fields: port / transport / timestamp / product
+- **Optional Censys** passive intel: `--intel-provider censys` entry point
+  (`plugins/censys_provider.py`) reuses the same sudden-buffet entropy spirit
+  against a capped host/services snapshot
+- **STIX 2.1 + MISP file export** (no live TAXII/MISP push):
+  - `--format stix` → owner-only `.stix.json` bundle (ipv4-addr SCO,
+    Infrastructure, Indicator, relationship)
+  - `--format misp` → owner-only `.misp.json` Event with Attribute/Tag
+  - Shared `reporters/cti_context.build_cti_context`; docs in `docs/EXPORTS.md`
+- **Mandatory corroboration wiring:** `_audit_host` runs non-deep jobs first,
+  computes `has_ungated_corroboration`, then calls
+  `run_deep_probes(..., corroboration=…)`. Shared helper also drives
+  `apply_stack_corroboration`
+
+### Changed
+
+- Scoring weight key **`shodan` → `passive_intel`** (`WEIGHTS` /
+  `STRATEGY_LABELS`). Legacy `category="shodan"` still scores via
+  `normalize_category` / `CATEGORY_ALIASES`. Shodan provider name, CLI
+  `--shodan-key`, env keys, and indicator **ids** (`shodan.*`) unchanged;
+  recon emits `category="passive_intel"`. Intel plugin allowlist prefers
+  `passive_intel` and rewrites legacy `shodan`
+- SMB `smb.ntlm_challenge` / deep target-mismatch evidence serialized as JSON
+  for observables (legacy comma-hex still parsed by the collector)
+- `deep.tls_stack` evidence gains `cert_sha256` alongside `cert_snippet`
+- Docs: `docs/SCORING.md`, `docs/PLUGINS.md`, `docs/agents.md`, README banners
+  updated for 1.1.0 CTI surface
+
+### Fixed
+
+- Deep cotenancy / gated tells could not see real corroboration state because
+  `run_deep_probes` was always invoked with the default `corroboration=False`
+  from the parallel job list — fixed by two-phase orchestration in `_audit_host`
+
 ## [1.0.5] - 2026-10-27
 
 ### Security

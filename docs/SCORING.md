@@ -6,7 +6,7 @@ Basic category weights (from `config.WEIGHTS`):
 
 | Category | Weight |
 |----------|--------|
-| Passive intel (Shodan or selected providers) | 25% |
+| Passive intel (`passive_intel`; Shodan/Censys or selected providers; legacy `shodan` category aliases here) | 25% |
 | Arbitrary auth | 30% |
 | State non-persistence | 25% |
 | Static signature | 20% |
@@ -310,8 +310,8 @@ min(category contributions (+ intra-category) + bonuses, 100)
 
 Repeated arbitrary authentication for two independent synthetic users is a decisive override to 100%.
 Suppressed, skipped, and non-triggered indicators contribute zero. Passive-intel plugins may only use
-categories `shodan` (scores via the existing passive weight) or `info` (**never scores**). They cannot
-create higher-weight categories such as `arbitrary_auth`.
+categories `passive_intel` (scores via the passive weight; legacy `shodan` is accepted as an alias)
+or `info` (**never scores**). They cannot create higher-weight categories such as `arbitrary_auth`.
 
 ## Scoped / Normalized Honeyscore (`-p`)
 

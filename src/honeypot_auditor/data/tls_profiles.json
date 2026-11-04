@@ -1,13 +1,18 @@
 {
   "_meta": {
-    "note": "Populate ja3s/ja4s via docs/scripts/capture-tls-baseline.sh against authorized lab lures. Placeholder values are ignored by match_lure_profile(). Default capture writes .lab-tls-capture/; use --update-package to merge into this file. CDN edges live in cdn_tls_profiles.json.",
+    "note": "Lab-captured JA3S/JA4S for authorized honeypot HTTPS faces (fixed ClientHello audit profile). Entries without a TLS face are omitted rather than left as placeholders. Re-capture via docs/scripts/capture-tls-baseline.sh --update-package. CDN edges live in cdn_tls_profiles.json.",
     "capture": "docs/scripts/capture-tls-baseline.sh [--name NAME] [--cdn] [--update-package] HOST:PORT"
   },
   "lures": {
     "cowrie_https": {
-      "ja3s": "placeholder_update_via_capture_script",
+      "ja3s": "b32309a26951912be7d4abe674baf1e6",
       "ja4s": "",
-      "description": "Stock Cowrie/Dionaea HTTPS lure — run capture-tls-baseline.sh to fill"
+      "description": "Authorized lab Cowrie/Dionaea-style HTTPS face (TLS 1.2 ServerHello) — fixed ClientHello audit baseline"
+    },
+    "dionaea_https": {
+      "ja3s": "",
+      "ja4s": "t120200_c02f_0000",
+      "description": "Authorized lab Dionaea HTTPS face (TLS 1.3-style JA4S) — fixed ClientHello audit baseline"
     }
   },
   "cdn_edge": {}

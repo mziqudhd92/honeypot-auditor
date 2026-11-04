@@ -140,6 +140,8 @@ class AuditReport:
     score_breakdown: dict = field(default_factory=dict)
     # Normalized score for targeted single-port (-p) audits; None when not applicable.
     scoped_score: float | None = None
+    # CTI fingerprints lifted from indicator evidence (HASSH/JA3S/JA4S/cert/NTLM).
+    observables: dict = field(default_factory=dict)
 
     def triggered(self) -> list[Indicator]:
         return [i for i in self.indicators if i.triggered and not i.skipped and not i.suppressed]

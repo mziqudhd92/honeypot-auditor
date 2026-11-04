@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 from dataclasses import dataclass, field
 
 from honeypot_auditor.capabilities import probe_capabilities
@@ -17,7 +18,7 @@ from honeypot_auditor.config import (
     probe_port_map,
 )
 from honeypot_auditor.models import AuditReport
-from honeypot_auditor.reporters.json_export import export, export_nmap_exclude
+from honeypot_auditor.reporters.json_export import export_nmap_exclude
 from honeypot_auditor.settings import ProbeProfile, settings
 
 
@@ -35,6 +36,9 @@ class Auditor:
     confirm_authorized: bool = False
     output: str = ""
     output_nmap_exclude: str = ""
+    output_format: str = "json"
+    shodan_history: bool = False
+    shodan_key: str = ""
     intel_providers: list[str] = field(default_factory=list)
     intel_keys: dict[str, str] = field(default_factory=dict, repr=False)
 
@@ -45,6 +49,19 @@ class Auditor:
         settings.safe_mode = self.safe_mode
         settings.proxy_url = self.proxy
         settings.capabilities = probe_capabilities()
+        settings.output_format = self.output_format
+
+    def _resolve_shodan_key(self) -> str:
+        """Match CLI resolution: explicit key, else SHODAN_API_KEY, else intel_keys/env."""
+        if (self.shodan_key or "").strip():
+            return self.shodan_key.strip()
+        env = (os.environ.get("SHODAN_API_KEY") or "").strip()
+        if env:
+            return env
+        intel_env = (os.environ.get("HONEYPOT_AUDITOR_INTEL_SHODAN_KEY") or "").strip()
+        if intel_env:
+            return intel_env
+        return (self.intel_keys.get("shodan") or "").strip()
 
     def _args_namespace(self) -> argparse.Namespace:
         return argparse.Namespace(
@@ -55,7 +72,8 @@ class Auditor:
             timeout=self.timeout,
             deep=settings.deep,
             with_nmap=False,
-            shodan_key="",
+            shodan_key=self._resolve_shodan_key(),
+            shodan_history=bool(self.shodan_history),
             intel_provider=list(self.intel_providers),
             intel_key=[f"{name}={key}" for name, key in self.intel_keys.items()],
             confirm_authorized=self.confirm_authorized,
@@ -63,6 +81,7 @@ class Auditor:
             scan_concurrency=8,
             safe_mode=self.safe_mode,
             profile=self.profile.value,
+            format=self.output_format,
         )
 
     async def run_async(self) -> AuditReport:
@@ -84,7 +103,9 @@ class Auditor:
             capability_warnings=caps.warnings,
         )
         if self.output:
-            export(report, self.output)
+            from honeypot_auditor.cli import _export_report
+
+            _export_report(report, self.output, self.output_format or "json")
         if self.output_nmap_exclude and report.score >= 60:
             export_nmap_exclude(report.resolved_ip, self.output_nmap_exclude)
         return report

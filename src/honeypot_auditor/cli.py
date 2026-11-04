@@ -33,6 +33,7 @@ from honeypot_auditor.models import AuditReport, Indicator
 from honeypot_auditor.plugins.intel import run_intel_provider, validate_intel_provider_name
 from honeypot_auditor.probes import PROBE_BY_PROTOCOL
 from honeypot_auditor.probes.deep import run_deep_probes
+from honeypot_auditor.probes.history_intel import shodan_history_indicators
 from honeypot_auditor.probes.recon import nmap_scan, shodan_lookup
 from honeypot_auditor.reporters.console import render, render_subnet_summary
 from honeypot_auditor.reporters.json_export import export, export_nmap_exclude, export_subnet
@@ -301,10 +302,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="RNG seed for blend profile TLS/UA rotation",
     )
     p.add_argument(
+        "--shodan-history",
+        action="store_true",
+        help="Opt-in: fetch capped Shodan host history for sudden_buffet entropy scoring",
+    )
+    p.add_argument(
         "--format",
-        choices=("json", "sarif", "html", "csv", "markdown"),
+        choices=("json", "sarif", "html", "csv", "markdown", "stix", "misp"),
         default="json",
-        help="Primary report format (default json; markdown writes .md)",
+        help="Primary report format (default json; stix/misp write CTI file exports)",
     )
     p.add_argument(
         "--signature-pack",
@@ -561,6 +567,8 @@ def _probe_jobs(
     if include_shodan and _shodan_requested(args, intel_keys):
         shodan_key = _resolve_shodan_key(args, intel_keys)
         shodan_inds = shodan_lookup(ip, shodan_key or None)
+        if bool(getattr(args, "shodan_history", False)):
+            shodan_inds = [*shodan_inds, *shodan_history_indicators(ip, shodan_key or None)]
         passive_inds.extend(shodan_inds)
         jobs.append(("shodan", _constant_indicators(shodan_inds)))
 
@@ -582,7 +590,9 @@ def _probe_jobs(
         for port in ports.get(proto, []):
             jobs.append((f"{proto}:{port}", _port_probe_job(fn, ip, port, proto)))
     if (settings.deep or bool(getattr(args, "deep", False))) and not settings.safe_mode:
-        jobs.append(("deep", lambda: run_deep_probes(ip, ports)))
+        # Placeholder only — `_audit_host` runs `run_deep_probes(..., corroboration=)`
+        # after non-deep jobs so gated tells see real ungated hits.
+        jobs.append(("deep", lambda: []))
     return jobs
 
 
@@ -640,8 +650,35 @@ def _apply_cli_settings(args: argparse.Namespace) -> None:
     settings.capabilities = caps
 
 
+_EXPORT_SUFFIXES = (
+    ".stix.json",
+    ".misp.json",
+    ".sarif",
+    ".html",
+    ".csv",
+    ".md",
+    ".markdown",
+    ".json",
+)
+
+
+def _with_export_suffix(path: str | Path, suffix: str) -> Path:
+    """Apply an export suffix without doubling compound endings (e.g. .stix.json)."""
+    p = Path(path)
+    s = suffix if suffix.startswith(".") else f".{suffix}"
+    name = p.name
+    if name.endswith(s):
+        return p
+    for known in _EXPORT_SUFFIXES:
+        if name.endswith(known):
+            return p.with_name(name[: -len(known)] + s)
+    return p.with_name(name + s)
+
+
 def _export_report(report: AuditReport, out: str, fmt: str) -> Path:
     """Dispatch one finished report to the chosen file format."""
+    from honeypot_auditor.reporters.misp_export import export_misp
+    from honeypot_auditor.reporters.stix_export import export_stix
     from honeypot_auditor.reporters.text_export import (
         export_csv,
         export_html,
@@ -649,13 +686,17 @@ def _export_report(report: AuditReport, out: str, fmt: str) -> Path:
     )
 
     if fmt == "sarif":
-        return export_sarif(report, str(Path(out).with_suffix(".sarif")))
+        return export_sarif(report, str(_with_export_suffix(out, ".sarif")))
     if fmt == "html":
-        return export_html(_report_payload_for(report), str(Path(out).with_suffix(".html")))
+        return export_html(_report_payload_for(report), str(_with_export_suffix(out, ".html")))
     if fmt == "csv":
-        return export_csv(_report_payload_for(report), str(Path(out).with_suffix(".csv")))
+        return export_csv(_report_payload_for(report), str(_with_export_suffix(out, ".csv")))
     if fmt == "markdown":
-        return export_markdown(_report_payload_for(report), str(Path(out).with_suffix(".md")))
+        return export_markdown(_report_payload_for(report), str(_with_export_suffix(out, ".md")))
+    if fmt == "stix":
+        return export_stix(report, _with_export_suffix(out, ".stix.json"))
+    if fmt == "misp":
+        return export_misp(report, _with_export_suffix(out, ".misp.json"))
     return export(report, out)
 
 
@@ -772,6 +813,10 @@ async def _audit_host(
         args, subnet=False, public_target=not is_private_or_loopback(ip), ports=ports
     )
 
+    # Run non-deep jobs first so deep probes can receive real corroboration state.
+    deep_requested = any(name == "deep" for name, _ in jobs)
+    jobs = [(name, fn) for name, fn in jobs if name != "deep"]
+
     indicators: list[Indicator] = []
     if progress is not None and task_id is not None:
         batches = await asyncio.gather(
@@ -782,6 +827,26 @@ async def _audit_host(
     else:
         for name, fn in jobs:
             indicators.extend(await _run_named(name, fn, None, None))
+
+    if deep_requested:
+        from honeypot_auditor.analyzer import has_ungated_corroboration
+
+        corr = has_ungated_corroboration(indicators)
+        if progress is not None and task_id is not None:
+            deep_batch = await _run_named(
+                "deep",
+                lambda: run_deep_probes(ip, ports, corroboration=corr),
+                progress,
+                task_id,
+            )
+        else:
+            deep_batch = await _run_named(
+                "deep",
+                lambda: run_deep_probes(ip, ports, corroboration=corr),
+                None,
+                None,
+            )
+        indicators.extend(deep_batch)
 
     indicators.extend(evaluate_signatures(indicators))
     finished = datetime.now(UTC).isoformat()
@@ -942,7 +1007,15 @@ async def run_audit(args: argparse.Namespace) -> int:
             console.print(f"[dim]{note}[/dim]")
     out = _subnet_output_path(args.target, args.output)
     if args.format == "sarif":
-        dest = export_sarif_many(reports, Path(out).with_suffix(".sarif"))
+        dest = export_sarif_many(reports, _with_export_suffix(out, ".sarif"))
+    elif args.format == "stix":
+        from honeypot_auditor.reporters.stix_export import export_stix_many
+
+        dest = export_stix_many(reports, _with_export_suffix(out, ".stix.json"))
+    elif args.format == "misp":
+        from honeypot_auditor.reporters.misp_export import export_misp_many
+
+        dest = export_misp_many(reports, _with_export_suffix(out, ".misp.json"))
     elif args.format in ("html", "csv", "markdown"):
         from honeypot_auditor.reporters.json_export import write_owner_only
         from honeypot_auditor.reporters.text_export import (
@@ -960,7 +1033,7 @@ async def run_audit(args: argparse.Namespace) -> int:
             "hosts": [_report_payload_for(r) for r in reports],
         }
         suffix = {"html": ".html", "csv": ".csv", "markdown": ".md"}[args.format]
-        dest = Path(out).with_suffix(suffix)
+        dest = _with_export_suffix(out, suffix)
         dest.parent.mkdir(parents=True, exist_ok=True)
         if args.format == "csv":
             dest = export_csv_subnet(payload, dest)

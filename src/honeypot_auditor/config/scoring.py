@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 WEIGHTS: dict[str, float] = {
-    "shodan": 0.25,
+    "passive_intel": 0.25,
     "arbitrary_auth": 0.30,
     "state_nonpersist": 0.25,
     "static_signature": 0.20,
     "cotenancy": 0.15,
 }
+
+# Legacy indicator/plugin category "shodan" maps into the passive_intel weight bucket.
+CATEGORY_ALIASES: dict[str, str] = {
+    "shodan": "passive_intel",
+}
+
+
+def normalize_category(category: str) -> str:
+    """Map legacy category names onto the current WEIGHTS keys."""
+    key = (category or "").strip().lower()
+    return CATEGORY_ALIASES.get(key, key)
 
 CORROBORATION_PROTOCOL_THRESHOLD = 1
 CORROBORATION_PROTOCOL_STEP_PCT = 5.0
@@ -28,7 +39,7 @@ FIDELITY_LEVELS = frozenset({"low", "medium", "high", "decisive"})
 BASIC_STRATEGIES: tuple[str, ...] = ("arbitrary_auth", "state_nonpersist", "static_signature")
 
 STRATEGY_LABELS: dict[str, str] = {
-    "shodan": "Passive intel (Shodan / plugins)",
+    "passive_intel": "Passive intel (Shodan / Censys / plugins)",
     "arbitrary_auth": "Arbitrary auth",
     "state_nonpersist": "State non-persistence",
     "static_signature": "Static signature",

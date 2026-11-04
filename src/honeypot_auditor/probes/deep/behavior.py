@@ -318,8 +318,20 @@ def probe_mtime_uniformity(host: str, port: int) -> list[Indicator]:
     ]
 
 
+_LLM_TRIVIAL_CMDS = ("echo ok", "true", "pwd")
+_LLM_SLOW_SECONDS = 1.0
+_LLM_HASH_PATH = "/etc/hostname"
+
+
+def _extract_digest(line: str) -> str:
+    token = (line or "").strip().split()[0] if (line or "").strip() else ""
+    if len(token) in (32, 64) and all(c in "0123456789abcdefABCDEF" for c in token):
+        return token.lower()
+    return ""
+
+
 def probe_llm_hallucination(host: str, port: int) -> list[Indicator]:
-    """Experimental: flag plausible fake success on invalid commands (LLM decoys)."""
+    """Flag LLM/decoy tells: fake success, slow trivial cadence, hash drift."""
     if settings.safe_mode or not settings.deep:
         return [
             skipped_indicator(
@@ -351,13 +363,40 @@ def probe_llm_hallucination(host: str, port: int) -> list[Indicator]:
     evidence: list[str] = []
     try:
         for cmd in probes:
-            out, exec_err, _ = ssh_exec(client, cmd)
-            evidence.append(f"{cmd}: {out[:120]!r} err={exec_err!r}")
+            out, exec_err, elapsed = ssh_exec(client, cmd)
+            evidence.append(f"{cmd}: {out[:120]!r} err={exec_err!r} t={elapsed:.3f}s")
             text = out.lower()
             if "no such file" in text or "unrecognized" in text or "invalid" in text:
                 continue
             if out.strip() and "error" not in text and exec_err == "":
                 failures.append(f"plausible fake success for {cmd!r}")
+
+        # Latency cadence: trivial shell cmds consistently slow → LLM-style generation lag.
+        trivial_times: list[float] = []
+        for cmd in _LLM_TRIVIAL_CMDS:
+            out, exec_err, elapsed = ssh_exec(client, cmd)
+            evidence.append(f"trivial {cmd}: t={elapsed:.3f}s err={exec_err!r}")
+            trivial_times.append(elapsed)
+        if trivial_times and all(t >= _LLM_SLOW_SECONDS for t in trivial_times):
+            failures.append(
+                f"latency cadence: trivial cmds consistently slow "
+                f"(min={min(trivial_times):.2f}s)"
+            )
+
+        # Dual hash: identical path hashed twice must not drift on a real FS.
+        digests: list[str] = []
+        for _ in range(2):
+            out, exec_err, elapsed = ssh_exec(client, f"sha256sum {_LLM_HASH_PATH}")
+            evidence.append(f"hash: {out[:100]!r} err={exec_err!r} t={elapsed:.3f}s")
+            digest = _extract_digest(out)
+            if not digest:
+                out2, _, _ = ssh_exec(client, f"md5sum {_LLM_HASH_PATH}")
+                digest = _extract_digest(out2)
+                evidence.append(f"hash-md5: {out2[:100]!r}")
+            if digest:
+                digests.append(digest)
+        if len(digests) == 2 and digests[0] != digests[1]:
+            failures.append(f"hash drift on {_LLM_HASH_PATH}: {digests[0][:12]}… vs {digests[1][:12]}…")
     finally:
         with suppress(Exception):
             client.close()

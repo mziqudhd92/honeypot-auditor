@@ -10,6 +10,12 @@ from honeypot_auditor.config.signatures.ftp import (
     match_ftp_stale_banner,
 )
 from honeypot_auditor.config.signatures.git import match_git_always_missing
+from honeypot_auditor.config.signatures.c2_decoy import (
+    classify_c2_http_face,
+    match_c2_static_ui_clone,
+    match_c2_stock_404_plain,
+    match_c2_stock_tls_cert,
+)
 from honeypot_auditor.config.signatures.http import match_http_proxy_lure, match_tls_stock_cert
 from honeypot_auditor.config.signatures.mongo import (
     match_mongo_hello_clone,
@@ -99,7 +105,11 @@ from honeypot_auditor.config.signatures.telnet import (
 
 __all__ = [
     "claimed_os_from_banner",
+    "classify_c2_http_face",
     "extract_mysql_scramble",
+    "match_c2_static_ui_clone",
+    "match_c2_stock_404_plain",
+    "match_c2_stock_tls_cert",
     "match_cowrie_identity",
     "match_cpuinfo_signature",
     "match_ftp_auth_lure",

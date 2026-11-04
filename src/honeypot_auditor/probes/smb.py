@@ -8,6 +8,8 @@ shares, silent TCP accept / tarpit).
 
 from __future__ import annotations
 
+import json
+
 from honeypot_auditor.config import (
     SMB_NATIVE_OS_TELLS,
     SMB_SMB1_DIALECTS,
@@ -170,7 +172,12 @@ def probe_smb(host: str, port: int) -> list[Indicator]:
             skip_reason="" if len(challenges) >= 2 else "need two NTLM challenges",
             protocol="smb",
             detail=challenge_hit or "NTLM challenges differ across sessions",
-            evidence=",".join(c.hex() for c in challenges),
+            evidence=json.dumps(
+                {
+                    "challenges": [c.hex() for c in challenges],
+                    "native_os": native_os,
+                }
+            ),
         ),
         Indicator(
             id="smb.stock_shares",

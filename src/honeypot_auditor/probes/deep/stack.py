@@ -7,6 +7,7 @@ import socket
 from contextlib import suppress
 
 from honeypot_auditor.config import claimed_os_from_banner, match_tls_stock_cert
+from honeypot_auditor.config.signatures.c2_decoy import match_c2_stock_tls_cert
 from honeypot_auditor.hassh import (
     capture_server_kexinit,
     find_kexinit_payload,
@@ -290,7 +291,9 @@ def probe_tls_stack(host: str, port: int) -> list[Indicator]:
         with suppress(Exception):
             cert_text, cipher1, cipher2, version = _stdlib_cert_peek(host, port)
 
-    cn_hit = match_tls_stock_cert(cert_text)
+    # CS default teamserver certs are ambiguous (live panel vs decoy) — never alone Confirm.
+    c2_tls_hit = match_c2_stock_tls_cert(cert_text)
+    cn_hit = None if c2_tls_hit else match_tls_stock_cert(cert_text)
     stable = cipher1 == cipher2 if cipher1 and cipher2 else True
     parts: list[str] = []
     if ja3s:
@@ -308,12 +311,17 @@ def probe_tls_stack(host: str, port: int) -> list[Indicator]:
     detail = "; ".join(parts) or "tls handshake completed"
     if cn_hit:
         detail = f"{cn_hit}; {detail}"
+    if c2_tls_hit:
+        detail = f"{c2_tls_hit}; {detail}"
     if not stable:
         detail = f"{detail}; cipher tuple unstable across handshakes"
 
+    # Do not let CS stock TLS alone raise deep.tls_stack (that would Confirm via weight).
     triggered = bool(lure_name and lure_kind == "lure") or bool(cn_hit) or not stable
     if blend:
         triggered = bool(cn_hit) or not stable
+
+    from honeypot_auditor.tls_fingerprint import pem_cert_sha256
 
     evidence = json.dumps(
         {
@@ -321,10 +329,12 @@ def probe_tls_stack(host: str, port: int) -> list[Indicator]:
             "ja4s": ja4s,
             "raw_kexinit": "",
             "cert_snippet": cert_text[:240],
+            "cert_sha256": pem_cert_sha256(cert_text),
             "lure_match": lure_name,
+            "c2_tls": c2_tls_hit or "",
         }
     )
-    return [
+    out = [
         Indicator(
             id="deep.tls_stack",
             title="TLS ServerHello / certificate looks like a stock lure",
@@ -339,6 +349,26 @@ def probe_tls_stack(host: str, port: int) -> list[Indicator]:
             remediation="Use production-grade TLS cert and stable cipher negotiation",
         )
     ]
+    if c2_tls_hit:
+        out.append(
+            Indicator(
+                id="tls.c2_panel_or_decoy",
+                title="TLS certificate looks like a stock C2 panel or decoy (ambiguous)",
+                category="static_signature",
+                triggered=True,
+                protocol="tls",
+                detail=c2_tls_hit,
+                evidence=cert_text[:400],
+                fidelity="low",
+                requires_corroboration=True,
+                fingerprint_type="",
+                remediation=(
+                    "Default Cobalt Strike TLS material is ambiguous — "
+                    "require another ungated tell before treating as a honeypot"
+                ),
+            )
+        )
+    return out
 
 
 def probe_tls_wildcard_sni(host: str, port: int) -> list[Indicator]:

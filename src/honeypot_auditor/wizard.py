@@ -176,17 +176,21 @@ def _run_one(console: Console) -> None:
 
 
 def _offer_report_file(console: Console, report: AuditReport) -> None:
-    """Optional file export: json / html / csv / markdown / sarif."""
+    """Optional file export: json / html / csv / markdown / sarif / stix / misp."""
     from honeypot_auditor.cli import _export_report
 
     fmt = Prompt.ask(
         "Export a report file as",
-        choices=["skip", "json", "html", "csv", "markdown", "sarif"],
+        choices=["skip", "json", "html", "csv", "markdown", "sarif", "stix", "misp"],
         default="skip",
     )
     if fmt == "skip":
         return
-    ext = "md" if fmt == "markdown" else fmt
+    ext = {
+        "markdown": "md",
+        "stix": "stix.json",
+        "misp": "misp.json",
+    }.get(fmt, fmt)
     default_path = f"honeypot-audit-{report.resolved_ip.replace(':', '_')}.{ext}"
     path = Prompt.ask("  output path", default=default_path)
     try:
