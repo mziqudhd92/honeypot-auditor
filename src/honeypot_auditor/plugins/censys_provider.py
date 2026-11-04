@@ -53,7 +53,7 @@ def censys_provider(ip: str, api_key: str | None) -> list[Indicator]:
         token = auth.removeprefix("Bearer ").removeprefix("bearer ")
         req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urlopen(req, timeout=min(8.0, settings.timeout_seconds)) as resp:  # nosec B310
+        with urlopen(req, timeout=min(8.0, settings.timeout_seconds)) as resp:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             raw = resp.read(512_000 + 1)
             if len(raw) > 512_000:
                 return [

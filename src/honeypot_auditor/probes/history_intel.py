@@ -170,7 +170,7 @@ def fetch_shodan_history(
     req = Request(full, headers={"User-Agent": USER_AGENT})
     to = timeout if timeout is not None else min(HISTORY_TIMEOUT_SECONDS, settings.timeout_seconds)
     try:
-        with urlopen(req, timeout=to) as resp:  # nosec B310
+        with urlopen(req, timeout=to) as resp:  # nosec B310  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             raw = resp.read(max_bytes + 1)
             if len(raw) > max_bytes:
                 return [], f"history response exceeded {max_bytes} bytes; skipped"
