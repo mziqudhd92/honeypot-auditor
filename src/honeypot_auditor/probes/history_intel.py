@@ -28,14 +28,25 @@ SUDDEN_MIN_PORTS = 8
 SUDDEN_MIN_LEGACY_FAMILIES = 4
 
 
-def _scrub_api_key(detail: str, api_key: str) -> str:
-    """Keep API keys out of skip_reason / error fields (URLError may embed the keyed URL)."""
+def scrub_api_key(detail: str, api_key: str) -> str:
+    """Keep API keys out of skip_reason / error fields (URLError / auth headers)."""
     text = detail or ""
-    if api_key:
-        text = text.replace(api_key, "[REDACTED]")
-    # Query-string form even if key value was partially escaped in the exception.
+    key = (api_key or "").strip()
+    if key:
+        text = text.replace(key, "[REDACTED]")
+        # id:secret Basic form — scrub each half if long enough to be identifying.
+        if ":" in key:
+            for part in key.split(":", 1):
+                if len(part) >= 8:
+                    text = text.replace(part, "[REDACTED]")
     text = re.sub(r"([?&]key=)[^&\s\"']+", r"\1[REDACTED]", text, flags=re.I)
+    text = re.sub(r"(Bearer\s+)\S+", r"\1[REDACTED]", text, flags=re.I)
+    text = re.sub(r"(Basic\s+)\S+", r"\1[REDACTED]", text, flags=re.I)
     return text
+
+
+# Back-compat alias for call sites / tests that used the private name.
+_scrub_api_key = scrub_api_key
 
 
 def port_family(port: int, product: str = "") -> str:

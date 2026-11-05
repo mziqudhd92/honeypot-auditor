@@ -19,7 +19,7 @@ security:
 	semgrep scan --config p/python --config p/security-audit --config p/secrets --error --metrics off .
 	bandit -c pyproject.toml -r src scripts honeypot-auditor.py
 	pip-audit
-	detect-secrets scan --exclude-files 'tests/fixtures/.*' --exclude-files 'src/honeypot_auditor/data/.*' > .detect-secrets.json
+	detect-secrets scan --exclude-files 'tests/fixtures/.*' --exclude-files 'src/honeypot_auditor/data/tls_profiles\.json' --exclude-files 'src/honeypot_auditor/data/cdn_tls_profiles\.json' > .detect-secrets.json
 	python -c 'import json; data=json.load(open(".detect-secrets.json", encoding="utf-8")); assert not any(data["results"].values()), data["results"]'
 	@rm -f .detect-secrets.json
 	@gitleaks git --redact --verbose || { echo "Install gitleaks to run the history scan"; exit 1; }

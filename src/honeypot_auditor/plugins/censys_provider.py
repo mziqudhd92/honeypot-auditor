@@ -67,9 +67,9 @@ def censys_provider(ip: str, api_key: str | None) -> list[Indicator]:
                 ]
             body = raw.decode("utf-8", "replace")
     except OSError as exc:
-        detail = str(exc)
-        if api_key:
-            detail = detail.replace(api_key, "[REDACTED]")
+        from honeypot_auditor.probes.history_intel import scrub_api_key
+
+        detail = scrub_api_key(str(exc), api_key or "")
         return [
             skipped_indicator(
                 "history",

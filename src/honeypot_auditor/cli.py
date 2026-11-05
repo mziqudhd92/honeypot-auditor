@@ -475,16 +475,22 @@ def _resolve_dual_stack(target: str) -> tuple[list[str], list[str]]:
     return list(dict.fromkeys(ipv4)), list(dict.fromkeys(ipv6))
 
 
+_PASSIVE_HIGH_IDS = frozenset(
+    {
+        "shodan.honeyscore",
+        "shodan.tags",
+        "shodan.open_ports",
+        "shodan.buffet",
+        # Opt-in --shodan-history entropy tell (high fidelity when triggered).
+        "shodan.sudden_buffet",
+    }
+)
+
+
 def _passive_score_high(indicators: list[Indicator]) -> bool:
     open_protocols = 0
     for ind in indicators:
-        if ind.id == "shodan.honeyscore" and ind.triggered:
-            return True
-        if ind.id == "shodan.tags" and ind.triggered:
-            return True
-        if ind.id == "shodan.open_ports" and ind.triggered:
-            return True
-        if ind.id == "shodan.buffet" and ind.triggered:
+        if ind.id in _PASSIVE_HIGH_IDS and ind.triggered:
             return True
     for ind in indicators:
         if ind.protocol and ind.triggered and not ind.skipped:

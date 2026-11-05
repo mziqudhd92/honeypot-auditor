@@ -13,6 +13,19 @@ def _ts(days_ago: float = 0.5) -> str:
     return (datetime.now(UTC) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def test_censys_error_scrubs_api_key_halves():
+    with patch(
+        "honeypot_auditor.plugins.censys_provider.urlopen",
+        side_effect=OSError("401 unauthorized for user=censys-id token=censys-secret-value"),
+    ):
+        inds = censys_provider("203.0.113.10", "censys-id:censys-secret-value")
+    assert len(inds) == 1
+    assert inds[0].skipped is True
+    assert "censys-secret-value" not in (inds[0].detail or "")
+    assert "censys-secret-value" not in (inds[0].error or "")
+    assert "[REDACTED]" in (inds[0].detail or "")
+
+
 def test_censys_diverse_snapshot_is_medium_not_high_sudden():
     ports = [23, 445, 3306, 6379, 21, 1433, 5432, 502]
     services = [

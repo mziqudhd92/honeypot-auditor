@@ -129,6 +129,33 @@ def test_passive_score_high_buffet_and_open_ports():
     assert _passive_score_high(port_inds)
 
 
+def test_passive_score_high_includes_sudden_buffet():
+    from honeypot_auditor.models import Indicator
+
+    assert _passive_score_high(
+        [
+            Indicator(
+                id="shodan.sudden_buffet",
+                title="sudden",
+                category="passive_intel",
+                triggered=True,
+                fidelity="high",
+            )
+        ]
+    )
+    assert not _passive_score_high(
+        [
+            Indicator(
+                id="shodan.sudden_buffet",
+                title="sudden",
+                category="passive_intel",
+                triggered=False,
+                fidelity="low",
+            )
+        ]
+    )
+
+
 def test_passive_first_confirm_forces_safe_verify():
     import argparse
 
